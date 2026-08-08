@@ -1,0 +1,4 @@
+- [x] Update `profile_screen.dart` capture logic and fixed styles
+- [x] Update `waiting_room_screen.dart` fixed styles
+- [x] Update `result_screen.dart` fixed styles
+- [x] Verify poster consistency across font settings
