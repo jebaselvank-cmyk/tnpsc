@@ -1,159 +1,482 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:tnpsc_group_book/screens/subject_screen.dart';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:google_nav_bar/google_nav_bar.dart';
+
+import 'firebase_options.dart';
+
+// Screens
 import 'screens/splash_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/books_screen.dart';
-import 'screens/settings_screen.dart';
+import 'screens/subject_screen.dart';
 import 'screens/leaderboard_screen.dart';
 import 'screens/profile_screen.dart';
-import 'screens/quiz_screen.dart';
+
+// Utils
 import 'utils/app_theme.dart';
 import 'utils/app_language.dart';
 import 'utils/app_icons.dart';
-import 'services/notification_service.dart';
-import 'services/hive_service.dart';
-import 'package:google_nav_bar/google_nav_bar.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:flutter/services.dart';
-import 'services/tts_service.dart';
-import 'services/reward_service.dart';
-import 'firebase_options.dart';
+import 'utils/app_log.dart';
 
+// Services
+import 'services/hive_service.dart';
+import 'services/notification_service.dart';
+import 'services/reward_service.dart';
+import 'services/tts_service.dart';
+import 'services/deep_link_service.dart';
 import 'services/firestore_service.dart';
 import 'services/version_service.dart';
-import 'services/deep_link_service.dart';
-import 'utils/app_log.dart';
-import 'widgets/lazy_indexed_stack.dart';
 
+// Widgets
+import 'widgets/lazy_indexed_stack.dart';
 import 'widgets/error_state_widget.dart';
 
-final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
-void main() {
-  // 1. Core Flutter initialization (Instant)
-  WidgetsBinding binding = WidgetsFlutterBinding.ensureInitialized();
+// ============================================================
+// GLOBAL SCAFFOLD MESSENGER
+// ============================================================
 
-  // AI_DEBUG: Preserve native splash until Flutter is ready and we manually remove it
-  FlutterNativeSplash.preserve(widgetsBinding: binding);
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+GlobalKey<ScaffoldMessengerState>();
 
-  // 2. Global Error Handling (Crash Prevention)
+
+// ============================================================
+// MAIN
+// ============================================================
+
+Future<void> main() async {
+  // ----------------------------------------------------------
+  // Flutter initialization
+  // ----------------------------------------------------------
+
+  final WidgetsBinding binding =
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Keep native splash until Flutter is ready.
+  FlutterNativeSplash.preserve(
+    widgetsBinding: binding,
+  );
+
+  // ----------------------------------------------------------
+  // Global Flutter error handler
+  // ----------------------------------------------------------
+
   FlutterError.onError = (FlutterErrorDetails details) {
-    AppLog.e("GLOBAL_FLUTTER_ERROR: ${details.exception}", details.exception, details.stack);
+    AppLog.e(
+      'GLOBAL_FLUTTER_ERROR: ${details.exception}',
+      details.exception,
+      details.stack,
+    );
   };
 
-  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-    AppLog.e("GLOBAL_PLATFORM_ERROR: $error", error, stack);
-    return true; // Prevent app from terminating
+  // ----------------------------------------------------------
+  // Global platform error handler
+  // ----------------------------------------------------------
+
+  PlatformDispatcher.instance.onError = (
+      Object error,
+      StackTrace stack,
+      ) {
+    AppLog.e(
+      'GLOBAL_PLATFORM_ERROR: $error',
+      error,
+      stack,
+    );
+
+    return true;
   };
 
-  // 3. Start UI immediately
-  runApp(const TNPSCPrepApp());
-}
+  // ----------------------------------------------------------
+  // Portrait orientation
+  // ----------------------------------------------------------
 
-// Background initializations triggered by SplashScreen
-Future<void> initializeServices() async {
-  // AI_DEBUG: Start critical services immediately
-  
-  // Lock orientation to portrait
-  SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  
-  // 1. Critical initializations (Must be ready before Home screen)
+
+  // ==========================================================
+  // FIREBASE INITIALIZATION
+  // IMPORTANT:
+  // Firebase MUST be initialized BEFORE runApp()
+  // ==========================================================
+
+  bool firebaseReady = false;
+
   try {
-    // Run Firebase and Hive init in parallel to speed up startup
-    await Future.wait([
-      (() async {
-        try {
-          await Firebase.initializeApp(
-            options: DefaultFirebaseOptions.currentPlatform,
-          );
-        } catch (e) {
-          AppLog.e("AI_DEBUG: Firebase init error: $e");
-        }
-      })(),
-      HiveService.init(),
-    ]);
-  } catch (e) {
-    AppLog.e("AI_DEBUG: Service init error: $e");
+    AppLog.d('========================================');
+    AppLog.d('MAIN: Firebase initialization START');
+    AppLog.d('========================================');
+
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    firebaseReady = true;
+
+    AppLog.d(
+      'MAIN: Firebase.initializeApp() SUCCESS',
+    );
+
+    // Verify Firebase app
+    final firebaseApp = Firebase.app();
+
+    AppLog.d(
+      'MAIN: Firebase App = ${firebaseApp.name}',
+    );
+
+    // Verify Firebase Auth
+    final User? user =
+        FirebaseAuth.instance.currentUser;
+
+    AppLog.d(
+      'MAIN: Firebase Auth ready',
+    );
+
+    AppLog.d(
+      'MAIN: Current UID = ${user?.uid}',
+    );
+
+    AppLog.d(
+      'MAIN: Current Email = ${user?.email}',
+    );
+  } catch (e, stack) {
+    firebaseReady = false;
+
+    AppLog.e(
+      'MAIN: FIREBASE INITIALIZATION FAILED: $e',
+      e,
+      stack,
+    );
   }
 
-  // Load preferences from Hive (Requires Hive boxes to be open)
-  AppLanguage.init();
-  AppTheme.init();
-  
-  // All other services are moved to background to not block launch
-  _initServicesInBackground();
-}
+  // ==========================================================
+  // HIVE
+  // ==========================================================
 
-// Lazy initializations to speed up startup
-Future<void> _initServicesInBackground() async {
-  // AI_DEBUG: Increased delay to ensure UI is fully interactive before heavy init
-  await Future.delayed(const Duration(milliseconds: 1200));
+  try {
+    await HiveService.init();
 
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    AppLog.d(
+      'MAIN: Hive initialization SUCCESS',
+    );
+  } catch (e, stack) {
+    AppLog.e(
+      'MAIN: Hive initialization FAILED: $e',
+      e,
+      stack,
+    );
+  }
+
+  // ==========================================================
+  // APP LANGUAGE / THEME
+  // ==========================================================
+
+  try {
+    AppLanguage.init();
+    AppTheme.init();
+
+    AppLog.d(
+      'MAIN: App preferences initialized',
+    );
+  } catch (e, stack) {
+    AppLog.e(
+      'MAIN: App preferences initialization FAILED: $e',
+      e,
+      stack,
+    );
+  }
+
+  // ==========================================================
+  // RUN APP
+  // ==========================================================
+
+  AppLog.d(
+    'MAIN: runApp()',
   );
 
-  // Non-blocking services initialized one after another to avoid thread contention
+  runApp(
+    TNPSCPrepApp(
+      firebaseReady: firebaseReady,
+    ),
+  );
+}
+
+
+// ============================================================
+// BACKGROUND SERVICES
+// ============================================================
+
+Future<void> initializeServices() async {
+  AppLog.d(
+    '========================================',
+  );
+
+  AppLog.d(
+    'INITIALIZE SERVICES: START',
+  );
+
+  AppLog.d(
+    '========================================',
+  );
+
+  // ----------------------------------------------------------
+  // Verify Firebase
+  // ----------------------------------------------------------
+
   try {
-    await NotificationService.init();
-    // UMP Consent flow handles MobileAds.initialize() and loading ads
-    await RewardService.handleConsentAndInit();
-    TtsService.init();
-    DeepLinkService().init();
-    AppLog.d("AI_DEBUG: Background services initialized.");
-  } catch (e) {
-    AppLog.e("AI_DEBUG: Error in background service init: $e");
+    final firebaseApp = Firebase.app();
+
+    AppLog.d(
+      'SERVICES: Firebase ready = ${firebaseApp.name}',
+    );
+  } catch (e, stack) {
+    AppLog.e(
+      'SERVICES: Firebase NOT READY: $e',
+      e,
+      stack,
+    );
+
+    // Very important:
+    // Do not silently continue if Firebase is unavailable.
+    rethrow;
+  }
+
+  // ----------------------------------------------------------
+  // Firestore settings
+  // ----------------------------------------------------------
+
+  try {
+    FirebaseFirestore.instance.settings =
+    const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes:
+      Settings.CACHE_SIZE_UNLIMITED,
+    );
+
+    AppLog.d(
+      'SERVICES: Firestore configured',
+    );
+  } catch (e, stack) {
+    AppLog.e(
+      'SERVICES: Firestore settings error: $e',
+      e,
+      stack,
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Start background services
+  // ----------------------------------------------------------
+
+  _initServicesInBackground();
+
+  AppLog.d(
+    'SERVICES: Critical initialization COMPLETE',
+  );
+}
+
+
+// ============================================================
+// BACKGROUND INITIALIZATION
+// ============================================================
+
+Future<void> _initServicesInBackground() async {
+  try {
+    // Give UI time to become interactive.
+    await Future.delayed(
+      const Duration(milliseconds: 800),
+    );
+
+    // --------------------------------------------------------
+    // Notification Service
+    // --------------------------------------------------------
+
+    try {
+      await NotificationService.init();
+
+      AppLog.d(
+        'BACKGROUND: NotificationService initialized',
+      );
+    } catch (e, stack) {
+      AppLog.e(
+        'BACKGROUND: NotificationService error: $e',
+        e,
+        stack,
+      );
+    }
+
+    // --------------------------------------------------------
+    // Reward / Ads
+    // --------------------------------------------------------
+
+    try {
+      await RewardService.handleConsentAndInit();
+
+      AppLog.d(
+        'BACKGROUND: RewardService initialized',
+      );
+    } catch (e, stack) {
+      AppLog.e(
+        'BACKGROUND: RewardService error: $e',
+        e,
+        stack,
+      );
+    }
+
+    // --------------------------------------------------------
+    // TTS
+    // --------------------------------------------------------
+
+    try {
+      TtsService.init();
+
+      AppLog.d(
+        'BACKGROUND: TTS initialized',
+      );
+    } catch (e, stack) {
+      AppLog.e(
+        'BACKGROUND: TTS error: $e',
+        e,
+        stack,
+      );
+    }
+
+    // --------------------------------------------------------
+    // Deep Link
+    // --------------------------------------------------------
+
+    try {
+      DeepLinkService().init();
+
+      AppLog.d(
+        'BACKGROUND: DeepLink initialized',
+      );
+    } catch (e, stack) {
+      AppLog.e(
+        'BACKGROUND: DeepLink error: $e',
+        e,
+        stack,
+      );
+    }
+
+    AppLog.d(
+      'BACKGROUND: All background services completed',
+    );
+  } catch (e, stack) {
+    AppLog.e(
+      'BACKGROUND: Unexpected error: $e',
+      e,
+      stack,
+    );
   }
 }
 
+
+// ============================================================
+// TNPSC APP
+// ============================================================
+
 class TNPSCPrepApp extends StatelessWidget {
-  const TNPSCPrepApp({super.key});
+  final bool firebaseReady;
+
+  const TNPSCPrepApp({
+    super.key,
+    required this.firebaseReady,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Global Error UI (Prevents Grey Screen of Death)
-    ErrorWidget.builder = (FlutterErrorDetails details) {
+    // --------------------------------------------------------
+    // Global error UI
+    // --------------------------------------------------------
+
+    ErrorWidget.builder =
+        (FlutterErrorDetails details) {
       return ValueListenableBuilder<String>(
-        valueListenable: AppLanguage.languageNotifier,
-        builder: (context, lang, _) {
+        valueListenable:
+        AppLanguage.languageNotifier,
+        builder: (
+            context,
+            lang,
+            child,
+            ) {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
-            themeMode: AppTheme.themeNotifier.value,
+            themeMode:
+            AppTheme.themeNotifier.value,
             home: AppErrorWidget(
               isFullScreen: true,
-              onRetry: () => SystemNavigator.pop(),
+              onRetry: () {
+                SystemNavigator.pop();
+              },
             ),
           );
-        }
+        },
       );
     };
 
+    // --------------------------------------------------------
+    // Theme
+    // --------------------------------------------------------
+
     return ValueListenableBuilder<ThemeMode>(
-      valueListenable: AppTheme.themeNotifier,
-      builder: (_, ThemeMode currentMode, __) {
+      valueListenable:
+      AppTheme.themeNotifier,
+      builder: (
+          context,
+          currentMode,
+          child,
+          ) {
         return ValueListenableBuilder<String>(
-          valueListenable: AppLanguage.languageNotifier,
-          builder: (context, lang, child) {
+          valueListenable:
+          AppLanguage.languageNotifier,
+          builder: (
+              context,
+              lang,
+              child,
+              ) {
             return ValueListenableBuilder<double>(
-              valueListenable: AppTheme.fontSizeFactorNotifier,
-              builder: (context, fontSizeFactor, child) {
+              valueListenable:
+              AppTheme.fontSizeFactorNotifier,
+              builder: (
+                  context,
+                  fontSizeFactor,
+                  child,
+                  ) {
                 return MaterialApp(
-                  title: AppLanguage.getString('app_title'),
-                  scaffoldMessengerKey: scaffoldMessengerKey,
-                  debugShowCheckedModeBanner: false,
-                  theme: AppTheme.lightTheme,
-                  darkTheme: AppTheme.darkTheme,
-                  themeMode: currentMode,
+                  title: AppLanguage.getString(
+                    'app_title',
+                  ),
+
+                  scaffoldMessengerKey:
+                  scaffoldMessengerKey,
+
+                  debugShowCheckedModeBanner:
+                  false,
+
+                  theme:
+                  AppTheme.lightTheme,
+
+                  darkTheme:
+                  AppTheme.darkTheme,
+
+                  themeMode:
+                  currentMode,
+
+                  // ------------------------------------------------
+                  // IMPORTANT:
+                  // SplashScreen handles Auth session.
+                  // ------------------------------------------------
+
                   home: const SplashScreen(),
                 );
               },
@@ -165,202 +488,494 @@ class TNPSCPrepApp extends StatelessWidget {
   }
 }
 
+
+// ============================================================
+// MAIN WRAPPER
+// ============================================================
+
 class MainWrapper extends StatefulWidget {
-  const MainWrapper({super.key});
+  const MainWrapper({
+    super.key,
+  });
 
   @override
-  State<MainWrapper> createState() => _MainWrapperState();
+  State<MainWrapper> createState() =>
+      _MainWrapperState();
 }
 
-class _MainWrapperState extends State<MainWrapper> with WidgetsBindingObserver {
+
+// ============================================================
+// MAIN WRAPPER STATE
+// ============================================================
+
+class _MainWrapperState
+    extends State<MainWrapper>
+    with WidgetsBindingObserver {
+
   int _selectedIndex = 0;
+
   bool _isExiting = false;
-  DateTime _lastBackgroundCheck = DateTime.now();
+
+  DateTime _lastBackgroundCheck =
+  DateTime.now();
+
+  // ----------------------------------------------------------
+  // Screens
+  // ----------------------------------------------------------
+
+  final List<Widget> _screens = const [
+    HomeScreen(),
+    SubjectScreen(),
+    LeaderboardScreen(),
+    ProfileScreen(),
+  ];
+
+  // ----------------------------------------------------------
+  // INIT
+  // ----------------------------------------------------------
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    // Centralized app-level checks
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+    WidgetsBinding.instance
+        .addObserver(this);
+
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) {
       _runPeriodicChecks();
     });
   }
 
+  // ----------------------------------------------------------
+  // PERIODIC CHECKS
+  // ----------------------------------------------------------
+
   void _runPeriodicChecks() {
-    VersionService.checkForUpdate(context);
-    FirestoreService().updateStreak();
-    NotificationService.reschedulePersonalizedReminders();
-    _lastBackgroundCheck = DateTime.now();
+    if (!mounted) return;
+
+    try {
+      VersionService.checkForUpdate(
+        context,
+      );
+    } catch (e, stack) {
+      AppLog.e(
+        'MAIN WRAPPER: Version check error: $e',
+        e,
+        stack,
+      );
+    }
+
+    try {
+      FirestoreService()
+          .updateStreak();
+    } catch (e, stack) {
+      AppLog.e(
+        'MAIN WRAPPER: Streak update error: $e',
+        e,
+        stack,
+      );
+    }
+
+    try {
+      NotificationService
+          .reschedulePersonalizedReminders();
+    } catch (e, stack) {
+      AppLog.e(
+        'MAIN WRAPPER: Reminder error: $e',
+        e,
+        stack,
+      );
+    }
+
+    _lastBackgroundCheck =
+        DateTime.now();
   }
+
+  // ----------------------------------------------------------
+  // DISPOSE
+  // ----------------------------------------------------------
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    WidgetsBinding.instance
+        .removeObserver(this);
+
     super.dispose();
   }
 
+  // ----------------------------------------------------------
+  // APP LIFECYCLE
+  // ----------------------------------------------------------
+
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    
-    if (state == AppLifecycleState.resumed) {
-      // Only run heavy checks if away for more than 15 minutes
+  void didChangeAppLifecycleState(
+      AppLifecycleState state,
+      ) {
+    super.didChangeAppLifecycleState(
+      state,
+    );
+
+    // --------------------------------------------------------
+    // RESUMED
+    // --------------------------------------------------------
+
+    if (state ==
+        AppLifecycleState.resumed) {
       final now = DateTime.now();
-      if (now.difference(_lastBackgroundCheck).inMinutes >= 15) {
-        AppLog.d("AI_DEBUG: Resumed after >15m - Running periodic checks");
+
+      if (now
+          .difference(
+        _lastBackgroundCheck,
+      )
+          .inMinutes >=
+          15) {
+        AppLog.d(
+          'MAIN WRAPPER: Resumed after >15 minutes',
+        );
+
         _runPeriodicChecks();
       } else {
-        AppLog.d("AI_DEBUG: Resumed quickly - Skipping periodic checks for smoothness");
+        AppLog.d(
+          'MAIN WRAPPER: Resumed quickly',
+        );
       }
-    } else if (state == AppLifecycleState.paused) {
-      _lastBackgroundCheck = DateTime.now();
-      AppLog.d("AI_DEBUG: App paused - tracking timestamp");
+    }
+
+    // --------------------------------------------------------
+    // PAUSED
+    // --------------------------------------------------------
+
+    else if (state ==
+        AppLifecycleState.paused) {
+      _lastBackgroundCheck =
+          DateTime.now();
+
+      AppLog.d(
+        'MAIN WRAPPER: App paused',
+      );
     }
   }
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const SubjectScreen(),
-    const LeaderboardScreen(),
-    const ProfileScreen(),
-  ];
+  // ----------------------------------------------------------
+  // BACK NAVIGATION
+  // ----------------------------------------------------------
 
   Future<void> _handleBackNavigation() async {
-    AppLog.d("AI_DEBUG: [MainWrapper] _handleBackNavigation called. Current index: $_selectedIndex, isExiting: $_isExiting");
+    AppLog.d(
+      'MAIN WRAPPER: Back pressed. '
+          'Index=$_selectedIndex '
+          'Exiting=$_isExiting',
+    );
+
     if (_isExiting) {
-      AppLog.d("AI_DEBUG: [MainWrapper] Already in exiting state, ignoring.");
       return;
     }
 
-    // 1. If not on Home tab, switch to Home tab
+    // --------------------------------------------------------
+    // If not Home → Home
+    // --------------------------------------------------------
+
     if (_selectedIndex != 0) {
-      AppLog.d("AI_DEBUG: [MainWrapper] Not on Home tab (index $_selectedIndex). Switching to Home (index 0).");
       setState(() {
         _selectedIndex = 0;
       });
+
       return;
     }
 
-    // 2. If on Home tab, show exit confirmation
-    AppLog.d("AI_DEBUG: [MainWrapper] On Home tab. Showing exit confirmation dialog.");
+    // --------------------------------------------------------
+    // Home → Exit dialog
+    // --------------------------------------------------------
+
     _isExiting = true;
-    final shouldPop = await showDialog<bool>(
+
+    final shouldPop =
+    await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF101F42)
-            : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          AppLanguage.getString('exit_app_title'),
-          style: AppTheme.getStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white
-                : Colors.black87,
+      builder: (context) {
+        final isDark =
+            Theme.of(context)
+                .brightness ==
+                Brightness.dark;
+
+        return AlertDialog(
+          backgroundColor: isDark
+              ? const Color(0xFF101F42)
+              : Colors.white,
+
+          shape:
+          RoundedRectangleBorder(
+            borderRadius:
+            BorderRadius.circular(20),
           ),
-        ),
-        content: Text(
-          AppLanguage.getString('exit_app_desc'),
-          style: AppTheme.getStyle(
-            fontSize: 16,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white70
-                : Colors.black54,
+
+          title: Text(
+            AppLanguage.getString(
+              'exit_app_title',
+            ),
+            style:
+            AppTheme.getStyle(
+              fontSize: 20,
+              fontWeight:
+              FontWeight.bold,
+              color: isDark
+                  ? Colors.white
+                  : Colors.black87,
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              AppLog.d("AI_DEBUG: [MainWrapper] User chose NOT to exit.");
-              _isExiting = false;
-              Navigator.pop(context, false);
-            },
-            child: Text(
-              AppLanguage.getString('no'),
-              style: AppTheme.getStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
+
+          content: Text(
+            AppLanguage.getString(
+              'exit_app_desc',
+            ),
+            style:
+            AppTheme.getStyle(
+              fontSize: 16,
+              color: isDark
+                  ? Colors.white70
+                  : Colors.black54,
+            ),
+          ),
+
+          actions: [
+            TextButton(
+              onPressed: () {
+                _isExiting = false;
+
+                Navigator.pop(
+                  context,
+                  false,
+                );
+              },
+              child: Text(
+                AppLanguage.getString(
+                  'no',
+                ),
+                style:
+                AppTheme.getStyle(
+                  fontSize: 14,
+                  color:
+                  Colors.grey[600],
+                ),
               ),
             ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              AppLog.d("AI_DEBUG: [MainWrapper] User chose YES to exit.");
-              Navigator.pop(context, true);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  true,
+                );
+              },
+              style:
+              ElevatedButton.styleFrom(
+                backgroundColor:
+                AppTheme
+                    .primaryColor,
+                foregroundColor:
+                Colors.white,
+                shape:
+                RoundedRectangleBorder(
+                  borderRadius:
+                  BorderRadius.circular(
+                    10,
+                  ),
+                ),
+              ),
+              child: Text(
+                AppLanguage.getString(
+                  'yes',
+                ),
+              ),
             ),
-            child: Text(AppLanguage.getString('yes')),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
 
-    if (shouldPop ?? false) {
-      AppLog.d("AI_DEBUG: [MainWrapper] Executing SystemNavigator.pop()");
+    if (shouldPop == true) {
+      AppLog.d(
+        'MAIN WRAPPER: Exiting application',
+      );
+
       SystemNavigator.pop();
     } else {
-      AppLog.d("AI_DEBUG: [MainWrapper] Resetting isExiting to false.");
       _isExiting = false;
     }
   }
 
+  // ----------------------------------------------------------
+  // BUILD
+  // ----------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<String>(
-      valueListenable: AppLanguage.languageNotifier,
-      builder: (context, lang, child) {
+      valueListenable:
+      AppLanguage.languageNotifier,
+      builder: (
+          context,
+          lang,
+          child,
+          ) {
+        final isDark =
+            Theme.of(context)
+                .brightness ==
+                Brightness.dark;
+
         return PopScope(
           canPop: false,
-          onPopInvokedWithResult: (didPop, result) {
-            AppLog.d("AI_DEBUG: [MainWrapper] Global PopScope triggered. didPop: $didPop");
+
+          onPopInvokedWithResult: (
+              didPop,
+              result,
+              ) {
             if (didPop) return;
+
             _handleBackNavigation();
           },
+
           child: Scaffold(
+            // ------------------------------------------------
+            // BODY
+            // ------------------------------------------------
+
             body: LazyIndexedStack(
               index: _selectedIndex,
               children: _screens,
             ),
-            bottomNavigationBar: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkBgColor : Colors.white,
+
+            // ------------------------------------------------
+            // BOTTOM NAVIGATION
+            // ------------------------------------------------
+
+            bottomNavigationBar:
+            Container(
+              decoration:
+              BoxDecoration(
+                color: isDark
+                    ? AppTheme
+                    .darkBgColor
+                    : Colors.white,
+
                 boxShadow: [
-                  BoxShadow(blurRadius: 20, color: Colors.black.withOpacity(0.1)),
+                  BoxShadow(
+                    blurRadius: 20,
+                    color: Colors.black
+                        .withOpacity(
+                      0.1,
+                    ),
+                  ),
                 ],
               ),
+
               child: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 8),
+                  padding:
+                  const EdgeInsets
+                      .symmetric(
+                    horizontal: 15,
+                    vertical: 8,
+                  ),
+
                   child: GNav(
-                    rippleColor: Colors.grey[300]!,
-                    hoverColor: Colors.grey[100]!,
+                    rippleColor:
+                    Colors.grey[300]!,
+
+                    hoverColor:
+                    Colors.grey[100]!,
+
                     gap: 8,
-                    activeColor: AppTheme.secondaryColor,
-                    iconSize: AppTheme.getScaledIconSize(24),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    duration: const Duration(milliseconds: 400),
-                    tabBackgroundColor: AppTheme.secondaryColor.withOpacity(0.1),
+
+                    activeColor:
+                    AppTheme
+                        .secondaryColor,
+
+                    iconSize:
+                    AppTheme
+                        .getScaledIconSize(
+                      24,
+                    ),
+
+                    padding:
+                    const EdgeInsets
+                        .symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+
+                    duration:
+                    const Duration(
+                      milliseconds: 400,
+                    ),
+
+                    tabBackgroundColor:
+                    AppTheme
+                        .secondaryColor
+                        .withOpacity(
+                      0.1,
+                    ),
+
                     color: Colors.grey,
+
+                    selectedIndex:
+                    _selectedIndex,
+
                     tabs: [
-                      GButton(icon: AppIcons.home, text: AppLanguage.getString('home')),
-                      GButton(icon: AppIcons.books, text: AppLanguage.getString('book')),
-                      GButton(icon: AppIcons.leaderboard, text: AppLanguage.getString('rank')),
-                      GButton(icon: AppIcons.profile, text: AppLanguage.getString('profile')),
+                      GButton(
+                        icon:
+                        AppIcons.home,
+                        text:
+                        AppLanguage
+                            .getString(
+                          'home',
+                        ),
+                      ),
+
+                      GButton(
+                        icon:
+                        AppIcons.books,
+                        text:
+                        AppLanguage
+                            .getString(
+                          'book',
+                        ),
+                      ),
+
+                      GButton(
+                        icon:
+                        AppIcons
+                            .leaderboard,
+                        text:
+                        AppLanguage
+                            .getString(
+                          'rank',
+                        ),
+                      ),
+
+                      GButton(
+                        icon:
+                        AppIcons.profile,
+                        text:
+                        AppLanguage
+                            .getString(
+                          'profile',
+                        ),
+                      ),
                     ],
-                    selectedIndex: _selectedIndex,
-                    onTabChange: (index) {
-                      AppLog.d("AI_DEBUG: [MainWrapper] Tab changed to index $index");
+
+                    onTabChange: (
+                        index,
+                        ) {
+                      if (!mounted) {
+                        return;
+                      }
+
                       setState(() {
-                        _selectedIndex = index;
+                        _selectedIndex =
+                            index;
                       });
                     },
                   ),
@@ -369,7 +984,7 @@ class _MainWrapperState extends State<MainWrapper> with WidgetsBindingObserver {
             ),
           ),
         );
-      }
+      },
     );
   }
 }

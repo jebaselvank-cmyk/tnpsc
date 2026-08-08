@@ -33,7 +33,8 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleGoogleSignIn() async {
     setState(() => _isLoading = true);
     final ta = AppLanguage.languageNotifier.value == 'ta';
-
+    AppLog.d("LOGIN SCREEN OPENED");
+    AppLog.d("Current User = ${FirebaseAuth.instance.currentUser?.uid}");
     try {
       final userCredential = await GoogleAuthService.signInWithGoogle();
       if (userCredential != null && userCredential.user != null) {
