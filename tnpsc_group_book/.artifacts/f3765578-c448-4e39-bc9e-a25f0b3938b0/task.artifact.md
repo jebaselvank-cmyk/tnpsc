@@ -1,4 +1,0 @@
-- [x] Update `RoomService.joinRoom` to handle point deduction via transaction
-- [x] Update `RoomSetupScreen._showNeedPointsMessage` to accept dynamic point values
-- [x] Update `RoomSetupScreen._joinRoom` to check for points and handle insufficient points flow
-- [x] Update Join Room UI description to mention point cost

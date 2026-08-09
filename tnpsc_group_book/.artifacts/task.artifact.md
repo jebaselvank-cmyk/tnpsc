@@ -1,6 +1,0 @@
-- [x] Pre-cache share quiz background images in `AdminPromoteScreen`
-- [x] Add intro/outro delays in recording logic in `AdminPromoteScreen`
-- [x] Enhance transition animation in `AdminPromoteScreen` (Slide + Fade + Scale)
-- [x] Implement smooth 60fps timer progress in `SharePoster`
-- [x] Speed up question typing animation in `SharePoster`
-- [x] Verify overall "smoothness" and recording flow
