@@ -19,6 +19,10 @@ class AppLanguage {
     HiveService.saveLanguage(code);
   }
 
+  static Locale getLocale() {
+    return Locale(languageNotifier.value);
+  }
+
   static String getString(String key) {
     bool ta = languageNotifier.value == 'ta';
     switch (key) {

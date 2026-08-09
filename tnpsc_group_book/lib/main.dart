@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -100,6 +102,10 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // Initialize localized date formatting
+  await initializeDateFormatting('ta', null);
+  await initializeDateFormatting('en', null);
 
   // ==========================================================
   // FIREBASE INITIALIZATION
@@ -413,6 +419,16 @@ class TNPSCPrepApp extends StatelessWidget {
             darkTheme: AppTheme.darkTheme,
             themeMode:
             AppTheme.themeNotifier.value,
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('ta'),
+              Locale('en'),
+            ],
+            locale: AppLanguage.getLocale(),
             home: AppErrorWidget(
               isFullScreen: true,
               onRetry: () {
@@ -471,6 +487,17 @@ class TNPSCPrepApp extends StatelessWidget {
 
                   themeMode:
                   currentMode,
+
+                  localizationsDelegates: const [
+                    GlobalMaterialLocalizations.delegate,
+                    GlobalWidgetsLocalizations.delegate,
+                    GlobalCupertinoLocalizations.delegate,
+                  ],
+                  supportedLocales: const [
+                    Locale('ta'),
+                    Locale('en'),
+                  ],
+                  locale: AppLanguage.getLocale(),
 
                   // ------------------------------------------------
                   // IMPORTANT:

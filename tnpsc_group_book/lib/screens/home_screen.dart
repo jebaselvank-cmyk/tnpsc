@@ -833,20 +833,20 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 12),
               // Progress bar (Mastery style)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: value,
-                  minHeight: 6,
-                  backgroundColor: progressColor.withValues(alpha: 0.1),
-                  valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Sub-info row (Optional detail)
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: value,
+                        minHeight: 6,
+                        backgroundColor: progressColor.withValues(alpha: 0.1),
+                        valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Text(
                     isTamil ? "$correct / $total சரி" : "$correct / $total Correct",
                     style: AppTheme.getStyle(
@@ -855,14 +855,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Colors.green,
                     ),
                   ),
-                  Text(
-                    isTamil ? "$wrong தவறு" : "$wrong Wrong",
-                    style: AppTheme.getStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.redAccent,
-                    ),
-                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Sub-info row (Optional detail)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
                 ],
               ),
             ],
@@ -957,7 +956,7 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: isDark 
-              ? [Colors.indigo.shade700, Colors.cyanAccent.shade700]
+              ? [Colors.indigo.shade500, Colors.cyan.shade100]
               : [Colors.white, Colors.blue.shade50],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -994,7 +993,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const Spacer(),
                 Text(
-                  news.date,
+                  AppDate.getDisplayDate(news.timestamp),
                   style: AppTheme.getStyle(fontSize: 10, color: Colors.black87,fontWeight: FontWeight.w600),
                 ),
               ],

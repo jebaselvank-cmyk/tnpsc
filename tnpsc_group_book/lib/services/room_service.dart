@@ -136,18 +136,20 @@ class RoomService {
                    _auth.currentUser?.email == 'adminjeba@gmail.com' || 
                    _auth.currentUser?.email == 'kjebaselvan987@gmail.com';
 
+    // 11:00 PM IST Limit Check
+    if (AppDate.isAfter11PM()) {
+      return 'too_late_error';
+    }
+
     try {
       if (maxPlayers < 2 || maxPlayers > maxRoomPlayers) {
         return 'invalid_player_limit';
       }
 
-      // Check for any active room membership (Hosting or Joined)
+      // Check for existing HOSTED room only. Users can join others while hosting.
       final existingHost = await getActiveHostRoom();
       if (existingHost != null) return 'room_exists_error';
       
-      final existingJoined = await getActiveJoinedRoom();
-      if (existingJoined != null) return 'room_exists_error';
-
       // Strict validation: Prevent creating rooms with past start time
       DateTime now = AppDate.getISTNow();
       if (startTime != null && startTime.isBefore(now.subtract(const Duration(minutes: 1)))) {
@@ -459,13 +461,9 @@ class RoomService {
                    _auth.currentUser?.email == 'kjebaselvan987@gmail.com';
 
     try {
-      // Check for any active room membership first
-      final existingHost = await getActiveHostRoom();
-      if (existingHost != null && existingHost['roomCode'] != roomCode) return 'already_in_room';
+      // Logic: Users can join a room even if hosting or joined elsewhere.
+      // Joining a NEW room replaces the 'joined' membership but keeps the 'hosted' one.
       
-      final existingJoined = await getActiveJoinedRoom();
-      if (existingJoined != null && existingJoined['roomCode'] != roomCode) return 'already_in_room';
-
       String today = AppDate.getTodayString();
       currentRoomDate = today;
       DocumentReference roomRef = _getRoomRef(roomCode);
@@ -479,8 +477,13 @@ class RoomService {
         if (!roomSnap.exists) return 'not_found';
         
         Room room = Room.fromMap(roomSnap.data() as Map<String, dynamic>, roomCode);
+        
+        // Expiry check
+        if (room.endTime != null && AppDate.getISTNow().isAfter(room.endTime!)) {
+          return 'expired';
+        }
+
         if (room.status == 'finished') return 'finished';
-        if (room.status == 'active') return 'already_started';
 
         // Check if user is already a member
         final playerRef = roomRef.collection('players').doc(uid);
@@ -498,6 +501,12 @@ class RoomService {
            if (!isAdmin) {
              cost = roomJoinCostPoints;
            }
+        } else {
+          // If already a member, check if they already finished
+          final pData = playerSnap.data() as Map<String, dynamic>;
+          if (pData['hasFinished'] == true) {
+            return 'already_played';
+          }
         }
 
         final userSnap = await transaction.get(userRef);
@@ -559,26 +568,58 @@ class RoomService {
     }
   }
 
-  /// Host starts group test — all joined players must attempt before group reward.
-  /// Returns: 'success' | 'need_more_players' | 'error'
+  /// Host triggers 30-second countdown for group test.
+  /// Returns: 'success' | 'not_authorized' | 'need_more_players' | 'error'
   Future<String> startRoom(String roomCode) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return 'error';
+
     try {
       final roomRef = _getRoomRef(roomCode);
+      final roomSnap = await roomRef.get();
+      if (!roomSnap.exists) return 'error';
+      
+      final roomData = roomSnap.data() as Map<String, dynamic>;
+      
+      // Security Check: Only the host can start the room
+      if (roomData['hostId'] != uid) {
+        return 'not_authorized';
+      }
+
       final playersSnap = await roomRef.collection('players').get();
       if (playersSnap.docs.length < 2) {
         return 'need_more_players';
       }
 
-      final playerIds = playersSnap.docs.map((d) => d.id).toList();
+      final countdownDuration = const Duration(seconds: 30);
+      final countdownEndTime = AppDate.getISTNow().add(countdownDuration);
+
+      await roomRef.update({
+        'status': 'starting',
+        'countdownEndTime': Timestamp.fromDate(countdownEndTime),
+        'expectedPlayerCount': playersSnap.docs.length,
+        'playerIdsAtStart': playersSnap.docs.map((d) => d.id).toList(),
+        'rewardDistributed': false,
+        'startingAt': FieldValue.serverTimestamp(),
+      });
+
+      return 'success';
+    } catch (e) {
+      AppLog.e("Error starting room countdown", e);
+      return 'error';
+    }
+  }
+
+  /// Transitions room from 'starting' to 'active'.
+  Future<void> activateRoom(String roomCode) async {
+    try {
+      final roomRef = _getRoomRef(roomCode);
       await roomRef.update({
         'status': 'active',
-        'mode': 'group_test',
-        'expectedPlayerCount': playersSnap.docs.length,
-        'playerIdsAtStart': playerIds,
-        'rewardDistributed': false,
         'startedAt': FieldValue.serverTimestamp(),
       });
 
+      final playersSnap = await roomRef.collection('players').get();
       final batch = _db.batch();
       for (final doc in playersSnap.docs) {
         batch.set(
@@ -592,10 +633,8 @@ class RoomService {
         );
       }
       await batch.commit();
-      return 'success';
     } catch (e) {
-      AppLog.e("Error starting room", e);
-      return 'error';
+      AppLog.e("Error activating room", e);
     }
   }
 
@@ -677,7 +716,8 @@ class RoomService {
     return {'playing': playing, 'finished': finished, 'abandoned': abandoned};
   }
 
-  /// True when every player who was in the room at start has finished.
+  /// True when room has expired or been manually finished.
+  /// We no longer auto-finish based on player count to allow late joiners.
   Future<bool> _checkAndMarkRoomFinished(String roomCode) async {
     final roomRef = _getRoomRef(roomCode);
     final roomSnap = await roomRef.get();
@@ -686,21 +726,15 @@ class RoomService {
     final room = roomSnap.data() as Map<String, dynamic>;
     if (room['status'] == 'finished') return true;
 
-    final expected = room['expectedPlayerCount'] as int? ?? 0;
-    if (expected < 1) return false;
-
-    final progress = await _syncRoomProgress(roomCode);
-    final finished = progress['finished'] ?? 0;
-    final abandoned = progress['abandoned'] ?? 0;
-    final playing = progress['playing'] ?? 0;
-
-    if (finished + abandoned >= expected || playing == 0) {
+    final endTs = room['endTime'] as Timestamp?;
+    if (endTs != null && AppDate.getISTNow().isAfter(endTs.toDate())) {
       await roomRef.update({
         'status': 'finished',
         'allFinishedAt': FieldValue.serverTimestamp(),
       });
       return true;
     }
+    
     return false;
   }
 

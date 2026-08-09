@@ -13,6 +13,7 @@ import '../services/reward_service.dart';
 import 'package:hive/hive.dart';
 import '../services/version_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/question.dart';
 import '../services/deep_link_service.dart';
 import '../utils/app_log.dart';
@@ -37,6 +38,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
   late TimeOfDay _endTime;
   bool _isFirstAttempt = true;
   Map<String, dynamic>? _activeRoomData;
+  Map<String, dynamic>? _activeJoinedData;
 
   // Teaser for loading screen
   List<Question> _teaserQuestions = [];
@@ -118,9 +120,41 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
 
   Future<void> _refreshExistingRoom() async {
     final serverData = await _roomService.getActiveHostRoom();
+    final joinedData = await _roomService.getActiveJoinedRoom();
+    
+    // Check if user has already finished these rooms
+    bool hostFinished = false;
+    bool joinedFinished = false;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    if (serverData != null && uid != null) {
+      final pSnap = await FirebaseFirestore.instance
+          .collection('rooms')
+          .doc('daily_${AppDate.getTodayString()}')
+          .collection('matches')
+          .doc(serverData['roomCode'])
+          .collection('players')
+          .doc(uid)
+          .get();
+      hostFinished = pSnap.exists && pSnap.data()?['hasFinished'] == true;
+    }
+
+    if (joinedData != null && uid != null) {
+      final pSnap = await FirebaseFirestore.instance
+          .collection('rooms')
+          .doc('daily_${AppDate.getTodayString()}')
+          .collection('matches')
+          .doc(joinedData['roomCode'])
+          .collection('players')
+          .doc(uid)
+          .get();
+      joinedFinished = pSnap.exists && pSnap.data()?['hasFinished'] == true;
+    }
+
     if (mounted) {
       setState(() {
-        _activeRoomData = serverData;
+        _activeRoomData = serverData != null ? {...serverData, 'hasFinished': hostFinished} : null;
+        _activeJoinedData = joinedData != null ? {...joinedData, 'hasFinished': joinedFinished} : null;
       });
     }
   }
@@ -245,17 +279,22 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
   }
 
   Future<void> _createRoom() async {
+    String lang = AppLanguage.languageNotifier.value;
     // 1. Check App Version
     if (await VersionService.isUpdateRequired()) {
       if (mounted) VersionService.showUpdateDialogIfNeeded(context);
       return;
     }
 
-    // 2. Check Daily Quiz Status
-    if (!HiveService.isDailyQuizDone()) {
-      _showError(AppLanguage.getString('daily_quiz_first_error'));
+    // 2. Check Time Limit (11:00 PM)
+    if (AppDate.isAfter11PM()) {
+      _showError(lang == 'ta' 
+        ? "இன்றைய நேரம் முடிந்துவிட்டது. நாளை புதிய ரூம் உருவாக்கலாம்." 
+        : "Today's time is over. You can create a new room tomorrow.");
       return;
     }
+
+    // 3. Check Daily Quiz Status
 
     // 3. Check for Existing Room (Server sync)
     setState(() {
@@ -264,9 +303,8 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     });
     _startSpinnerTimer();
     
-    // Check both Hosting and Joined rooms
+    // Check Hosting room - Only block if hosting
     final activeData = await _roomService.getActiveHostRoom();
-    final joinedData = await _roomService.getActiveJoinedRoom();
     
     setState(() => _isLoading = false);
 
@@ -283,19 +321,6 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
       return;
     }
 
-    if (joinedData != null) {
-       final code = joinedData['roomCode'];
-       final isHost = joinedData['isHost'] ?? false;
-       _showError(AppLanguage.languageNotifier.value == 'ta' 
-          ? "நீங்கள் ஏற்கனவே ஒரு தேர்வில் இணைந்துள்ளீர்கள் ($code)" 
-          : "You are already in an active room ($code)");
-       Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => WaitingRoomScreen(roomCode: code, isHost: isHost)),
-      );
-      return;
-    }
-
     // 4. Check Points
     if (!_hasEnoughPointsForRoom()) {
       setState(() => _isCreatingProcess = false);
@@ -305,11 +330,20 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
 
     // 5. If all checks pass, validate time BEFORE showing ad
     final nowAtClick = AppDate.getISTNow();
+    
+    // Auto-refresh start time to current time if user hasn't manually picked a specific future time
+    // or if the picked time is now in the past.
     final startDateTime = AppDate.getISTTodayWithTime(_startTime.hour, _startTime.minute);
-    final endDateTime = AppDate.getISTTodayWithTime(_endTime.hour, _endTime.minute);
+    
+    if (startDateTime.isBefore(nowAtClick)) {
+       _startTime = AppDate.getISTTimeOfDay(nowAtClick.add(const Duration(minutes: 2)));
+    }
+    
+    final finalStartDT = AppDate.getISTTodayWithTime(_startTime.hour, _startTime.minute);
+    final finalEndDT = AppDate.getISTTodayWithTime(_endTime.hour, _endTime.minute);
     
     // Validation: Start time must be in future (at least 2 mins from now)
-    if (startDateTime.isBefore(nowAtClick.add(const Duration(minutes: 2)))) {
+    if (finalStartDT.isBefore(nowAtClick.add(const Duration(minutes: 1)))) {
       _showError(AppLanguage.languageNotifier.value == 'ta' 
         ? "தொடக்க நேரம் குறைந்தது 2 நிமிடங்கள் எதிர்காலத்தில் இருக்க வேண்டும்" 
         : "Start time must be at least 2 minutes in the future");
@@ -318,7 +352,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     }
 
     // Validation: End time cannot be before start time
-    if (endDateTime.isBefore(startDateTime)) {
+    if (finalEndDT.isBefore(finalStartDT)) {
       _showError(AppLanguage.languageNotifier.value == 'ta' 
         ? "முடிவு நேரம் தொடக்க நேரத்திற்குப் பிறகு இருக்க வேண்டும்" 
         : "End time must be after start time");
@@ -326,7 +360,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
       return;
     }
 
-    final diffInMinutes = endDateTime.difference(startDateTime).inMinutes;
+    final diffInMinutes = finalEndDT.difference(finalStartDT).inMinutes;
 
     // Validation: At least 1 hour difference
     if (diffInMinutes < 60) {
@@ -359,8 +393,8 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
         String? code = await _roomService.createRoom(
           _selectedSubject, 
           _selectedMaxPlayers,
-          startTime: startDateTime,
-          endTime: endDateTime,
+          startTime: finalStartDT,
+          endTime: finalEndDT,
         );
       
       if (!mounted) return;
@@ -400,6 +434,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
   }
 
   Future<void> _joinRoom() async {
+    String lang = AppLanguage.languageNotifier.value;
     if (await VersionService.isUpdateRequired()) {
       if (mounted) VersionService.showUpdateDialogIfNeeded(context);
       return;
@@ -432,6 +467,11 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
         context,
         MaterialPageRoute(builder: (context) => WaitingRoomScreen(roomCode: code, isHost: false)),
       );
+    } else if (result == 'already_played') {
+       _showError(lang == 'ta' ? "நீங்கள் ஏற்கனவே இந்தத் தேர்வை முடித்துவிட்டீர்கள்" : "You have already completed this test");
+       Navigator.push(context, MaterialPageRoute(builder: (context) => RoomLeaderboardScreen(roomCode: code)));
+    } else if (result == 'expired') {
+       _showError(lang == 'ta' ? "இந்த தேர்வு நேரம் முடிந்துவிட்டது" : "This test time has expired");
     } else if (result == 'insufficient_points') {
       _showNeedPointsMessage(requiredPoints: RoomService.roomJoinCostPoints);
     } else if (result == 'finished') {
@@ -1092,102 +1132,15 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-            // 1. Priority: Active Host Room (Show if user is currently hosting an active room)
-            if (_activeRoomData != null)
-              Container(
-                padding: const EdgeInsets.all(20),
-                margin: const EdgeInsets.only(bottom: 25),
-                decoration: BoxDecoration(
-                    color: AppTheme.secondaryColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.secondaryColor.withValues(alpha: 0.4), width: 1.5),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 5))
-                    ]
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const AppIcon(AppIcons.star, color: AppTheme.secondaryColor, size: 28),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                AppLanguage.getString('active_room_available'),
-                                style: AppTheme.getStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "${AppLanguage.getString('subject_name_label')}: ${AppLanguage.getString(_activeRoomData!['subject'] ?? 'general_tamil')}",
-                                style: AppTheme.getStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black54, fontWeight: FontWeight.w500),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.black38 : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300, width: 1),
-                        ),
-                        child: Text(
-                          _activeRoomData!['roomCode'] ?? '',
-                          style: AppTheme.getStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.secondaryColor,
-                          ).copyWith(letterSpacing: 3),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          if (await VersionService.isUpdateRequired()) {
-                            if (mounted) VersionService.showUpdateDialogIfNeeded(context);
-                            return;
-                          }
-                          if (mounted) {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => WaitingRoomScreen(roomCode: _activeRoomData!['roomCode'], isHost: true),
-                              ),
-                            );
-                          }
-                        },
-                        label: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            AppLanguage.getString('enter_waiting_room'),
-                            style: AppTheme.getStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.secondaryColor,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                // 1. Priority: Active Host Room (Show if user is currently hosting an active room)
+                if (_activeRoomData != null)
+                  _buildActiveRoomCard(context, _activeRoomData!, isDark, isHost: true),
 
-            // 2. Persistent Join Section (Always available)
+                // 1.1 Priority: Active Joined Room (Show if user is currently in a room joined from others)
+                if (_activeJoinedData != null && _activeJoinedData!['roomCode'] != _activeRoomData?['roomCode'])
+                  _buildActiveRoomCard(context, _activeJoinedData!, isDark, isHost: false),
+
+                // 2. Persistent Join Section (Always available)
             Container(
               padding: const EdgeInsets.all(20),
               margin: const EdgeInsets.only(bottom: 25),
@@ -1378,15 +1331,31 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
 
                                 setState(() {
                                   _startTime = picked;
-                                  // Auto increment end time by 1 hour and save preference
-                                  _endTime = TimeOfDay(
-                                    hour: (picked.hour + 1) % 24,
-                                    minute: picked.minute,
-                                  );
-                                  // If end time reaches next day (00:xx), cap at 23:59
-                                  if (_endTime.hour == 0 && picked.hour > 0) {
-                                    _endTime = const TimeOfDay(hour: 23, minute: 59);
+                                  // Auto increment end time by 2 hours instead of 1
+                                  int nextHour = picked.hour + 2;
+                                  int nextMinute = picked.minute;
+                                  
+                                  // Cap at 11:59 PM (23:59)
+                                  if (nextHour >= 24) {
+                                    nextHour = 23;
+                                    nextMinute = 59;
+                                  } else if (nextHour == 23 && nextMinute > 59) {
+                                    nextMinute = 59;
                                   }
+
+                                  TimeOfDay newEnd = TimeOfDay(hour: nextHour, minute: nextMinute);
+
+                                  // If there was a preference, use it ONLY if it's > current + 2h
+                                  final prefEnd = HiveService.getRoomTimePreference();
+                                  if (prefEnd != null) {
+                                    final curEndDT = AppDate.getISTTodayWithTime(newEnd.hour, newEnd.minute);
+                                    final prefEndDT = AppDate.getISTTodayWithTime(prefEnd.hour, prefEnd.minute);
+                                    if (prefEndDT.isAfter(curEndDT)) {
+                                      newEnd = prefEnd;
+                                    }
+                                  }
+
+                                  _endTime = newEnd;
                                   HiveService.saveRoomTimePreference(_endTime.hour, _endTime.minute);
                                 });
                               }
@@ -1544,5 +1513,119 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
         child: const AppIcon(Icons.help_outline_rounded, color: Colors.white),
       ),
     ));
+  }
+
+  Widget _buildActiveRoomCard(BuildContext context, Map<String, dynamic> data, bool isDark, {required bool isHost}) {
+    final code = data['roomCode'] ?? '';
+    final subject = data['subject'] ?? 'general_tamil';
+    final bool hasFinished = data['hasFinished'] ?? false;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 25),
+      decoration: BoxDecoration(
+          color: isHost ? AppTheme.secondaryColor.withValues(alpha: 0.12) : Colors.green.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isHost ? AppTheme.secondaryColor.withValues(alpha: 0.4) : Colors.green.withValues(alpha: 0.3), width: 1.5),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 5))
+          ]
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppIcon(isHost ? AppIcons.star : Icons.group_add_rounded, color: isHost ? AppTheme.secondaryColor : Colors.green, size: 28),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isHost ? AppLanguage.getString('active_room_available') : (AppLanguage.languageNotifier.value == 'ta' ? "இணைந்த தேர்வு உள்ளது" : "Joined Room Available"),
+                      style: AppTheme.getStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "${AppLanguage.getString('subject_name_label')}: ${AppLanguage.getString(subject)}",
+                      style: AppTheme.getStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black54, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              if (isHost)
+                 Container(
+                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                   decoration: BoxDecoration(color: AppTheme.secondaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                   child: Text(AppLanguage.languageNotifier.value == 'ta' ? "நிர்வாகி" : "Host", style: AppTheme.getStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.secondaryColor)),
+                 ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.black38 : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300, width: 1),
+              ),
+              child: Text(
+                code,
+                style: AppTheme.getStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: isHost ? AppTheme.secondaryColor : Colors.green,
+                ).copyWith(letterSpacing: 3),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                if (await VersionService.isUpdateRequired()) {
+                  if (mounted) VersionService.showUpdateDialogIfNeeded(context);
+                  return;
+                }
+                if (mounted) {
+                  if (hasFinished) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => RoomLeaderboardScreen(roomCode: code),
+                      ),
+                    );
+                  } else {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => WaitingRoomScreen(roomCode: code, isHost: isHost),
+                      ),
+                    );
+                  }
+                }
+              },
+              label: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  hasFinished ? (AppLanguage.languageNotifier.value == 'ta' ? "முடிவுகளைப் பார்" : "View Results") : AppLanguage.getString('enter_waiting_room'),
+                  style: AppTheme.getStyle(color: isHost ? Colors.black87 : Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isHost ? AppTheme.secondaryColor : (hasFinished ? Colors.blue : Colors.green),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

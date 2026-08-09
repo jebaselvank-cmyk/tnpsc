@@ -45,6 +45,9 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   DateTime? _roomEndTime;
   Timer? _timeCheckTimer;
   bool _canSelfStart = false;
+  bool _isExpired = false;
+  int _countdownSeconds = 30;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
@@ -57,10 +60,38 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     _timeCheckTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_roomStartTime != null && _roomEndTime != null) {
         final now = AppDate.getISTNow();
-        final bool shouldEnable = now.isAfter(_roomStartTime!) && now.isBefore(_roomEndTime!);
-        if (shouldEnable != _canSelfStart) {
+        
+        // Expiry Logic: Now is after end time
+        final bool expired = now.isAfter(_roomEndTime!);
+        
+        // Start Logic: Now is between start and end
+        final bool shouldEnable = now.isAfter(_roomStartTime!) && !expired;
+        
+        if (expired != _isExpired || shouldEnable != _canSelfStart) {
           setState(() {
+            _isExpired = expired;
             _canSelfStart = shouldEnable;
+          });
+        }
+      }
+    });
+  }
+
+  void _startCountdown(DateTime endTime) {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final now = AppDate.getISTNow();
+      final diff = endTime.difference(now).inSeconds;
+      
+      if (diff <= 0) {
+        timer.cancel();
+        if (widget.isHost) {
+          _roomService.activateRoom(widget.roomCode);
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _countdownSeconds = diff;
           });
         }
       }
@@ -70,6 +101,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   @override
   void dispose() {
     _timeCheckTimer?.cancel();
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
@@ -864,11 +896,13 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
             ),
           ),
           Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Starting Time',
+              Text(
+                AppLanguage.languageNotifier.value == 'ta' ? 'தேர்வு நேரம்: ' : 'Match Time: ',
                 textAlign: TextAlign.center,
                 style: AppTheme.getStyle(
-                  fontSize: 20,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: Colors.white70,
                   ignoreScale: true,
@@ -885,14 +919,26 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                     : '',
                 textAlign: TextAlign.center,
                 style: AppTheme.getStyle(
-                  fontSize: 20,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white70,
+                  color: theme.accentColor,
                   ignoreScale: true,
                 ),
               ),
             ],
           ),
+          if (_roomStartTime != null && _roomEndTime != null)
+             Padding(
+               padding: const EdgeInsets.only(top: 4.0),
+               child: Text(
+                 "(${DateFormat('hh:mm a').format(_roomStartTime!)} - ${DateFormat('hh:mm a').format(_roomEndTime!)})",
+                 style: AppTheme.getStyle(
+                   fontSize: 10,
+                   color: Colors.white38,
+                   ignoreScale: true,
+                 ),
+               ),
+             ),
         ],
       ),
     );
@@ -1945,8 +1991,22 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
           if (startTs != null) _roomStartTime = AppDate.toIST(startTs.toDate());
           if (endTs != null) _roomEndTime = AppDate.toIST(endTs.toDate());
 
+          // Handle Countdown State
+          if (roomData['status'] == 'starting') {
+            final endCountdownTs = roomData['countdownEndTime'] as Timestamp?;
+            if (endCountdownTs != null) {
+              final endDT = AppDate.toIST(endCountdownTs.toDate());
+              if (_countdownTimer == null || !_countdownTimer!.isActive) {
+                _startCountdown(endDT);
+              }
+            }
+          }
+
           if (roomData['status'] == 'active' ||
               roomData['status'] == 'finished') {
+            // Stop countdown if active
+            _countdownTimer?.cancel();
+            
             WidgetsBinding.instance.addPostFrameCallback((_) async {
               final uid = FirebaseAuth.instance.currentUser?.uid;
               if (uid == null) return;
@@ -2068,6 +2128,42 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                       ],
                     ),
                   ),
+                ] else if (roomData?['status'] == 'starting') ...[
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            AppLanguage.languageNotifier.value == 'ta' ? "தேர்வு தொடங்குகிறது!" : "Exam Starting Soon!",
+                            style: AppTheme.getStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.secondaryColor),
+                          ),
+                          const SizedBox(height: 32),
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              SizedBox(
+                                width: 120,
+                                height: 120,
+                                child: CircularProgressIndicator(
+                                  value: _countdownSeconds / 30,
+                                  strokeWidth: 10,
+                                  backgroundColor: AppTheme.secondaryColor.withOpacity(0.1),
+                                  valueColor: const AlwaysStoppedAnimation(AppTheme.secondaryColor),
+                                ),
+                              ),
+                              Text(
+                                "$_countdownSeconds",
+                                style: AppTheme.getStyle(fontSize: 48, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 40),
+                          _buildEducationalTips(isDark),
+                        ],
+                      ),
+                    ),
+                  )
                 ] else ...[
                   Screenshot(
                     controller: _screenshotController,
@@ -2425,7 +2521,22 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (_canSelfStart)
+                          if (_isExpired)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                AppLanguage.languageNotifier.value == 'ta'
+                                    ? "தேர்வு நேரம் முடிந்துவிட்டது (Expired)"
+                                    : "Match time has expired",
+                                textAlign: TextAlign.center,
+                                style: AppTheme.getStyle(
+                                  fontSize: 14,
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          else if (_canSelfStart)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: Text(
@@ -2447,19 +2558,19 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                                   ),
                                   builder: (context, ps) {
                                     final count = ps.data?.docs.length ?? 0;
-                                    final canStart = count >= 2;
+                                    final canStart = count >= 2 && !_isExpired;
                                     return Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        if (!_canSelfStart)
+                                        if (!_canSelfStart && !_isExpired)
                                           Text(
-                                            canStart
+                                            count >= 2
                                                 ? 'All $count players will attempt the same quiz.'
                                                 : 'Need at least 2 players to start ($count joined)',
                                             textAlign: TextAlign.center,
                                             style: AppTheme.getStyle(
                                               fontSize: 13,
-                                              color: canStart
+                                              color: count >= 2
                                                   ? AppTheme.secondaryColor
                                                   : Colors.orange,
                                             ),
@@ -2468,7 +2579,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                                         SizedBox(
                                           width: double.infinity,
                                           child: ElevatedButton(
-                                            onPressed: (canStart || _canSelfStart)
+                                            onPressed: canStart || (_canSelfStart && !_isExpired)
                                                 ? () async {
                                                     if (_canSelfStart) {
                                                        _startExam();
@@ -2484,8 +2595,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                                                   }
                                                 : null,
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  AppTheme.secondaryColor,
+                                              backgroundColor: _isExpired ? Colors.grey : AppTheme.secondaryColor,
                                               padding: const EdgeInsets.symmetric(
                                                 vertical: 16,
                                               ),
@@ -2496,9 +2606,11 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                                               ),
                                             ),
                                             child: Text(
-                                              _canSelfStart 
-                                                ? (AppLanguage.languageNotifier.value == 'ta' ? "தேர்வைத் தொடங்கு" : "Start Quiz")
-                                                : AppLanguage.getString('start_group_test'),
+                                              _isExpired 
+                                                ? (AppLanguage.languageNotifier.value == 'ta' ? "காலாவதியானது" : "Expired")
+                                                : (_canSelfStart 
+                                                    ? (AppLanguage.languageNotifier.value == 'ta' ? "தேர்வைத் தொடங்கு" : "Start Quiz")
+                                                    : AppLanguage.getString('start_group_test')),
                                               style: AppTheme.getStyle(
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.bold,
@@ -2514,44 +2626,19 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                               : Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (_canSelfStart)
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                          onPressed: _startExam,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppTheme.secondaryColor,
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 16,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(
-                                                12,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            AppLanguage.languageNotifier.value == 'ta' ? "தேர்வைத் தொடங்கு" : "Start Quiz Now",
-                                            style: AppTheme.getStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    else
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 10),
-                                        child: Text(
-                                          AppLanguage.getString('waiting_for_host'),
-                                          textAlign: TextAlign.center,
-                                          style: AppTheme.getStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey,
-                                          ).copyWith(fontStyle: FontStyle.italic),
-                                        ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      child: Text(
+                                        _isExpired 
+                                          ? (AppLanguage.languageNotifier.value == 'ta' ? "இந்த தேர்வு நேரம் முடிந்துவிட்டது." : "This test time has expired.")
+                                          : AppLanguage.getString('waiting_for_host'),
+                                        textAlign: TextAlign.center,
+                                        style: AppTheme.getStyle(
+                                          fontSize: 14,
+                                          color: _isExpired ? Colors.redAccent : Colors.grey,
+                                        ).copyWith(fontStyle: FontStyle.italic),
                                       ),
+                                    ),
                                   ],
                                 ),
                         ],

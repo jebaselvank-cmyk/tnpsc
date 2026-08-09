@@ -4,6 +4,7 @@ import '../services/tts_service.dart';
 import '../utils/app_theme.dart';
 import '../utils/app_language.dart';
 import '../utils/app_icons.dart';
+import '../utils/app_date.dart';
 
 class NewsDetailScreen extends StatefulWidget {
   final NewsItem newsItem;
@@ -87,7 +88,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              widget.newsItem.date,
+              AppDate.getDisplayDate(widget.newsItem.timestamp),
               style: AppTheme.getStyle(
                 fontSize: 14,
                 color: Colors.grey,

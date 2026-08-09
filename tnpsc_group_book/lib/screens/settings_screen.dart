@@ -94,7 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showEditNameDialog() {
     if (!HiveService.canUpdateName()) {
       DateTime? nextUpdate = HiveService.getLastNameUpdateDate()?.add(const Duration(days: 30));
-      String dateStr = nextUpdate != null ? DateFormat('dd MMM yyyy').format(nextUpdate) : "next month";
+      String dateStr = nextUpdate != null ? DateFormat('dd MMM yyyy', AppLanguage.languageNotifier.value).format(nextUpdate) : (AppLanguage.languageNotifier.value == 'ta' ? "அடுத்த மாதம்" : "next month");
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

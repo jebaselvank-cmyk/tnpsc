@@ -100,7 +100,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildHistoryCard(Map<String, dynamic> item, bool isDark) {
     final DateTime timestamp = item['timestamp']?.toDate() ?? AppDate.getISTNow();
-    final String dateStr = DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp);
+    final String dateStr = DateFormat('MMM dd, yyyy • hh:mm a', AppLanguage.languageNotifier.value).format(timestamp);
     final int score = item['score'] ?? 0;
     final int total = item['totalQuestions'] ?? 0;
     final double percentage = total > 0 ? (score / total) * 100 : 0;

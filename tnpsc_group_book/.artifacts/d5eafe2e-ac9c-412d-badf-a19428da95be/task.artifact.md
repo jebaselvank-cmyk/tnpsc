@@ -1,0 +1,7 @@
+- `[ ]` Add `isAfter11PM()` helper to `AppDate`
+- `[ ]` Update `RoomService.createRoom` with 11 PM constraint and Hosted room persistence
+- `[ ]` Update `RoomService.joinRoom` to allow replacing existing joined membership
+- `[ ]` Refine `RoomSetupScreen` with auto End-Time (+2h) logic and 11 PM toast
+- `[ ]` Implement Expiry check in `WaitingRoomScreen`
+- `[ ]` Update Share Poster to show Start-End time range
+- `[ ]` Verify all time-based logic and room switching
