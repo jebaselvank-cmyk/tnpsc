@@ -31,6 +31,10 @@ import '../services/version_service.dart';
 import '../services/tts_service.dart';
 import 'room_setup_screen.dart';
 import '../services/content_sync_service.dart';
+import '../services/ai_service.dart';
+import '../models/news_item.dart';
+import 'news_detail_screen.dart';
+import '../services/reward_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -49,8 +53,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _userDataFuture = _firestoreService.getUserData();
     _checkInitialSync();
     _ensurePointsRestored();
+    _checkAutoNews();
     // AI_DEBUG: Check clipboard on home screen entry for room codes
     DeepLinkService().checkClipboard();
+  }
+
+  Future<void> _checkAutoNews() async {
+    // Wait a bit to not interfere with initial UI load
+    await Future.delayed(const Duration(seconds: 2));
+    await AiService.checkAndAutoGenerateNews();
   }
 
   Future<void> _ensurePointsRestored() async {
@@ -267,6 +278,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ],
                                       ),
                                 ),
+                                const SizedBox(height: 32),
+
+                                // Current Affairs Section
+                                _buildCurrentAffairsSection(context, isDark),
                                 const SizedBox(height: 32),
 
                                 // Smart Weak Area Analysis Card
@@ -576,7 +591,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
           decoration: BoxDecoration(
             color: isDark ? color.withValues(alpha: 0.15) : color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(16),
@@ -853,6 +868,169 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildCurrentAffairsSection(BuildContext context, bool isDark) {
+    bool isTamil = AppLanguage.languageNotifier.value == 'ta';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              isTamil ? "இன்றைய நடப்பு நிகழ்வுகள்" : "Daily Current Affairs",
+              style: AppTheme.getStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isDark ? AppTheme.secondaryColor : AppTheme.textMainColor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('current_affairs_points')
+              .orderBy('timestamp', descending: true)
+              .limit(10)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Center(
+                  child: Text(
+                    isTamil ? "செய்திகள் எதுவும் இல்லை" : "No news available",
+                    style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+              );
+            }
+
+            return SizedBox(
+              height: 180,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: snapshot.data!.docs.length,
+                itemBuilder: (context, index) {
+                  NewsItem news = NewsItem.fromFirestore(snapshot.data!.docs[index]);
+                  return _buildNewsCard(context, news, isDark, isTamil);
+                },
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNewsCard(BuildContext context, NewsItem news, bool isDark, bool isTamil) {
+    String title = isTamil ? news.titleTa : news.titleEn;
+    return GestureDetector(
+      onTap: () {
+        RewardService.showInterstitialAd(
+          onDismissed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NewsDetailScreen(newsItem: news),
+              ),
+            );
+          },
+        );
+      },
+      child: Container(
+        width: 280,
+        margin: const EdgeInsets.only(right: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDark 
+              ? [Colors.indigo.shade700, Colors.cyanAccent.shade700]
+              : [Colors.white, Colors.blue.shade50],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isDark ? Colors.white10 : Colors.blue.shade100),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.secondaryColor.withOpacity(0.1) : AppTheme.primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    news.category,
+                    style: AppTheme.getStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  news.date,
+                  style: AppTheme.getStyle(fontSize: 10, color: Colors.black87,fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.getStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : AppTheme.textMainColor,
+                ),
+              ),
+            ),
+            // const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.play_circle_fill_rounded, color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor, size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  isTamil ? "விளம்பரம் மற்றும் செய்தி" : "Ad & News",
+                  style: AppTheme.getStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor,
+                  ),
+                ),
+                const Spacer(),
+                const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.grey),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

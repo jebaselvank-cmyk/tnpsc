@@ -315,9 +315,19 @@ class RewardService {
       );
       _interstitialAd!.show();
     } else {
-      AppLog.d('AI_DEBUG: Interstitial Ad not ready. Pre-loading for next time.');
+      AppLog.d('AI_DEBUG: Interstitial Ad not ready. Waiting 2s max...');
       loadInterstitialAd();
-      onDismissed();
+      
+      // Safety timeout: proceed after 2 seconds if ad doesn't load
+      Future.delayed(const Duration(milliseconds: 2000), () {
+        if (_isInterstitialLoaded && _interstitialAd != null) {
+          AppLog.d('AI_DEBUG: Interstitial Ad loaded during wait, showing now.');
+          showInterstitialAd(onDismissed: onDismissed);
+        } else {
+          AppLog.d('AI_DEBUG: Ad still not ready after wait. Proceeding to screen.');
+          onDismissed();
+        }
+      });
     }
   }
 

@@ -1228,4 +1228,74 @@ Only return the raw JSON array, no other text or markdown formatting.
     }
     return [];
   }
+
+  static Future<bool> generateAndSaveDailyNews(DateTime date) async {
+    final dateStr = AppDate.format(date);
+    
+    final prompt = '''
+Generate 10 important Current Affairs news items for TNPSC exams for the date $dateStr.
+Focus on Tamil Nadu events, National news, Awards, and Sports.
+STRICT LANGUAGE REQUIREMENTS:
+1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
+2. NO OTHER LANGUAGES (No Hindi, etc.).
+3. Ensure there are NO spelling mistakes.
+Strictly use this BILINGUAL JSON format:
+[
+  {
+    "titleEn": "English Title",
+    "titleTa": "தமிழ் தலைப்பு",
+    "contentEn": "Detailed news content in English (2-3 sentences)",
+    "contentTa": "செய்தியின் விரிவான விளக்கம் தமிழில் (2-3 வாக்கியங்கள்)",
+    "category": "Tamil Nadu / National / International / Sports"
+  }
+]
+Only return the raw JSON array, no other text or markdown formatting.
+''';
+
+    final res = await _generateWithFallback(prompt);
+    if (res != null) {
+      try {
+        int start = res.indexOf('[');
+        int end = res.lastIndexOf(']');
+        if (start != -1 && end != -1) {
+          List<dynamic> newsItems = jsonDecode(res.substring(start, end + 1));
+          final db = FirebaseFirestore.instance;
+          
+          for (var item in newsItems) {
+            await db.collection('current_affairs_points').add({
+              ...item,
+              'date': dateStr,
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+          }
+          return true;
+        }
+      } catch (e) {
+        AppLog.d("AI_DEBUG: News Generation Parse Error: $e");
+      }
+    }
+    return false;
+  }
+
+  static Future<void> checkAndAutoGenerateNews() async {
+    try {
+      final todayStr = AppDate.getTodayString();
+      final db = FirebaseFirestore.instance;
+      
+      // Check if news for today already exists
+      final query = await db.collection('current_affairs_points')
+          .where('date', isEqualTo: todayStr)
+          .limit(1)
+          .get();
+          
+      if (query.docs.isEmpty) {
+        AppLog.d("AI_DEBUG: No news found for today ($todayStr). Triggering auto-generation...");
+        await generateAndSaveDailyNews(AppDate.getISTNow());
+      } else {
+        AppLog.d("AI_DEBUG: News for today ($todayStr) already exists. Skipping auto-gen.");
+      }
+    } catch (e) {
+      AppLog.e("AI_DEBUG: Error in auto news generation", e);
+    }
+  }
 }

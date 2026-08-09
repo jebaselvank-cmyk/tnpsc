@@ -142,6 +142,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               onTap: _showRoomQuizGenDialog,
             ),
             const SizedBox(height: 12),
+            // Generate Daily Current Affairs
+            _buildAdminCard(
+              context,
+              title: "Generate Daily Current Affairs",
+              icon: Icons.newspaper_rounded,
+              color: Colors.blueAccent,
+              onTap: _showNewsGenDialog,
+            ),
+            const SizedBox(height: 12),
             // Promote App (Video Format)
             _buildAdminCard(
               context,
@@ -217,6 +226,56 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   // ────── Dialogs ──────
+
+  void _showNewsGenDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Generate Daily Current Affairs"),
+        content: const Text("This will generate 5 important news items for today using AI and save them to Firestore."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _startNewsGeneration();
+            },
+            child: const Text("Generate"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startNewsGeneration() async {
+    setState(() {
+      _isGenerating = true;
+      _currentStatus = "Generating Daily Current Affairs...";
+    });
+
+    try {
+      bool success = await AiService.generateAndSaveDailyNews(AppDate.getISTNow());
+      
+      setState(() {
+        _isGenerating = false;
+        _currentStatus = success ? "Success! News generated." : "Failed to generate news.";
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? "News generated successfully!" : "Failed to generate news."),
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isGenerating = false;
+        _currentStatus = "Error: $e";
+      });
+    }
+  }
 
   void _showBulkQuizGenDialog() async {
       showDialog(
