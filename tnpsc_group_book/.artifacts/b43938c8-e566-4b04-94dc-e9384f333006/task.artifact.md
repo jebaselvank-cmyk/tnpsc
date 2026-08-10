@@ -1,0 +1,13 @@
+- [x] Update `RoomService` for expiry checks
+    - [x] Update `getActiveHostRoom`
+    - [x] Update `getActiveJoinedRoom`
+- [x] Update `RoomSetupScreen` with periodic refresh
+- [x] Refine Room Creation Cost Logic
+    - [x] Update `RoomService.calculateRoomCost` (Verified logic)
+    - [x] Update `RoomSetupScreen` UI cost messages
+- [x] Implement Strict Point Verification
+    - [x] Add new localized strings to `AppLanguage` for room cost errors
+    - [x] Update `_showNeedPointsMessage` with contextual logic and "100 pts / One-time" rule
+    - [x] Update `_createRoom` to strictly verify points before ANY ad starts
+- [x] Verify `RoomSetupScreen` behavior
+- [x] Final verification and testing

@@ -212,6 +212,10 @@ class AppLanguage {
         return ta ? 'ஆதரவு' : 'Support';
       case 'join_telegram':
         return ta ? 'டெலிகிராமில் இணையுங்கள்' : 'Join Telegram';
+      case 'join_whatsapp':
+        return ta ? 'வாட்ஸ்அப் குழுவில் இணையுங்கள்' : 'Join WhatsApp Group';
+      case 'whatsapp_desc':
+        return ta ? 'தினசரி அப்டேட்ஸ் மற்றும் டிப்ஸ் பெற' : 'Get daily updates and study tips';
       case 'telegram_desc':
         return ta ? 'முக்கிய அறிவிப்புகள் மற்றும் டிப்ஸ் பெற' : 'Get important updates and study tips';
       case 'feedback_support':
@@ -842,6 +846,10 @@ class AppLanguage {
         return ta ? 'கூடுதல் வீரர் செலவு: {points} புள்ளிகள்' : 'Extra player cost: {points} points';
       case 'base_room_cost':
         return ta ? 'அடிப்படை குழு செலவு: {points} புள்ளிகள்' : 'Base room cost: {points} points';
+      case 'room_cost_first_free_limit':
+        return ta ? 'முதல் ரூம் 10 வீரர்கள் வரை மட்டுமே இலவசம். கூடுதல் வீரர்களுக்கு பாயிண்ட்டுகள் தேவை.' : 'First room is free up to 10 users only. You need points for extra players.';
+      case 'room_cost_second_min_points':
+        return ta ? 'இரண்டாவது ரூம் உருவாக்க 200 பாயிண்ட்டுகள் தேவை. தொடர பாயிண்ட்டுகளைப் பெறவும்.' : 'Creating a second room requires 200 points. Please earn points to continue.';
       case 'create_room_btn':
         return ta ? 'குழுவை உருவாக்கு' : 'Create Room';
       case 'join_room_section':

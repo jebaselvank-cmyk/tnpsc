@@ -407,21 +407,38 @@ class RoomService {
           .doc('daily_$today')
           .collection('matches')
           .where('hostId', isEqualTo: uid)
-          .where('status', whereIn: ['waiting', 'active'])
+          .where('status', whereIn: ['waiting', 'active', 'starting'])
           .limit(1)
           .get();
 
       if (snap.docs.isNotEmpty) {
-        String roomCode = snap.docs.first.id;
+        final doc = snap.docs.first;
+        String roomCode = doc.id;
+        final data = doc.data() as Map<String, dynamic>;
+        
+        // Expiry check
+        final endTs = data['endTime'] as Timestamp?;
+        if (endTs != null) {
+          final endDT = AppDate.toIST(endTs.toDate());
+          if (AppDate.getISTNow().isAfter(endDT)) {
+            AppLog.d("AI_DEBUG: Host room $roomCode expired, marking finished");
+            await doc.reference.update({
+              'status': 'finished',
+              'autoFinishedAt': FieldValue.serverTimestamp(),
+            });
+            await HiveService.clearHostRoom();
+            return null;
+          }
+        }
+
         await HiveService.saveHostRoom(roomCode, today);
-        final data = snap.docs.first.data() as Map<String, dynamic>;
         return {
           'roomCode': roomCode,
           'subject': data['subject'],
           'maxPlayers': data['maxPlayers'],
           'status': data['status'],
-          'startTime': data['startTime'],
-          'endTime': data['endTime'],
+          'startTime': data['startTime'] != null ? AppDate.toIST((data['startTime'] as Timestamp).toDate()) : null,
+          'endTime': data['endTime'] != null ? AppDate.toIST((data['endTime'] as Timestamp).toDate()) : null,
         };
       } else {
         await HiveService.clearHostRoom();
@@ -596,7 +613,7 @@ class RoomService {
 
       await roomRef.update({
         'status': 'starting',
-        'countdownEndTime': Timestamp.fromDate(countdownEndTime),
+        'countdownEndTime': Timestamp.fromDate(AppDate.toRealUTC(countdownEndTime)),
         'expectedPlayerCount': playersSnap.docs.length,
         'playerIdsAtStart': playersSnap.docs.map((d) => d.id).toList(),
         'rewardDistributed': false,
@@ -727,7 +744,7 @@ class RoomService {
     if (room['status'] == 'finished') return true;
 
     final endTs = room['endTime'] as Timestamp?;
-    if (endTs != null && AppDate.getISTNow().isAfter(endTs.toDate())) {
+    if (endTs != null && AppDate.getISTNow().isAfter(AppDate.toIST(endTs.toDate()))) {
       await roomRef.update({
         'status': 'finished',
         'allFinishedAt': FieldValue.serverTimestamp(),
@@ -899,8 +916,8 @@ class RoomService {
   Future<void> updateRoomTimeRange(String roomCode, DateTime start, DateTime end) async {
     try {
       await _getRoomRef(roomCode).update({
-        'startTime': Timestamp.fromDate(start),
-        'endTime': Timestamp.fromDate(end),
+        'startTime': Timestamp.fromDate(AppDate.toRealUTC(start)),
+        'endTime': Timestamp.fromDate(AppDate.toRealUTC(end)),
       });
     } catch (e) {
       AppLog.e("Error updating room time range", e);
@@ -923,7 +940,17 @@ class RoomService {
           final roomData = roomDoc.data() as Map<String, dynamic>;
           final status = roomData['status'];
           
-          if (status == 'waiting' || status == 'active') {
+          // Expiry check
+          final endTs = roomData['endTime'] as Timestamp?;
+          if (endTs != null) {
+            final endDT = AppDate.toIST(endTs.toDate());
+            if (AppDate.getISTNow().isAfter(endDT)) {
+              AppLog.d("AI_DEBUG: Joined room $lastRoomPlayed expired, treating as null");
+              return null;
+            }
+          }
+
+          if (status == 'waiting' || status == 'active' || status == 'starting') {
              // Verify user is actually a player
              final playerDoc = await roomDoc.reference.collection('players').doc(uid).get();
              if (playerDoc.exists) {

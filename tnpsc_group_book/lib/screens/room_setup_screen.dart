@@ -44,6 +44,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
   List<Question> _teaserQuestions = [];
   PageController? _teaserController;
   Timer? _teaserTimer;
+  Timer? _refreshTimer;
   int _currentTeaserIndex = 0;
 
   bool get _isAdmin {
@@ -75,6 +76,13 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
 
     _loadTeaserQuestions();
     _refreshExistingRoom();
+
+    // Periodic refresh to remove expired rooms automatically
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted && !_isLoading) {
+        _refreshExistingRoom();
+      }
+    });
 
     // Listen for deep link codes
     DeepLinkService().pendingRoomCode.addListener(_handleDeepLinkCode);
@@ -114,6 +122,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
   void dispose() {
     DeepLinkService().pendingRoomCode.removeListener(_handleDeepLinkCode);
     _teaserTimer?.cancel();
+    _refreshTimer?.cancel();
     _teaserController?.dispose();
     super.dispose();
   }
@@ -179,79 +188,93 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     int points = requiredPoints ?? _requiredRoomPoints();
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     bool isTamil = AppLanguage.languageNotifier.value == 'ta';
+    
+    String today = AppDate.getTodayString();
+    int attempts = Hive.box(HiveService.userBoxName).get('room_create_attempts_$today', defaultValue: 0) as int;
+    
+    String message = AppLanguage.getString('insufficient_points_create').replaceAll('{points}', '$points');
+    
+    if (attempts == 0 && _selectedMaxPlayers > RoomService.baseMaxPlayers) {
+      message = AppLanguage.getString('room_cost_first_free_limit');
+    } else if (attempts > 0) {
+      message = AppLanguage.getString('room_cost_second_min_points');
+    }
+
     bool canWatch = HiveService.canWatchRewardAdToday();
     int watchCount = HiveService.getRewardAdWatchCountToday();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            const Icon(Icons.stars_rounded, color: Colors.orange, size: 28),
-            const SizedBox(width: 12),
-            Text(
-              isTamil ? "பாயிண்ட்டுகள் தேவை" : "Points Required",
-              style: AppTheme.getStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              AppLanguage.getString('insufficient_points_create').replaceAll('{points}', '$points'),
-              style: AppTheme.getStyle(fontSize: 15, color: isDark ? Colors.white70 : AppTheme.textSecondaryColor),
-            ),
-            if (canWatch) ...[
-              const SizedBox(height: 16),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              const Icon(Icons.stars_rounded, color: Colors.orange, size: 28),
+              const SizedBox(width: 12),
               Text(
-                isTamil 
-                  ? "விளம்பரம் பார்த்து 100 பாயிண்ட்டுகளை உடனே பெறுங்கள்."
-                  : "Watch an ad to get 100 points instantly.",
-                style: AppTheme.getStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.bold),
+                isTamil ? "பாயிண்ட்டுகள் தேவை" : "Points Required",
+                style: AppTheme.getStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
-              Text(
-                isTamil ? "மீதமுள்ளது: ${3 - watchCount}/3" : "Remaining: ${3 - watchCount}/3",
-                style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ] else ...[
-              const SizedBox(height: 16),
-              Text(
-                isTamil ? "இன்றைய இலவச பாயிண்ட் வரம்பு முடிந்தது. நாளை மீண்டும் முயலவும்." : "Daily free points limit reached. Try again tomorrow.",
-                style: AppTheme.getStyle(fontSize: 13, color: Colors.redAccent),
-              ),
-            ]
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(isTamil ? "தவிர்" : "Cancel", style: AppTheme.getStyle(color: Colors.grey, fontSize: 14)),
+            ],
           ),
-          if (canWatch)
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _earnPointsForRoom(amount: 100);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                message,
+                style: AppTheme.getStyle(fontSize: 15, color: isDark ? Colors.white70 : AppTheme.textSecondaryColor),
               ),
-              child: Text(
-                isTamil ? "100 பாயிண்ட்ஸ் பெற" : "Earn 100 Points",
-                style: AppTheme.getStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
-              ),
+              if (canWatch) ...[
+                const SizedBox(height: 16),
+                Text(
+                  isTamil 
+                    ? "விளம்பரம் பார்த்து 50 பாயிண்ட்டுகளை உடனே பெறுங்கள்."
+                    : "Watch an ad to get 50 points instantly.",
+                  style: AppTheme.getStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  isTamil ? "மீதமுள்ளது: ${3 - watchCount}/3" : "Remaining: ${3 - watchCount}/3",
+                  style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ] else if (watchCount >= 3) ...[
+                const SizedBox(height: 16),
+                Text(
+                  isTamil ? "இன்றைய இலவச பாயிண்ட் வரம்பு முடிந்தது. நாளை மீண்டும் முயலவும்." : "Daily free points limit reached. Try again tomorrow.",
+                  style: AppTheme.getStyle(fontSize: 13, color: Colors.redAccent),
+                ),
+              ]
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(isTamil ? "தவிர்" : "Cancel", style: AppTheme.getStyle(color: Colors.grey, fontSize: 14)),
             ),
-        ],
+            if (canWatch)
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _earnPointsForRoom(amount: 50);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(
+                  isTamil ? "50 பாயிண்ட்ஸ் பெற" : "Earn 50 Points",
+                  style: AppTheme.getStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  void _earnPointsForRoom({int amount = 100}) {
+  void _earnPointsForRoom({int amount = 50}) {
     RewardService.showRewardAdIfAllowed(
       fixedRewardAmount: amount,
       useLimit: true,
@@ -323,6 +346,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
 
     // 4. Check Points
     if (!_hasEnoughPointsForRoom()) {
+      setState(() => _isLoading = false);
       setState(() => _isCreatingProcess = false);
       _showNeedPointsMessage();
       return;
@@ -937,8 +961,8 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
                 isDeduction: true,
                 prefix: "-",
               ),
-              
-            const SizedBox(height: 8),
+            const Divider(height: 20),
+            // const SizedBox(height: 8),
             _buildCalcRow(
               AppLanguage.getString('remaining_points_label'), 
               balance.toDouble(), 
@@ -967,16 +991,14 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
           ),
         ),
         if (overrideValue != null)
-           Expanded(
-             child: Text(
-              overrideValue,
-              style: AppTheme.getStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: valueColor ?? (isDark ? Colors.white : Colors.black87),
-              ),
-                       ),
-           )
+           Text(
+            overrideValue,
+            style: AppTheme.getStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: valueColor ?? (isDark ? Colors.white : Colors.black87),
+            ),
+                     )
         else
           TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 0, end: value),
@@ -1158,8 +1180,8 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
                   const SizedBox(height: 10),
                   Text(
                     lang == 'ta' 
-                      ? "மற்றவர்கள் உருவாக்கிய ரூமில் இணைந்து விளையாடலாம். இதற்காக 100 பாயிண்ட்டுகள் கழிக்கப்படும்."
-                      : "Join a room created by others. 100 points will be deducted.",
+                      ? "மற்றவர்கள் உருவாக்கிய ரூமில் இணைந்து விளையாடலாம்."
+                      : "Join a room created by others.",
                     style: AppTheme.getStyle(fontSize: 14, color: Colors.grey),
                   ),
                   const SizedBox(height: 20),
@@ -1479,10 +1501,14 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      _selectedMaxPlayers > RoomService.baseMaxPlayers
-                          ? AppLanguage.getString('extra_player_cost').replaceAll('{points}', '${RoomService.extraPlayersCostPoints}').replaceAll('{total}', '${_requiredRoomPoints()}')
-                          : AppLanguage.getString('base_room_cost').replaceAll('{points}', '${RoomService.roomCreateCostPoints}'),
-                      style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
+                      _requiredRoomPoints() == 0 
+                        ? (AppLanguage.languageNotifier.value == 'ta' 
+                            ? "* இன்றைய முதல் குழு உருவாக்கம் இலவசம் (10 வீரர்கள் வரை)" 
+                            : "* First room of the day is free (Up to 10 players)")
+                        : (AppLanguage.languageNotifier.value == 'ta'
+                            ? "* தேர்வு செய்யும் வீரர்களின் எண்ணிக்கையைப் பொறுத்து புள்ளிகள் கழிக்கப்படும்."
+                            : "* Points will be deducted based on the number of players selected."),
+                      style: AppTheme.getStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
                     ),
                     _buildPointCalculator(isDark),
                     SizedBox(

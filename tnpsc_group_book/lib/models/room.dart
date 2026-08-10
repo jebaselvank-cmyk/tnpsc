@@ -38,9 +38,15 @@ class Room {
       status: map['status'] ?? 'waiting',
       mode: map['mode'] ?? 'group_test',
       expectedPlayerCount: map['expectedPlayerCount'] ?? 0,
-      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? AppDate.getISTNow(),
-      startTime: (map['startTime'] as Timestamp?)?.toDate(),
-      endTime: (map['endTime'] as Timestamp?)?.toDate(),
+      createdAt: (map['createdAt'] as Timestamp?)?.toDate() != null 
+          ? AppDate.toIST((map['createdAt'] as Timestamp).toDate()) 
+          : AppDate.getISTNow(),
+      startTime: (map['startTime'] as Timestamp?) != null 
+          ? AppDate.toIST((map['startTime'] as Timestamp).toDate()) 
+          : null,
+      endTime: (map['endTime'] as Timestamp?) != null 
+          ? AppDate.toIST((map['endTime'] as Timestamp).toDate()) 
+          : null,
       questions: map['questions'] ?? [],
     );
   }
@@ -54,8 +60,8 @@ class Room {
       'mode': mode,
       'expectedPlayerCount': expectedPlayerCount,
       'createdAt': FieldValue.serverTimestamp(),
-      'startTime': startTime != null ? Timestamp.fromDate(startTime!) : null,
-      'endTime': endTime != null ? Timestamp.fromDate(endTime!) : null,
+      'startTime': startTime != null ? Timestamp.fromDate(AppDate.toRealUTC(startTime!)) : null,
+      'endTime': endTime != null ? Timestamp.fromDate(AppDate.toRealUTC(endTime!)) : null,
       'questions': questions,
       'rewardDistributed': false,
     };

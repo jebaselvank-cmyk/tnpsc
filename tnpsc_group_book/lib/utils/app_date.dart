@@ -57,8 +57,11 @@ class AppDate {
     return now.hour >= 23;
   }
 
-
-
+  /// Converts internal "Fake IST UTC" DateTime to real UTC for Firestore storage.
+  /// Since internal IST is UTC+5:30, subtracting that duration gives real UTC.
+  static DateTime toRealUTC(DateTime istDate) {
+    return istDate.subtract(const Duration(hours: 5, minutes: 30)).toUtc();
+  }
 
   /// Returns a seed that changes every 6 hours and is consistent across all users.
   static int getSlotSeed() {

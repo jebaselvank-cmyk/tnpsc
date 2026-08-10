@@ -1,0 +1,4 @@
+- `[x]` Add WhatsApp strings to `AppLanguage`
+- `[x]` Add WhatsApp link to `ProfileScreen`
+- `[x]` Add WhatsApp banner to `HomeScreen`
+- `[x]` Verify translations and link launching

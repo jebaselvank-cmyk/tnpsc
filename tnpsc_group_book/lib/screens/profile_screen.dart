@@ -562,6 +562,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 const Divider(height: 1),
                                 ListTile(
                                   leading: const AppIcon(
+                                    Icons.chat_bubble_rounded,
+                                    color: Colors.green,
+                                    size: 28,
+                                  ),
+                                  title: Text(
+                                    AppLanguage.getString('join_whatsapp'),
+                                    style: AppTheme.getStyle(
+                                      fontSize: 16,
+                                      // fontWeight: FontWeight.bold,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                  trailing: const AppIcon(
+                                    Icons.chevron_right_rounded,
+                                    color: Colors.grey,
+                                  ),
+                                  onTap: () => _launchURL('https://chat.whatsapp.com/EgLPBuTBIccIhHGglPXGN9?s=sw&p=a&mlu=0'),
+                                ),
+                                const Divider(height: 1),
+                                ListTile(
+                                  leading: const AppIcon(
                                     Icons.send_rounded,
                                     color: Colors.lightBlue,
                                   ),
@@ -569,7 +590,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     AppLanguage.getString('join_telegram'),
                                     style: AppTheme.getStyle(
                                       fontSize: 16,
-                                      fontWeight: FontWeight.bold,
+                                      // fontWeight: FontWeight.bold,
                                       color: Colors.lightBlue,
                                     ),
                                   ),
@@ -589,7 +610,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     AppLanguage.languageNotifier.value == 'ta' ? 'நண்பர்களுடன் பகிர்க' : 'Share with Friends',
                                     style: AppTheme.getStyle(
                                       fontSize: 16,
-                                      fontWeight: FontWeight.bold,
+                                      // fontWeight: FontWeight.bold,
                                       color: Colors.blueAccent,
                                     ),
                                   ),
@@ -616,7 +637,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     style: AppTheme.getStyle(
                                       fontSize: 16,
                                       color: Colors.redAccent,
-                                      fontWeight: FontWeight.bold,
+                                      // fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                   onTap: () async {

@@ -361,7 +361,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
             isTamil ? "அழைப்பிதழ் பகிரப்படுகிறது..." : "Sharing invitation...",
           ),
           duration: const Duration(seconds: 2),
-          backgroundColor: AppTheme.primaryColor,
+          backgroundColor: Colors.green,
         ),
       );
     }
@@ -391,7 +391,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                 : "Preparing invitation card...",
           ),
           duration: const Duration(seconds: 2),
-          backgroundColor: AppTheme.primaryColor,
+          backgroundColor: Colors.green,
         ),
       );
     }
@@ -566,17 +566,6 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
           // 1. Background (Full)
           Positioned.fill(child: _buildPosterBackground(theme)),
 
-          // 2. Mascot Character (Bottom Left)
-          Positioned(
-            bottom: 120,
-            left: -30,
-            child: Icon(
-              Icons.person_pin_rounded,
-              size: 240,
-              color: theme.mascotColor.withOpacity(0.08),
-            ),
-          ),
-
           // 3. Logo & Study Badge (Header)
           Positioned(
             top: 20,
@@ -587,7 +576,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
 
           // 5. Group ID Card (Right side)
           Positioned(
-            top: 220,
+            top: 210,
             width: 400,
             child: _buildPosterGroupIDCard(theme, roomData, customTime),
           ),
@@ -596,6 +585,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
           Positioned(
             top: 380,
             right: 20,
+            left: 20,
             child: _buildPosterBeatMeSection(theme),
           ),
 
@@ -688,12 +678,12 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
               Text(
                 "TNPSC",
                 style:
-                    AppTheme.getStyle(
+                    GoogleFonts.almarai(
                       fontSize: 38,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
                       height: 0.9,
-                      ignoreScale: true,
+                      // ignoreScale: true,
                     ).copyWith(
                       shadows: [
                         Shadow(
@@ -895,14 +885,15 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
               ignoreScale: true,
             ),
           ),
+          SizedBox(height: 10,),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                AppLanguage.languageNotifier.value == 'ta' ? 'தேர்வு நேரம்: ' : 'Match Time: ',
+                AppLanguage.languageNotifier.value == 'ta' ? 'தேர்வு நேரம்:  ' : 'Match Time:  ',
                 textAlign: TextAlign.center,
                 style: AppTheme.getStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.bold,
                   color: Colors.white70,
                   ignoreScale: true,
@@ -927,88 +918,98 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
               ),
             ],
           ),
-          if (_roomStartTime != null && _roomEndTime != null)
-             Padding(
-               padding: const EdgeInsets.only(top: 4.0),
-               child: Text(
-                 "(${DateFormat('hh:mm a').format(_roomStartTime!)} - ${DateFormat('hh:mm a').format(_roomEndTime!)})",
-                 style: AppTheme.getStyle(
-                   fontSize: 10,
-                   color: Colors.white38,
-                   ignoreScale: true,
-                 ),
-               ),
-             ),
         ],
       ),
     );
   }
 
   Widget _buildPosterBeatMeSection(_PosterTheme theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Row(
-          children: [
-            Text(
-              "Think you can beat me?",
-              textAlign: TextAlign.right,
-              style: GoogleFonts.kaushanScript(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: theme.accentColor,
-                height: 1.1,
-                shadows: [
-                  Shadow(
-                    blurRadius: 10,
-                    color: Colors.black.withOpacity(0.5),
-                    offset: const Offset(2, 2),
+        Transform.rotate(
+          angle: 0.1,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.accentColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black45,
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Text(
+                  "Think you can",
+                  style: AppTheme.getStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black,
+                    ignoreScale: true,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 15),
-            Transform.rotate(
-              angle: -0.1,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: theme.accentColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black45,
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
                 ),
-                child: Column(
-                  children: [
-                    Text(
-                      "JOIN NOW",
-                      style: AppTheme.getStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black,
-                        ignoreScale: true,
-                      ),
-                    ),
-                    Text(
-                      "PROVE IT!",
-                      style: AppTheme.getStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black,
-                        ignoreScale: true,
-                      ),
-                    ),
-                  ],
+                Text(
+                  "beat me?",
+                  style: AppTheme.getStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black,
+                    ignoreScale: true,
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
+        ),
+        Container(
+          width: 15,
+        ),
+        Transform.rotate(
+          angle: -0.1,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.accentColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black45,
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Text(
+                  "JOIN NOW",
+                  style: AppTheme.getStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black,
+                    ignoreScale: true,
+                  ),
+                ),
+                Text(
+                  "PROVE IT!",
+                  style: AppTheme.getStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black,
+                    ignoreScale: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );
