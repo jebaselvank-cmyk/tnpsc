@@ -148,10 +148,10 @@ class _MyRankStickyCardState extends State<_MyRankStickyCard> {
     }
   }
 
-  void _loadFuture() {
+  void _loadFuture({bool forceRefresh = false}) {
     final FirestoreService firestoreService = FirestoreService();
     setState(() {
-      _future = firestoreService.getUserBestResultToday(isDaily: widget.isDaily);
+      _future = firestoreService.getUserBestResultToday(isDaily: widget.isDaily, forceRefresh: forceRefresh);
     });
   }
 
@@ -291,7 +291,7 @@ class _MyRankStickyCardState extends State<_MyRankStickyCard> {
                           padding: EdgeInsets.all(0),
                           icon: const AppIcon(AppIcons.refresh, color: Colors.white),
                           onPressed: () {
-                            _loadFuture();
+                            _loadFuture(forceRefresh: true);
                           },
                         ),
                       ],

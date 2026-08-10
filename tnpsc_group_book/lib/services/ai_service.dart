@@ -1435,8 +1435,8 @@ Strictly use this BILINGUAL JSON format:
   {
     "titleEn": "English Title",
     "titleTa": "தமிழ் தலைப்பு",
-    "contentEn": "Detailed news content in English (2-10 concise bullet points)",
-    "contentTa": "செய்தியின் விரிவான விளக்கம் தமிழில் (2-10 முக்கியமான குறிப்புகள் - point by point)",
+    "contentEn": "Detailed news content in English (2-30 concise bullet points)",
+    "contentTa": "செய்தியின் விரிவான விளக்கம் தமிழில் (2-30 முக்கியமான குறிப்புகள் - point by point)",
     "category": "Tamil Nadu / National / International / Sports"
   }
 ]

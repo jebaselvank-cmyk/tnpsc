@@ -6,6 +6,7 @@ import '../utils/app_icons.dart';
 import '../utils/app_language.dart';
 import '../services/ai_service.dart';
 import '../widgets/bilingual_text.dart';
+import '../widgets/native_ad_widget.dart';
 
 class ReviewScreen extends StatelessWidget {
   final List<Question> questions;
@@ -29,6 +30,11 @@ class ReviewScreen extends StatelessWidget {
       builder: (context, lang, child) {
         bool isDark = Theme.of(context).brightness == Brightness.dark;
 
+        // Calculate item count with ads (1 ad per 10 questions)
+        final int adInterval = 10;
+        final int adCount = questions.length ~/ adInterval;
+        final int totalCount = questions.length + adCount;
+
         return Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: AppBar(
@@ -40,10 +46,19 @@ class ReviewScreen extends StatelessWidget {
           ),
           body: ListView.builder(
             padding: const EdgeInsets.all(20),
-            itemCount: questions.length,
+            itemCount: totalCount,
             itemBuilder: (context, index) {
-              final q = questions[index];
-              final selectedIdx = selectedAnswers[index];
+              // Check if this position is for an ad
+              if ((index + 1) % (adInterval + 1) == 0) {
+                return const NativeAdWidget(isSmall: true);
+              }
+
+              // Adjust index to get correct question
+              final int qIndex = index - (index ~/ (adInterval + 1));
+              if (qIndex >= questions.length) return const SizedBox.shrink();
+
+              final q = questions[qIndex];
+              final selectedIdx = selectedAnswers[qIndex];
               final isCorrect = selectedIdx == q.correctOptionIndex;
               final isUnanswered = selectedIdx == null;
 

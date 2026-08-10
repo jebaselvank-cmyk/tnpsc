@@ -13,6 +13,7 @@ import '../utils/app_language.dart';
 import '../utils/app_theme.dart';
 import '../utils/app_icons.dart';
 import '../main.dart';
+import '../widgets/native_ad_widget.dart';
 
 class RoomLeaderboardScreen extends StatefulWidget {
   final String roomCode;
@@ -91,7 +92,7 @@ class _RoomLeaderboardScreenState extends State<RoomLeaderboardScreen> {
     if (HiveService.isAdFree()) {
       grant();
     } else {
-      RewardService.showRewardAdIfAllowed(onRewardEarned: grant);
+      RewardService.showInterstitialAd(onDismissed: grant);
     }
   }
 
@@ -343,9 +344,17 @@ class _RoomLeaderboardScreenState extends State<RoomLeaderboardScreen> {
                           Expanded(
                             child: ListView.builder(
                               padding: const EdgeInsets.all(20),
-                              itemCount: players.length,
+                              itemCount: players.length + (players.length ~/ 10),
                               itemBuilder: (context, index) {
-                                final player = players[index];
+                                // Native Ad integration (every 10 items)
+                                if ((index + 1) % 11 == 0) {
+                                  return const NativeAdWidget(isSmall: true);
+                                }
+
+                                final int pIndex = index - (index ~/ 11);
+                                if (pIndex >= players.length) return const SizedBox.shrink();
+
+                                final player = players[pIndex];
                                 final hasFinished =
                                     player['hasFinished'] ?? false;
                                 final hasAbandoned = player['abandoned'] == true ||
@@ -362,9 +371,9 @@ class _RoomLeaderboardScreenState extends State<RoomLeaderboardScreen> {
                                       borderRadius: BorderRadius.circular(15)),
                                   child: ListTile(
                                     leading: CircleAvatar(
-                                      backgroundColor: _getRankColor(index),
+                                      backgroundColor: _getRankColor(pIndex),
                                       child: Text(
-                                        '${index + 1}',
+                                        '${pIndex + 1}',
                                         style: AppTheme.getStyle(
                                             fontSize: 14,
                                             color: Colors.white,

@@ -1,49 +1,25 @@
-# Walkthrough - Auto-expiry of Room Cards
+# Walkthrough - Fixed Leaderboard Rank Refresh
 
-I have implemented the logic to automatically remove expired room cards from the `RoomSetupScreen` and restore the "Create Room" option once a hosted room expires.
+I have fixed the issue where the user's rank in the sticky card at the bottom of the leaderboard screen was not updating when the refresh button was pressed.
 
 ## Changes Made
 
-### 1. Room Service Logic Update
-In [room_service.dart](file:///C:/Users/ADMIN/StudioProjects/tnpsc_app/tnpsc_group_book/lib/services/room_service.dart), I modified `getActiveHostRoom()` and `getActiveJoinedRoom()`:
-- **Expiry Detection**: Added a check to compare the room's `endTime` with the current time (IST).
-- **Auto-Finish**: If a hosted room is found to be expired, its status is automatically updated to `'finished'` in Firestore.
-- **Null Safety**: Expired rooms are now returned as `null`, causing the UI to hide the corresponding cards.
-- **Status Support**: Included the `'starting'` status in active room checks to ensure rooms in countdown are also handled.
+### 1. Firestore Service Enhancement
+In [firestore_service.dart](file:///C:/Users/ADMIN/StudioProjects/tnpsc_app/tnpsc_group_book/lib/services/firestore_service.dart), I updated `getUserBestResultToday()`:
+- **`forceRefresh` Parameter**: Added a parameter to allow explicitly bypassing the local cache.
+- **Cache Invalidation**: When `forceRefresh` is true, it calls `HiveService.invalidateRankCache()` to clear old data.
+- **Server Fetch**: Forces Firestore to fetch from the server instead of the cache when refreshing.
 
-### 2. Room Setup Screen UI Enhancement
-In [room_setup_screen.dart](file:///C:/Users/ADMIN/StudioProjects/tnpsc_app/tnpsc_group_book/lib/screens/room_setup_screen.dart):
-- **Periodic Refresh**: Added a `_refreshTimer` that triggers every 30 seconds to check for room expiry while the user is on the screen.
-- **Dynamic UI**: When `_activeRoomData` becomes `null` (due to expiry), the "Create Room" form automatically reappears, allowing the user to host a new session immediately.
-
-### 3. Room Creation Cost Logic
-I have updated the cost calculation to match your requirements:
-- **First Room Free**: The first room created each day is **free (0 pts)** if it has 10 or fewer players.
-- **Extra Players**: If you increase the players beyond 10 in the first room, an **extra cost** is applied.
-- **Subsequent Rooms**: From the second room onwards, a **base cost of 200 pts** is applied, plus any extra player costs.
-- **UI Clarity**: The `RoomSetupScreen` now correctly displays "Free" when the total cost is 0 and provides a clear breakdown of base vs extra costs.
-
-### 4. Strict Point Verification & Contextual Messages
-I have improved the room creation flow to handle insufficient points more gracefully:
-- **Strict Verification**: The app now checks for points **before** starting any ads. If points are insufficient, it immediately shows a message instead of an ad.
-- **Contextual Messages**:
-    - If it's the **first room** but the user selected > 10 players: "Only 10 players are free. You need extra points for more players."
-    - If it's a **subsequent room**: "Creating a second room requires 200 points."
-- **Earn Points Option**: Added an "Earn 100 Points" button directly in the error dialog. This allows users to watch a rewarded ad and get exactly **100 points** to help them reach their goal.
-- **Limit Handling**: The "Earn Points" option respects the daily rewarded ad limit (3 per day) and provides a clear message when the limit is reached.
-
-### 5. Relaxed First Room Point Requirement
-I have implemented the logic to allow users to create their first room even with 0 points:
-- **First Room Exception**: For the first attempt of the day, the point check is relaxed. Users can create a room (even with > 10 players) by watching an ad, even if they have 0 points.
-- **Deduction Logic**: If the user has some points but less than the extra cost (for > 10 players), the app deducts whatever they have (down to 0).
-- **Explanation Toast**: If points were insufficient for extra players during the first attempt, a Toast message explains: *"Points required for extra players, but allowed for your first room match."*
-- **Strict Subsequent Checks**: From the second room onwards, the app strictly requires 200 points and will not show an ad if the balance is too low.
+### 2. Leaderboard Screen UI Update
+In [leaderboard_screen.dart](file:///C:/Users/ADMIN/StudioProjects/tnpsc_app/tnpsc_group_book/lib/screens/leaderboard_screen.dart):
+- **Refresh Action**: Updated the refresh button's `onPressed` logic to call the enhanced service method with `forceRefresh: true`.
+- **State Management**: Ensured the UI rebuilds immediately with the latest server-side data.
 
 ## Verification Results
 
-- [x] **Room Service**: Confirmed transaction succeeds on first attempt with low points.
-- [x] **UI Flow**: Verified ad plays on first attempt regardless of points, but blocked on second attempt if < 200 pts.
-- [x] **Messages**: Verified localized Toast message appears when points are short on the first attempt.
+- [x] **Refresh Button**: Confirmed that clicking the button now triggers a server-side fetch and clears the local cache.
+- [x] **Tab Consistency**: Verified that switching between Daily and Mock tabs still loads data correctly while respecting the new refresh logic.
+- [x] **Cost Efficiency**: Local caching is still used by default to save Firestore reads; it is only bypassed when the user manually requests a refresh.
 
 > [!TIP]
-> This change ensures that users aren't stuck with "ghost" rooms that have already ended, providing a much smoother user experience.
+> Users can now manually sync their latest rank if they see others moving ahead on the main leaderboard list.

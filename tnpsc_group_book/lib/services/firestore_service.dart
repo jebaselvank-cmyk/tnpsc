@@ -687,11 +687,15 @@ class FirestoreService {
   }
 
   // Get current user's accumulated score for today (Daily or Mock)
-  Future<Map<String, dynamic>?> getUserBestResultToday({bool isDaily = true}) async {
+  Future<Map<String, dynamic>?> getUserBestResultToday({bool isDaily = true, bool forceRefresh = false}) async {
     String? uid = _auth.currentUser?.uid;
     if (uid == null) return null;
 
     try {
+      if (forceRefresh) {
+        await HiveService.invalidateRankCache(isDaily);
+      }
+
       String docId;
       if (isDaily) {
         String today = AppDate.getTodayString();
@@ -700,24 +704,27 @@ class FirestoreService {
         docId = _getMockLeaderboardDocId();
       }
 
-      // Try cache first
+      // Try cache first if not forcing refresh
       DocumentSnapshot doc = await _db
           .collection('leaderboards')
           .doc(docId)
           .collection('scores')
           .doc(uid)
-          .get();
+          .get(forceRefresh ? const GetOptions(source: Source.server) : const GetOptions());
+      
       if (doc.exists) {
-        AppLog.d("AI_DEBUG: User ${isDaily ? 'daily' : 'mock'} score fetched from SERVER");
+        AppLog.d("AI_DEBUG: User ${isDaily ? 'daily' : 'mock'} score fetched from ${forceRefresh ? 'SERVER' : 'CACHE/SERVER'}");
         var userData = doc.data() as Map<String, dynamic>;
         int myScore = userData['score'] ?? 0;
 
         // READ_OPT: Check Hive first for cached rank to avoid count() costs
-        var cachedRank = HiveService.getCachedRank(isDaily, myScore);
-        if (cachedRank != null) {
-          userData['rank'] = cachedRank['rank'];
-          AppLog.d("FIRESTORE_OPT: Using cached rank from HIVE: ${userData['rank']}");
-          return userData;
+        if (!forceRefresh) {
+          var cachedRank = HiveService.getCachedRank(isDaily, myScore);
+          if (cachedRank != null) {
+            userData['rank'] = cachedRank['rank'];
+            AppLog.d("FIRESTORE_OPT: Using cached rank from HIVE: ${userData['rank']}");
+            return userData;
+          }
         }
         
         // AI_DEBUG: Calculate current user's rank for today's leaderboard
