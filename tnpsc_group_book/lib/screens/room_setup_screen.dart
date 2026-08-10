@@ -415,10 +415,9 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     setState(() => _isLoading = true);
     _startSpinnerTimer();
     
-    RewardService.showRewardAdIfAllowed(
-      useLimit: false,
-      onRewardEarned: () async {
-        // Ad successful - Unlock the attempt
+    RewardService.showInterstitialAd(
+      onDismissed: () async {
+        // Unlock the attempt
         await HiveService.incrementRoomAdWatchCount();
         
         // Start creating the room on Firestore using the PRE-VALIDATED anchored dates
@@ -646,9 +645,8 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
                       _showNeedPointsMessage();
                       return;
                     }
-                    RewardService.showRewardAdIfAllowed(
-                      useLimit: false,
-                      onRewardEarned: () async {
+                    RewardService.showInterstitialAd(
+                      onDismissed: () async {
                         final nextWatches =
                             await HiveService.incrementRoomAdWatchCount();
                         if (context.mounted) {
