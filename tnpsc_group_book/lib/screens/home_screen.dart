@@ -267,7 +267,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                   },
                                 ),
                                 const SizedBox(height: 32),
-                                RepaintBoundary(
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
                                   child: Row(
                                         children: [
                                           _buildQuickActionCard(context, title: AppLanguage.getString('mistake_bank'), icon: "📝", color: Colors.orange, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MistakeBankScreen()))),
@@ -921,10 +922,15 @@ class _HomeScreenState extends State<HomeScreen> {
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
+                shrinkWrap: true,
                 itemCount: snapshot.data!.docs.length,
                 itemBuilder: (context, index) {
-                  NewsItem news = NewsItem.fromFirestore(snapshot.data!.docs[index]);
-                  return _buildNewsCard(context, news, isDark, isTamil);
+                  try {
+                    NewsItem news = NewsItem.fromFirestore(snapshot.data!.docs[index]);
+                    return _buildNewsCard(context, news, isDark, isTamil);
+                  } catch (e) {
+                    return const SizedBox.shrink();
+                  }
                 },
               ),
             );
@@ -956,7 +962,7 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: isDark 
-              ? [Colors.indigo.shade500, Colors.cyan.shade100]
+              ? [Colors.indigo.shade500.withOpacity(0.6), Colors.cyan.shade100.withOpacity(0.5)]
               : [Colors.white, Colors.blue.shade50],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -985,7 +991,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Text(
                     news.category,
                     style: AppTheme.getStyle(
-                      fontSize: 10,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor,
                     ),
@@ -994,7 +1000,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const Spacer(),
                 Text(
                   AppDate.getDisplayDate(news.timestamp),
-                  style: AppTheme.getStyle(fontSize: 10, color: Colors.black87,fontWeight: FontWeight.w600),
+                  style: AppTheme.getStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87,fontWeight: FontWeight.w600),
                 ),
               ],
             ),

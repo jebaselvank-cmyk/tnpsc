@@ -542,9 +542,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
     if (isDailyOrMock) {
       if (mounted) Navigator.pop(context); // Pop loading
-      RewardService.showRewardAdIfAllowed(
-          useLimit: false,
-          onRewardEarned: () {
+      RewardService.showInterstitialAd(onDismissed: () {
             if (!mounted) return;
             // Navigate to result screen without adding extra points (points are added per question)
             Navigator.pushReplacement(

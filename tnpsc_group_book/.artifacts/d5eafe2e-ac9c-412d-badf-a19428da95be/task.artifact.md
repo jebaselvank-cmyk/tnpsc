@@ -1,7 +1,7 @@
-- `[ ]` Add `isAfter11PM()` helper to `AppDate`
-- `[ ]` Update `RoomService.createRoom` with 11 PM constraint and Hosted room persistence
-- `[ ]` Update `RoomService.joinRoom` to allow replacing existing joined membership
-- `[ ]` Refine `RoomSetupScreen` with auto End-Time (+2h) logic and 11 PM toast
-- `[ ]` Implement Expiry check in `WaitingRoomScreen`
-- `[ ]` Update Share Poster to show Start-End time range
-- `[ ]` Verify all time-based logic and room switching
+- `[ ]` Define `_gsTopics` in `AiService` with 21 items
+- `[ ]` Implement `_getGsTopicsForDate` helper
+- `[ ]` Update `generateAndSaveDailyQuiz` (GS Section)
+- `[ ]` Update `generateAndSaveMockQuiz` (GS Section)
+- `[ ]` Update `generateSubjectQuestions` for 'general_studies' and 'current_affairs'
+- `[ ]` Update `subject.dart` with regrouped GS topics
+- `[ ]` Verify AI prompt structure for GS topics

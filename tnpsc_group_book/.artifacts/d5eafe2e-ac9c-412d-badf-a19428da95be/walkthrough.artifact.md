@@ -1,36 +1,35 @@
-# Walkthrough - Indian Tamil Zone Localization
+# Walkthrough - Comprehensive Aptitude Syllabus Update
 
-The app is now fully localized for the Indian Tamil region. This includes system-level support for Tamil, localized date/time displays, and default Tamil language settings.
+The Aptitude & Mental Ability curriculum has been fully expanded to cover 31 specialized topics, matching the official TNPSC syllabus. This update improves AI variety and provides a structured navigation for users.
 
 ## Changes Made
 
-### Core Localization Setup
-- **[pubspec.yaml](file:///C:/Users/ADMIN/StudioProjects/tnpsc_app/tnpsc_group_book/pubspec.yaml)**: Added `flutter_localizations` dependency.
-- **[main.dart](file:///C:/Users/ADMIN/StudioProjects/tnpsc_app/tnpsc_group_book/lib/main.dart)**:
-    - Configured `MaterialApp` with `GlobalMaterialLocalizations`, `GlobalWidgetsLocalizations`, and `GlobalCupertinoLocalizations`.
-    - Set `supportedLocales` to include `ta` (Tamil) and `en` (English).
-    - Implemented dynamic `locale` switching based on the app's internal language state.
-    - Initialized `intl` date formatting for Tamil and English locales.
+### 1. Expanded AI Aptitude Topics
+- **31 Core Topics**: Updated `AiService` with a comprehensive list of math and reasoning categories:
+    - **Arithmetic**: Simplification, Percentage, Ratio, Average, Number System, HCF/LCM, Fractions.
+    - **Business Math**: Profit & Loss, Simple & Compound Interest, Problems on Ages.
+    - **Measurement**: Time & Work, Pipes & Cisterns, Speed/Distance, Mensuration, Geometry.
+    - **Logical Reasoning**: Puzzles, Number Series, Odd One Out, Analogy, Coding/Decoding, Direction Sense, Blood Relations, Ranking.
+    - **Advanced/Stat**: Data Interpretation, Probability, Permutations, Calendar, Clock.
 
-### Localization Helpers
-- **[app_language.dart](file:///C:/Users/ADMIN/StudioProjects/tnpsc_app/tnpsc_group_book/lib/utils/app_language.dart)**: Added `getLocale()` helper to easily retrieve the current `Locale` object.
-- **[app_date.dart](file:///C:/Users/ADMIN/StudioProjects/tnpsc_app/tnpsc_group_book/lib/utils/app_date.dart)**:
-    - Added `getDisplayDate()` for localized UI date strings.
-    - Preserved internal `yyyy-MM-dd` format for `getTodayString()` and `format()` to prevent breaking Firestore/Hive database keys.
+- **Broader Daily Coverage**: The daily rotation now selects **3 Language** and **3 Aptitude** topics for daily quizzes, and a wider spread for mock tests.
 
-### UI Improvements
-- **Home & News**: Updated news card dates to display in a localized format (e.g., "August 9, 2026" or Tamil equivalent).
-- **History Screen**: Localized the history list date strings.
-- **Settings Screen**: Localized the "next update" date for name changes.
-- **System Widgets**: All standard Flutter components like **Date Pickers**, **Time Pickers**, and **Tooltips** will now automatically appear in Tamil when the app is in Tamil mode.
+### 2. Regrouped Aptitude UI
+- **Logical Categories**: Organized the 31 topics into 5 top-level sections in `subject.dart` for easier selection:
+    1. **அடிப்படை கணிதம் (Arithmetic)**
+    2. **வணிகக் கணிதம் (Business Math)**
+    3. **நேரம் & அளவீடு (Time & Measurement)**
+    4. **தர்க்க அறிவு (Logical Reasoning)**
+    5. **புள்ளியியல் & இதர (Statistics & Others)**
+
+- **Bilingual Interface**: All 31 topics are displayed with their standard English names and clear Tamil categories.
 
 ## Verification Results
 
 ### Success
-- `flutter pub get` completed successfully with the new dependency.
-- Code structure follows Flutter's localization best practices.
-- Database keys remain consistent (`yyyy-MM-dd`) while UI displays are now localized.
-- Tamil font rendering is handled via `Noto Sans Tamil` as per the existing theme.
+- **AI Prompt Precision**: Verified that the AI now receives specific topic instructions like "Pipes and Cisterns" or "Blood Relations" instead of generic "Aptitude".
+- **Step-by-Step Logic**: Ensured the AI continues to provide the mandatory step-by-step formula and calculation for these complex topics.
+- **UI Scalability**: The new regrouped UI prevents the "Select Category" sheet from becoming a long, unorganized list.
 
 > [!TIP]
-> The app now defaults to Tamil for new users, providing a seamless experience for the target Indian Tamil audience.
+> With 31 specific aptitude topics, the app now provides a complete preparation path for the TNPSC Mental Ability section.

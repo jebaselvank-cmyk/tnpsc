@@ -25,16 +25,25 @@ class NewsItem {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     return NewsItem(
       id: doc.id,
-      titleEn: data['titleEn'] ?? '',
-      titleTa: data['titleTa'] ?? '',
-      contentEn: data['contentEn'] ?? '',
-      contentTa: data['contentTa'] ?? '',
-      category: data['category'] ?? 'General',
-      date: data['date'] ?? '',
+      titleEn: _parseContent(data['titleEn']),
+      titleTa: _parseContent(data['titleTa']),
+      contentEn: _parseContent(data['contentEn']),
+      contentTa: _parseContent(data['contentTa']),
+      category: _parseContent(data['category'] ?? 'General'),
+      date: _parseContent(data['date']),
       timestamp: data['timestamp'] != null 
           ? (data['timestamp'] as Timestamp).toDate() 
           : DateTime.now(),
     );
+  }
+
+  static String _parseContent(dynamic content) {
+    if (content == null) return '';
+    if (content is String) return content;
+    if (content is List) {
+      return content.map((e) => e.toString()).join('\n');
+    }
+    return content.toString();
   }
 
   Map<String, dynamic> toFirestore() {

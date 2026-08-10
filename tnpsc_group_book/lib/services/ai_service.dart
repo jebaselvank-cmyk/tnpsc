@@ -13,6 +13,135 @@ class AiService {
   static bool _isFetchingConfig = false;
 
   // -----------------------------------------------------------------
+  // Language Topics for Topical Rotation
+  // -----------------------------------------------------------------
+  static const List<Map<String, dynamic>> _languageTopics = [
+    {'id': 1, 'title': 'இலக்கணம் (Grammar)', 'desc': 'எழுத்தியல், சொற்களின் வகைகள், புணர்ச்சி, வேற்றுமை, பெயர்ச்சொல், வினைச்சொல்.'},
+    {'id': 2, 'title': 'சொல்லகராதி (Vocabulary)', 'desc': 'சொற்களின் அர்த்தம், பயன்பாடு, ஒருபொருள் பலசொல், பலபொருள் ஒரு சொல்.'},
+    {'id': 3, 'title': 'திருக்குறள் (Thirukkural)', 'desc': 'அறத்துப்பால், பொருட்பால், இன்பத்துப்பால் தொடர்பான வினாக்கள்.'},
+    {'id': 4, 'title': 'சங்க இலக்கியம் (Sangam Literature)', 'desc': 'எட்டுத்தொகை, பத்துப்பாட்டு மற்றும் சங்க கால செய்திகள்.'},
+    {'id': 5, 'title': 'காப்பியங்கள் (Epics)', 'desc': 'ஐம்பெருங் காப்பியங்கள் மற்றும் ஐஞ்சிறு காப்பியங்கள்.'},
+    {'id': 6, 'title': 'ஆசிரியர் மற்றும் நூல்கள் (Authors and Books)', 'desc': 'நூலாசிரியர்கள், அவர்களின் படைப்புகள் மற்றும் குறிப்புகள்.'},
+    {'id': 7, 'title': 'தமிழ் அறிஞர்கள் (Tamil Scholars)', 'desc': 'தமிழ் அறிஞர்களும் அவர்களின் தமிழ்த் தொண்டும்.'},
+    {'id': 8, 'title': 'பழமொழிகள் (Proverbs)', 'desc': 'பழமொழிகள் மற்றும் அவற்றின் வாழ்வியல் விளக்கங்கள்.'},
+    {'id': 9, 'title': 'மரபுத்தொடர்கள் (Idioms)', 'desc': 'மரபுத்தொடர்கள், சொலவடைகள் மற்றும் அவற்றின் பொருள்.'},
+    {'id': 10, 'title': 'எதிர்ச்சொல் (Antonyms)', 'desc': 'சரியான எதிர்ச்சொற்களைத் தேர்வு செய்தல்.'},
+    {'id': 11, 'title': 'இணைச்சொல் (Synonyms)', 'desc': 'நேரிணை, எதிரிணை மற்றும் செறிணைச் சொற்கள்.'},
+    {'id': 12, 'title': 'ஒருபொருள் பலசொல் (One meaning many words)', 'desc': 'ஒரே பொருளைத் தரும் பல்வேறு சொற்களை அறிதல்.'},
+    {'id': 13, 'title': 'பலபொருள் ஒரு சொல் (One word many meanings)', 'desc': 'ஒரு சொல்லுக்கு இருக்கும் பல்வேறு அர்த்தங்கள்.'},
+    {'id': 14, 'title': 'புணர்ச்சி (Punarchi)', 'desc': 'இயல்புப் புணர்ச்சி மற்றும் விகாரப் புணர்ச்சி விதிகள்.'},
+    {'id': 15, 'title': 'வேற்றுமை (Case)', 'desc': 'முதல் முதல் எட்டாம் வேற்றுமை வரையிலான உருபுகள் மற்றும் பயன்கள்.'},
+    {'id': 16, 'title': 'வினைச்சொல் (Verb)', 'desc': 'தன்வினை, பிறவினை, செய்வினை, செயப்பாட்டு வினை.'},
+    {'id': 17, 'title': 'பெயர்ச்சொல் (Noun)', 'desc': 'பெயர்ச்சொல்லின் வகைகள் மற்றும் பயன்பாடு.'},
+    {'id': 18, 'title': 'வாக்கிய அமைப்பு (Sentence Structure)', 'desc': 'நேரடி உரை, மறைமுக உரை மற்றும் வாக்கிய வகைகள்.'},
+    {'id': 19, 'title': 'பிழை திருத்தம் (Error Correction)', 'desc': 'எழுத்துப் பிழை, சந்திப் பிழை மற்றும் ஒருமை-பன்மை பிழை நீக்குதல்.'},
+    {'id': 20, 'title': 'வாசிப்புப் புரிதல் (Comprehension)', 'desc': 'பத்தியைப் படித்து வினாக்களுக்கு விடையளித்தல்.'},
+    {'id': 21, 'title': 'தமிழ் மொழி வரலாறு (Tamil History)', 'desc': 'தமிழ் மொழியின் தோற்றம் மற்றும் வளர்ச்சி நிலைகள்.'},
+    {'id': 22, 'title': 'சங்க காலம் (Sangam Era)', 'desc': 'சங்க காலத் தமிழகத்தின் சமூக மற்றும் பண்பாட்டு நிலைகள்.'},
+    {'id': 23, 'title': 'பக்தி இலக்கியம் (Devotional)', 'desc': 'தேவாரம், திருவாசகம், நாலாயிர திவ்ய பிரபந்தம் உள்ளிட்டவை.'},
+    {'id': 24, 'title': 'சிற்றிலக்கியம் (Minor Literature)', 'desc': 'தூது, உலா, பரணி, பள்ளு, குறவஞ்சி போன்ற 96 வகை இலக்கியங்கள்.'},
+    {'id': 25, 'title': 'செம்மொழித் தமிழ் (Classical)', 'desc': 'தமிழ் செம்மொழியானதற்கான தகுதிகள் மற்றும் சிறப்புகள்.'},
+    {'id': 26, 'title': 'தமிழ் வளர்ச்சி (Development)', 'desc': 'தற்காலத் தமிழ் வளர்ச்சி மற்றும் கணினித் தமிழ்.'},
+    {'id': 27, 'title': 'முந்தைய ஆண்டு கேள்விகள் (PYQ)', 'desc': 'டிஎன்பிஎஸ்சி தேர்வுகளில் கேட்கப்பட்ட முந்தைய வினாக்கள்.'},
+    {'id': 28, 'title': 'Mixed Tamil Quiz', 'desc': 'அனைத்துப் பகுதிகளில் இருந்தும் கேட்கப்படும் பொதுவான வினாக்கள்.'},
+  ];
+
+  static const List<Map<String, dynamic>> _aptitudeTopics = [
+    {'id': 1, 'title': 'Simplification', 'desc': 'BODMAS, Fractions, Decimals, Square/Cube Roots.'},
+    {'id': 2, 'title': 'Percentage', 'desc': 'Basic percentage, increase/decrease, results.'},
+    {'id': 3, 'title': 'Ratio and Proportion', 'desc': 'Comparison of quantities and sharing.'},
+    {'id': 4, 'title': 'Average', 'desc': 'Mean, weights, and age-based averages.'},
+    {'id': 5, 'title': 'Profit and Loss', 'desc': 'Cost price, selling price, discounts, markup.'},
+    {'id': 6, 'title': 'Simple Interest', 'desc': 'P*N*R/100 calculations and variations.'},
+    {'id': 7, 'title': 'Compound Interest', 'desc': 'Annual, half-yearly, and quarterly compounding.'},
+    {'id': 8, 'title': 'Time and Work', 'desc': 'Man-days, efficiency, combined work.'},
+    {'id': 9, 'title': 'Pipes and Cisterns', 'desc': 'Inlet and outlet flow calculations.'},
+    {'id': 10, 'title': 'Time, Speed and Distance', 'desc': 'Relative speed, trains, and boats.'},
+    {'id': 11, 'title': 'Problems on Ages', 'desc': 'Past, present, and future age relations.'},
+    {'id': 12, 'title': 'Number System', 'desc': 'Divisibility, units digit, remainder theorem.'},
+    {'id': 13, 'title': 'HCF and LCM', 'desc': 'Factors, multiples, and their applications.'},
+    {'id': 14, 'title': 'Fractions and Decimals', 'desc': 'Conversion, ordering, and operations.'},
+    {'id': 15, 'title': 'Square Root and Cube Root', 'desc': 'Calculation and application in problems.'},
+    {'id': 16, 'title': 'Data Interpretation', 'desc': 'Pie charts, Bar graphs, Tables, Line graphs.'},
+    {'id': 17, 'title': 'Mensuration', 'desc': 'Area and Volume of 2D/3D shapes.'},
+    {'id': 18, 'title': 'Geometry', 'desc': 'Lines, Angles, Triangles, and Circles.'},
+    {'id': 19, 'title': 'Probability', 'desc': 'Coin, Dice, and Card-based problems.'},
+    {'id': 20, 'title': 'Permutations and Combinations', 'desc': 'Arrangements and Selections.'},
+    {'id': 21, 'title': 'Logical Reasoning', 'desc': 'Puzzles, Deductions, and Conclusions.'},
+    {'id': 22, 'title': 'Number Series', 'desc': 'Missing number, next number patterns.'},
+    {'id': 23, 'title': 'Odd One Out', 'desc': 'Identifying the non-matching item.'},
+    {'id': 24, 'title': 'Analogy', 'desc': 'Finding similar relationships.'},
+    {'id': 25, 'title': 'Coding and Decoding', 'desc': 'Pattern-based word/number conversion.'},
+    {'id': 26, 'title': 'Direction Sense', 'desc': 'Movement and final position tracking.'},
+    {'id': 27, 'title': 'Blood Relations', 'desc': 'Family tree and relationship mapping.'},
+    {'id': 28, 'title': 'Ranking and Order', 'desc': 'Position in a row or sequence.'},
+    {'id': 29, 'title': 'Calendar', 'desc': 'Finding day of the week, odd days.'},
+    {'id': 30, 'title': 'Clock', 'desc': 'Angles between hands, time gain/loss.'},
+    {'id': 31, 'title': 'Mixed Aptitude Quiz', 'desc': 'General problems from all chapters.'},
+  ];
+
+  static const List<Map<String, dynamic>> _gsTopics = [
+    {'id': 1, 'title': 'General Science', 'desc': 'Physics, Chemistry, and Biology fundamentals.'},
+    {'id': 2, 'title': 'Current Affairs', 'desc': 'National and international news from last 6 months.'},
+    {'id': 3, 'title': 'Indian History', 'desc': 'Indus Valley to British Era history.'},
+    {'id': 4, 'title': 'Indian National Movement', 'desc': 'Freedom struggle and leaders.'},
+    {'id': 5, 'title': 'Indian Polity', 'desc': 'Constitution, Governance, and Rights.'},
+    {'id': 6, 'title': 'Indian Economy', 'desc': 'Finance, Planning, and RBI.'},
+    {'id': 7, 'title': 'Indian Geography', 'desc': 'Monsoon, Rivers, and Minerals.'},
+    {'id': 8, 'title': 'Tamil Nadu History', 'desc': 'Society and archaeological discoveries.'},
+    {'id': 9, 'title': 'Tamil Nadu Culture', 'desc': 'Traditions, literature, and art forms.'},
+    {'id': 10, 'title': 'Tamil Nadu Heritage', 'desc': 'Monuments and historical significance.'},
+    {'id': 11, 'title': 'Tamil Nadu Administration', 'desc': 'E-governance and social welfare schemes.'},
+    {'id': 12, 'title': 'Social Issues', 'desc': 'Population, Poverty, and Corruption.'},
+    {'id': 13, 'title': 'Development Administration', 'desc': 'HDI and socioeconomic development in TN.'},
+    {'id': 14, 'title': 'Science and Technology', 'desc': 'Space, Defense, and IT developments.'},
+    {'id': 15, 'title': 'Environment and Ecology', 'desc': 'Biodiversity and Climate change.'},
+    {'id': 16, 'title': 'Government Schemes', 'desc': 'Central and State welfare programs.'},
+    {'id': 17, 'title': 'Important Personalities', 'desc': 'Leaders, Scientists, and Social Reformers.'},
+    {'id': 18, 'title': 'Awards and Honours', 'desc': 'Nobel, Bharat Ratna, and State awards.'},
+    {'id': 19, 'title': 'Sports', 'desc': 'Cricket, Chess, Olympics, and Championships.'},
+    {'id': 20, 'title': 'Books and Authors', 'desc': 'Famous publications and literary awards.'},
+    {'id': 21, 'title': 'Mixed General Studies Quiz', 'desc': 'Integrated questions from all GS areas.'},
+  ];
+
+  static String _getLanguageTopicsForDate(DateTime date, int count) {
+    // Deterministic selection based on day of month + year to ensure rotation
+    int seed = date.day + date.month + date.year;
+    List<Map<String, dynamic>> selected = [];
+    
+    for (int i = 0; i < count; i++) {
+      int index = (seed + i) % _languageTopics.length;
+      selected.add(_languageTopics[index]);
+    }
+
+    return selected.map((t) => "- ${t['title']}: ${t['desc']}").join("\n");
+  }
+
+  static String _getAptitudeTopicsForDate(DateTime date, int count) {
+    int seed = date.day + (date.month * 2) + date.year; // Different seed than language
+    List<Map<String, dynamic>> selected = [];
+    
+    for (int i = 0; i < count; i++) {
+      int index = (seed + i) % _aptitudeTopics.length;
+      selected.add(_aptitudeTopics[index]);
+    }
+
+    return selected.map((t) => "- ${t['title']}: ${t['desc']}").join("\n");
+  }
+
+  static String _getGsTopicsForDate(DateTime date, int count) {
+    int seed = date.day + (date.month * 3) + date.year; // Different seed
+    List<Map<String, dynamic>> selected = [];
+    
+    for (int i = 0; i < count; i++) {
+      int index = (seed + i) % _gsTopics.length;
+      selected.add(_gsTopics[index]);
+    }
+
+    return selected.map((t) => "- ${t['title']}: ${t['desc']}").join("\n");
+  }
+
+  // -----------------------------------------------------------------
   // Remote Config fetcher for API key and Model Priority
   // -----------------------------------------------------------------
   static Future<void> _fetchRemoteConfig() async {
@@ -322,6 +451,11 @@ class AiService {
     // Get topics from last 30 days to avoid repeats
     String recentContext = await _getRecentQuizContext('quizzes', 30);
 
+    // Get Focus Topics for the day (Select 4 Language, 3 Aptitude, 3 GS)
+    String focusTopics = _getLanguageTopicsForDate(date, 4);
+    String focusAptitude = _getAptitudeTopicsForDate(date, 3);
+    String focusGS = _getGsTopicsForDate(date, 3);
+
     final avoidPrompt = recentContext.isNotEmpty
         ? """
 STRICTLY DO NOT create questions that are identical, very similar, or based on these recent questions/topics from the last 30 days:
@@ -347,8 +481,8 @@ STRICT QUALITY RULES (MUST FOLLOW)
 8. EVERY field MUST BE BILINGUAL (Separate English and Tamil keys).
 9. English must be natural and error-free.
 10. Tamil must use proper literary Tamil without spelling mistakes.
-11. Do NOT mix Tamil and English in the same sentence.
-12. Do NOT use Hindi or any other language.
+11. NO MIXED LANGUAGE: Do NOT mix Tamil and English in the same sentence or field.
+12. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages. No Hindi words in brackets or parentheses.
 13. Every question must have exactly four options.
 14. Only ONE option must be correct.
 15. Verify the correct answer before assigning correctOptionIndex.
@@ -407,13 +541,13 @@ Return ONLY the final verified JSON array.
 
     // Prompt definitions ------------------------------------------------
     final promptTamil = """
-Generate exactly 10 UNIQUE TNPSC General Tamil MCQs.
+Generate exactly 10 UNIQUE TNPSC General Language MCQs. 
+Focus primarily on these 3 categories for today:
+$focusTopics
 
 Requirements:
 - SSLC Standard
-- Cover different Samacheer Kalvi chapters.
-- Cover different grammar and literature concepts.
-- No repeated chapter.
+- Cover Grammar, Vocabulary, and Literature.
 - No repeated question pattern.
 $avoidPrompt
 
@@ -422,15 +556,13 @@ $commonRules
 
     final promptGS = """
 Generate exactly 6 UNIQUE TNPSC General Studies MCQs.
+Focus primarily on these categories for today:
+$focusGS
 
 Requirements:
-Rotate equally between:
-- Science
-- History
-- Geography
-- Polity
-- Economy
-- Current General Knowledge (timeless TNPSC syllabus)
+- SSLC Standard
+- Balanced coverage of History, Science, and Polity.
+- No repeated question pattern.
 
 $avoidPrompt
 
@@ -438,22 +570,16 @@ $commonRules
 """;
 
     final promptAptitude = """
-Generate exactly 4 UNIQUE TNPSC Aptitude MCQs.
+Generate exactly 4 UNIQUE TNPSC Aptitude & Mental Ability MCQs.
+Focus primarily on these categories for today:
+$focusAptitude
 
-Topics:
-- HCF & LCM
-- Ratio
-- Percentage
-- Profit & Loss
-- Time & Work
-- Time & Distance
-- Simple Interest
-- Compound Interest
-- Mensuration
-
-CRITICAL: Each question must require calculation. 
+Requirements:
+- SSLC Standard
+- Each question must require calculation (except for reasoning). 
 - You MUST solve the problem step-by-step internally before selecting the correct option.
 - The explanation MUST show the formula and the substitution steps clearly in both languages.
+- Ensure the calculated result EXACTLY matches the correct option value.
 
 $avoidPrompt
 
@@ -534,6 +660,11 @@ $commonRules
     // Get topics from last 30 days to avoid repeats in mock tests
     String recentContext = await _getRecentQuizContext('mock_tests', 30);
 
+    // Get Focus Topics for the mock test (Select 6 Language, 5 Aptitude, 4 GS)
+    String focusTopics = _getLanguageTopicsForDate(date, 6);
+    String focusAptitude = _getAptitudeTopicsForDate(date, 5);
+    String focusGS = _getGsTopicsForDate(date, 4);
+
     final avoidPrompt = recentContext.isNotEmpty
         ? """
 STRICTLY DO NOT create questions that are identical, very similar, or based on these recent questions/topics from the last 30 days:
@@ -559,8 +690,8 @@ STRICT QUALITY RULES (MUST FOLLOW)
 8. EVERY field MUST BE BILINGUAL (Separate English and Tamil keys).
 9. English must be natural and error-free.
 10. Tamil must use proper literary Tamil without spelling mistakes.
-11. Do NOT mix Tamil and English in the same sentence.
-12. Do NOT use Hindi or any other language.
+11. NO MIXED LANGUAGE: Do NOT mix Tamil and English in the same sentence or field.
+12. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages. No Hindi words in brackets or parentheses.
 13. Every question must have exactly four options.
 14. Only ONE option must be correct.
 15. Verify the correct answer before assigning correctOptionIndex.
@@ -619,13 +750,13 @@ Return ONLY the final verified JSON array.
 
     // Prompt definitions ------------------------------------------------
     final promptTamil = """
-Generate exactly 25 UNIQUE TNPSC General Tamil MCQs.
+Generate exactly 25 UNIQUE TNPSC General Language MCQs. 
+Focus primarily on these 4 categories for today:
+$focusTopics
 
 Requirements:
 - SSLC Standard
-- Cover different Samacheer Kalvi chapters.
-- Cover Grammar, Literature, and Tamil Scholars.
-- No repeated chapter.
+- Cover Grammar, Literature, and Authors.
 - No repeated question pattern.
 $avoidPrompt
 
@@ -634,15 +765,13 @@ $commonRules
 
     final promptGS = """
 Generate exactly 15 UNIQUE TNPSC General Studies MCQs.
+Focus primarily on these categories for today:
+$focusGS
 
 Requirements:
-Rotate equally between:
-- Science
-- History
-- Geography
-- Polity
-- Economy
-- Indian National Movement
+- SSLC Standard
+- Comprehensive coverage across GS domains.
+- No repeated question pattern.
 
 $avoidPrompt
 
@@ -650,20 +779,16 @@ $commonRules
 """;
 
     final promptAptitude = """
-Generate exactly 10 UNIQUE TNPSC Aptitude MCQs.
+Generate exactly 10 UNIQUE TNPSC Aptitude & Mental Ability MCQs.
+Focus primarily on these categories for today:
+$focusAptitude
 
-Topics:
-- HCF & LCM
-- Ratio & Proportion
-- Percentage
-- Simple & Compound Interest
-- Time & Work
-- Area & Volume
-- Logical Reasoning
-
-CRITICAL: Each question must require calculation.
+Requirements:
+- SSLC Standard
+- Each question must require calculation (except for reasoning).
 - You MUST solve the problem step-by-step internally before selecting the correct option.
 - The explanation MUST show the formula and the substitution steps clearly in both languages.
+- Ensure the calculated result EXACTLY matches the correct option value.
 
 $avoidPrompt
 
@@ -760,46 +885,68 @@ Rules:
         : "";
 
     if (subject == 'general_tamil') {
+      // Get Focus Topics for today (Select 4 categories)
+      String focusTopics = _getLanguageTopicsForDate(AppDate.getISTNow(), 4);
+
       specializedPrompt = '''
-Generate 20 UNIQUE TNPSC General Tamil (பொதுத்தமிழ்) MCQs (SSLC Standard). 
-Cover Part A: Grammar (இலக்கணம்), Part B: Literature (இலக்கியம்), and Part C: Tamil Scholars.
-STRICT LANGUAGE REQUIREMENTS:
+Generate 20 UNIQUE TNPSC General Language (பொதுமொழி) MCQs (SSLC Standard). 
+Focus primarily on these 4 categories:
+$focusTopics
+
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES (No Hindi, etc.).
+2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 3. Ensure there are NO spelling mistakes.
 ''';
     } else if (subject == 'general_studies') {
+      // Get Focus Topics for today (Select 4 GS categories)
+      String focusGS = _getGsTopicsForDate(AppDate.getISTNow(), 4);
+
       specializedPrompt = '''
 Generate 20 UNIQUE TNPSC General Studies (பொது அறிவு) MCQs (SSLC Standard). 
-Rotate between Science, History, Geography, Polity, and Economy.
-STRICT LANGUAGE REQUIREMENTS:
+Focus primarily on these categories:
+$focusGS
+
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES (No Hindi, etc.).
+2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 3. Ensure there are NO spelling mistakes.
 ''';
     } else if (subject == 'aptitude') {
+      // Get Focus Topics for today (Select 4 categories)
+      String focusAptitude = _getAptitudeTopicsForDate(AppDate.getISTNow(), 4);
+
       specializedPrompt = '''
 Generate 20 UNIQUE TNPSC Aptitude and Mental Ability MCQs (SSLC Standard). 
-Cover Simplification, Percentage, HCF/LCM, Ratio, Interest, Area, Volume, Time and Work.
+Focus primarily on these categories:
+$focusAptitude
+
 CRITICAL INSTRUCTIONS:
 1. Double-check the 'correctOptionIndex' (0, 1, 2, or 3).
-2. For Math/Aptitude: Solve step-by-step internally before finalizing.
+2. Solve step-by-step internally before finalizing.
 3. The explanation MUST show the formula and clear calculation steps in both English and Tamil.
 4. Ensure the calculated result EXACTLY matches the value in the correct option.
-5. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. NO OTHER LANGUAGES (Hindi, etc.).
+5. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 ''';
     } else if (subject == 'current_affairs') {
       specializedPrompt = '''
 Generate 20 UNIQUE TNPSC Current Affairs (நடப்பு நிகழ்வுகள்) MCQs. 
-Focus on important national and international events, awards, sports, and Tamil Nadu specific news from the last 6 months.
-STRICT LANGUAGE REQUIREMENTS:
+Focus on important events from the last 6 months, including Government Schemes, Awards, Sports, and Books.
+
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES (No Hindi, etc.).
+2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 3. Ensure there are NO spelling mistakes.
 ''';
     } else {
-      specializedPrompt =
-          "Create 20 UNIQUE TNPSC MCQs for '$subject' (Bilingual). STRICT LANGUAGE REQUIREMENTS: 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. 2. NO OTHER LANGUAGES (Hindi, etc.). 3. NO spelling mistakes.";
+      specializedPrompt = '''
+Create 20 UNIQUE TNPSC MCQs for '$subject' (Bilingual). 
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
+1. USE ONLY Pure Tamil and Pure English.
+2. NO MIXED LANGUAGE: Do NOT mix English and Tamil in the same sentence or field.
+3. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
+4. Ensure there are NO spelling mistakes.
+''';
     }
 
     final prompt =
@@ -884,28 +1031,34 @@ Only return the raw JSON array, no other text or markdown formatting.
     String syllabusPrompt = "";
 
     if (quizType == 'general_tamil') {
+      // Get Focus Topics for the scheduled quiz (Select 4 categories)
+      String focusTopics = _getLanguageTopicsForDate(date, 4);
+
       subjectTitle =
-          "General Tamil (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
+          "General Language (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
       syllabusPrompt =
-          "Part A: Grammar (இலக்கணம்), Part B: Literature (இலக்கியம்), and Part C: Tamil Scholars and Service (தமிழ் அறிஞர்களும் தமிழ்த் தொண்டும்).";
+          "Focus Categories for today:\n$focusTopics\n\nGeneral Grammar, Vocabulary, Literature, and Authors.";
     } else if (quizType == 'general_studies') {
       subjectTitle =
           "General Studies (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
       syllabusPrompt =
           "General Science, Current Events, Geography, History and Culture of India, Indian Polity, Indian Economy, and Indian National Movement.";
     } else {
+      // Get Focus Topics for the scheduled quiz (Select 4 categories)
+      String focusAptitude = _getAptitudeTopicsForDate(date, 4);
+
       subjectTitle =
           "Aptitude & Mental Ability Test (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
       syllabusPrompt =
-          "Simplification, Percentage, HCF & LCM, Ratio and Proportion, Simple Interest, Compound Interest, Area, Volume, Time and Work, and Logical Reasoning/Puzzles.";
+          "Focus Categories for today:\n$focusAptitude\n\nSimplification, Percentage, HCF & LCM, Ratio, Interest, Time and Work, and Logical Reasoning.";
     }
 
     final prompt =
         '''
 Generate EXACTLY $count TNPSC MCQs for the subject '$subjectTitle' based on the syllabus: $syllabusPrompt.
-STRICT LANGUAGE REQUIREMENTS:
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Malayalam, or others.
+2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 3. Ensure there are NO spelling mistakes.
 4. Each question MUST be bilingual using separate keys for English and Tamil.
 5. For Math/Aptitude questions, you MUST solve them step-by-step internally.
@@ -1004,46 +1157,68 @@ Rules:
         : "";
 
     if (subject == 'general_tamil') {
+      // Get Focus Topics for today (Select 4 categories)
+      String focusTopics = _getLanguageTopicsForDate(AppDate.getISTNow(), 4);
+
       specializedPrompt = '''
-Generate 20 UNIQUE TNPSC General Tamil (பொதுத்தமிழ்) MCQs (SSLC Standard). 
-Cover Part A: Grammar (இலக்கணம்), Part B: Literature (இலக்கியம்), and Part C: Tamil Scholars.
-STRICT LANGUAGE REQUIREMENTS:
+Generate 20 UNIQUE TNPSC General Language (பொதுமொழி) MCQs (SSLC Standard). 
+Focus primarily on these 4 categories:
+$focusTopics
+
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES (No Hindi, etc.).
+2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 3. Ensure there are NO spelling mistakes.
 ''';
     } else if (subject == 'general_studies') {
+      // Get Focus Topics for today (Select 4 GS categories)
+      String focusGS = _getGsTopicsForDate(AppDate.getISTNow(), 4);
+
       specializedPrompt = '''
 Generate 20 UNIQUE TNPSC General Studies (பொது அறிவு) MCQs (SSLC Standard). 
-Rotate between Science, History, Geography, Polity, and Economy.
-STRICT LANGUAGE REQUIREMENTS:
+Focus primarily on these categories:
+$focusGS
+
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES (No Hindi, etc.).
+2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 3. Ensure there are NO spelling mistakes.
 ''';
     } else if (subject == 'aptitude') {
+      // Get Focus Topics for today (Select 4 categories)
+      String focusAptitude = _getAptitudeTopicsForDate(AppDate.getISTNow(), 4);
+
       specializedPrompt = '''
 Generate 20 UNIQUE TNPSC Aptitude and Mental Ability MCQs (SSLC Standard). 
-Cover Simplification, Percentage, HCF/LCM, Ratio, Interest, Area, Volume, Time and Work.
+Focus primarily on these categories:
+$focusAptitude
+
 CRITICAL INSTRUCTIONS:
 1. Double-check the 'correctOptionIndex' (0, 1, 2, or 3).
-2. For Math/Aptitude: Solve step-by-step internally before finalizing.
+2. Solve step-by-step internally before finalizing.
 3. The explanation MUST show the formula and clear calculation steps in both English and Tamil.
 4. Ensure the calculated result EXACTLY matches the value in the correct option.
-5. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. NO OTHER LANGUAGES (Hindi, etc.).
+5. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 ''';
     } else if (subject == 'current_affairs') {
       specializedPrompt = '''
 Generate 20 UNIQUE TNPSC Current Affairs (நடப்பு நிகழ்வுகள்) MCQs. 
-Focus on important national and international events, awards, sports, and Tamil Nadu specific news from the last 6 months.
-STRICT LANGUAGE REQUIREMENTS:
+Focus on important events from the last 6 months, including Government Schemes, Awards, Sports, and Books.
+
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES (No Hindi, etc.).
+2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 3. Ensure there are NO spelling mistakes.
 ''';
     } else {
-      specializedPrompt =
-          "Create 25 UNIQUE TNPSC MCQs for '$subject' (Bilingual). STRICT LANGUAGE REQUIREMENTS: 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. 2. NO OTHER LANGUAGES (Hindi, etc.). 3. NO spelling mistakes.";
+      specializedPrompt = '''
+Create 25 UNIQUE TNPSC MCQs for '$subject' (Bilingual). 
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
+1. USE ONLY Pure Tamil and Pure English.
+2. NO MIXED LANGUAGE: Do NOT mix English and Tamil in the same sentence or field.
+3. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
+4. Ensure there are NO spelling mistakes.
+''';
     }
 
     final prompt =
@@ -1169,8 +1344,14 @@ Only return the raw JSON array, no other text or markdown formatting.
     String message,
     String context,
   ) async {
-    final prompt =
-        "TNPSC Tutor context search: $context. Question: $message. STRICT LANGUAGE REQUIREMENTS: 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. 2. NO OTHER LANGUAGES (Hindi, etc.). 3. NO spelling mistakes. Bilingual output required.";
+    final prompt = '''
+TNPSC Tutor context search: $context. Question: $message. 
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
+1. USE ONLY Pure Tamil and Pure English.
+2. NO MIXED LANGUAGE: Do NOT mix English and Tamil in the same sentence or field.
+3. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
+4. Ensure there are NO spelling mistakes.
+''';
     return await _generateWithFallback(prompt);
   }
 
@@ -1191,7 +1372,14 @@ Only return the raw JSON array, no other text or markdown formatting.
   }
 
   static Future<String> generateStructuredStudyMaterial(String topic) async {
-    final prompt = "Generate TNPSC study guide for '$topic'. STRICT LANGUAGE REQUIREMENTS: 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. 2. NO OTHER LANGUAGES (Hindi, etc.). 3. NO spelling mistakes. Bilingual.";
+    final prompt = '''
+Generate TNPSC study guide for '$topic'. 
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
+1. USE ONLY Pure Tamil and Pure English.
+2. NO MIXED LANGUAGE: Do NOT mix English and Tamil in the same sentence or field.
+3. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
+4. Ensure there are NO spelling mistakes.
+''';
     final res = await _generateWithFallback(prompt);
     return res ?? "Guide unavailable.";
   }
@@ -1235,21 +1423,24 @@ Only return the raw JSON array, no other text or markdown formatting.
     final prompt = '''
 Generate 10 important Current Affairs news items for TNPSC exams for the date $dateStr.
 Focus on Tamil Nadu events, National news, Awards, and Sports.
-STRICT LANGUAGE REQUIREMENTS:
-1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES (No Hindi, etc.).
-3. Ensure there are NO spelling mistakes.
+
+STRICT LANGUAGE REQUIREMENTS (CRITICAL):
+1. USE ONLY Pure Tamil and Pure English.
+2. NO MIXED LANGUAGE: Do not mix English and Tamil in the same sentence.
+3. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages. No Hindi words in brackets.
+4. Ensure there are NO spelling mistakes in Tamil or English.
+
 Strictly use this BILINGUAL JSON format:
 [
   {
     "titleEn": "English Title",
     "titleTa": "தமிழ் தலைப்பு",
-    "contentEn": "Detailed news content in English (2-3 sentences)",
-    "contentTa": "செய்தியின் விரிவான விளக்கம் தமிழில் (2-3 வாக்கியங்கள்)",
+    "contentEn": "Detailed news content in English (2-10 concise bullet points)",
+    "contentTa": "செய்தியின் விரிவான விளக்கம் தமிழில் (2-10 முக்கியமான குறிப்புகள் - point by point)",
     "category": "Tamil Nadu / National / International / Sports"
   }
 ]
-Only return the raw JSON array, no other text or markdown formatting.
+Only return the raw JSON array. No preamble, no markdown, no explanation.
 ''';
 
     final res = await _generateWithFallback(prompt);
