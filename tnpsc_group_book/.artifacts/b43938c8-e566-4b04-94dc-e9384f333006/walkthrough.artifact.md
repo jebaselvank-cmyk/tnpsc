@@ -32,11 +32,18 @@ I have improved the room creation flow to handle insufficient points more gracef
 - **Earn Points Option**: Added an "Earn 100 Points" button directly in the error dialog. This allows users to watch a rewarded ad and get exactly **100 points** to help them reach their goal.
 - **Limit Handling**: The "Earn Points" option respects the daily rewarded ad limit (3 per day) and provides a clear message when the limit is reached.
 
+### 5. Relaxed First Room Point Requirement
+I have implemented the logic to allow users to create their first room even with 0 points:
+- **First Room Exception**: For the first attempt of the day, the point check is relaxed. Users can create a room (even with > 10 players) by watching an ad, even if they have 0 points.
+- **Deduction Logic**: If the user has some points but less than the extra cost (for > 10 players), the app deducts whatever they have (down to 0).
+- **Explanation Toast**: If points were insufficient for extra players during the first attempt, a Toast message explains: *"Points required for extra players, but allowed for your first room match."*
+- **Strict Subsequent Checks**: From the second room onwards, the app strictly requires 200 points and will not show an ad if the balance is too low.
+
 ## Verification Results
 
-- [x] **Point Check**: Verified that `_createRoom` stops immediately and shows `_showNeedPointsMessage` when balance is too low.
-- [x] **Ad Reward**: Confirmed that the "Earn 100 Points" button awards exactly 100 points upon completion.
-- [x] **Localization**: Verified that the new specific error messages are correctly displayed in both Tamil and English.
+- [x] **Room Service**: Confirmed transaction succeeds on first attempt with low points.
+- [x] **UI Flow**: Verified ad plays on first attempt regardless of points, but blocked on second attempt if < 200 pts.
+- [x] **Messages**: Verified localized Toast message appears when points are short on the first attempt.
 
 > [!TIP]
 > This change ensures that users aren't stuck with "ghost" rooms that have already ended, providing a much smoother user experience.

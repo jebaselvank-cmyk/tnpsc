@@ -345,7 +345,15 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     }
 
     // 4. Check Points
-    if (!_hasEnoughPointsForRoom()) {
+    final todayStr = AppDate.getTodayString();
+    final userBox = Hive.box(HiveService.userBoxName);
+    int attempts = userBox.get('room_create_attempts_$todayStr', defaultValue: 0) as int;
+    int cost = _requiredRoomPoints();
+    int currentPoints = userBox.get('totalScore', defaultValue: 0) as int;
+
+    // Strict check ONLY for subsequent rooms. 
+    // First room (attempts == 0) is allowed even with 0 points (with an ad).
+    if (attempts > 0 && currentPoints < cost) {
       setState(() => _isLoading = false);
       setState(() => _isCreatingProcess = false);
       _showNeedPointsMessage();
@@ -437,14 +445,28 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
       } else if (code != null) {
         // Point deduction and attempt increment are now handled in RoomService.createRoom transaction
         // UI Refresh: Force rebuild to show updated points if they come back to this screen
-        if (mounted) setState(() {}); 
+        if (mounted) {
+          setState(() {}); 
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLanguage.getString('room_created_success').replaceAll('{points}', '${_requiredRoomPoints()}')),
-            backgroundColor: Colors.green,
-          ),
-        );
+          // Show Toast if points were insufficient for first attempt
+          if (attempts == 0 && currentPoints < cost) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(AppLanguage.languageNotifier.value == 'ta' 
+                  ? "10 வீரர்களுக்கு மேல் சேர்க்க பாயிண்ட்டுகள் தேவை, இருப்பினும் முதல் முறை என்பதால் அனுமதிக்கப்படுகிறது."
+                  : "Points required for extra players, but allowed for your first room match."),
+                backgroundColor: Colors.blueAccent,
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(AppLanguage.getString('room_created_success').replaceAll('{points}', '${_requiredRoomPoints()}')),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
 
         setState(() { _isFirstAttempt = false; });
         Navigator.pushReplacement(

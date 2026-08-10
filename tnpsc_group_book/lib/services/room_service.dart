@@ -329,14 +329,19 @@ class RoomService {
           currentPointsAlt = (userSnap.data()?['points'] as num?)?.toInt() ?? 0;
         }
 
-        if (currentPoints < cost) {
+        // Allow first attempt even if insufficient points
+        if (currentPoints < cost && currentAttempts > 0) {
           return 'insufficient_points';
         }
 
+        int pointsToDeduct = (currentAttempts == 0) 
+            ? (currentPoints >= cost ? cost : currentPoints)
+            : cost;
+
         // 1. Deduct points & Update room history & Set last played
         transaction.set(userRef, {
-          'totalScore': currentPoints - cost,
-          'points': currentPointsAlt - cost,
+          'totalScore': currentPoints - pointsToDeduct,
+          'points': currentPointsAlt - pointsToDeduct,
           'room_history': "$roomCode|$today",
           'last_room_played': roomCode,
           'last_room_at': FieldValue.serverTimestamp(),
@@ -360,7 +365,7 @@ class RoomService {
         RoomPlayer hostPlayer = RoomPlayer(uid: uid, name: name);
         transaction.set(_getRoomRef(roomCode).collection('players').doc(uid), hostPlayer.toMap());
 
-        return 'success';
+        return {'result': 'success', 'deducted': pointsToDeduct};
       });
 
       if (transactionResult == 'insufficient_points') return 'insufficient_points';
@@ -368,12 +373,13 @@ class RoomService {
 
       await HiveService.saveHostRoom(roomCode, today);
 
+      int deducted = (transactionResult as Map)['deducted'] ?? 0;
       
       // Update Hive local state for points and attempts
       final userBox = Hive.box(HiveService.userBoxName);
       
       // Get latest data from the successful transaction
-      int newScore = (userBox.get('totalScore', defaultValue: 0) as int) - cost;
+      int newScore = (userBox.get('totalScore', defaultValue: 0) as int) - deducted;
       await userBox.put('totalScore', newScore);
       
       int currentAttempts = userBox.get('room_create_attempts_$today', defaultValue: 0) as int;
@@ -382,7 +388,7 @@ class RoomService {
       // AI_DEBUG: Update the cached user data map as well for Profile screen
       Map<String, dynamic> cachedData = HiveService.getCachedUserData() ?? {};
       cachedData['totalScore'] = newScore;
-      cachedData['points'] = (cachedData['points'] ?? 0) - cost;
+      cachedData['points'] = (cachedData['points'] ?? 0) - deducted;
       await HiveService.cacheUserData(cachedData);
 
       // Force refresh user data from Firestore to ensure UI is in sync
