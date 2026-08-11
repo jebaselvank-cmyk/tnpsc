@@ -342,7 +342,8 @@ class RoomService {
           'totalScore': currentPoints - pointsToDeduct,
           'points': currentPointsAlt - pointsToDeduct,
           'room_history': "$roomCode|$today",
-          'last_room_played': roomCode,
+          'last_hosted_room': roomCode,
+          'last_room_played': roomCode, // Keep for backward compatibility/history
           'last_room_at': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
@@ -552,7 +553,8 @@ class RoomService {
           'totalScore': currentPoints - cost,
           'points': currentPointsAlt - cost,
           'room_history': "$roomCode|$today",
-          'last_room_played': roomCode,
+          'last_joined_room': roomCode,
+          'last_room_played': roomCode, // Keep for backward compatibility
           'last_room_at': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
@@ -683,11 +685,17 @@ class RoomService {
 
       // AI_DEBUG: Add roomCode to user's room_history in the 'users' collection
       String today = AppDate.getTodayString();
-      batch.set(_db.collection('users').doc(uid), {
+      final userUpdate = {
         'room_history': "$roomCode|$today",
         'last_room_played': roomCode,
         'last_room_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      };
+      
+      // Also clear/update the specific slot if it matches
+      // Note: We don't strictly delete the code so the UI can still show "View Results" if needed
+      // based on the hasFinished flag in players collection.
+      
+      batch.set(_db.collection('users').doc(uid), userUpdate, SetOptions(merge: true));
 
       await batch.commit();
       AppLog.d("AI_DEBUG: Score submitted and history updated in one batch");
@@ -906,12 +914,19 @@ class RoomService {
     try {
       String today = AppDate.getTodayString();
       final userDoc = await _db.collection('users').doc(uid).get();
-      final lastRoomPlayed = userDoc.data()?['last_room_played'] as String?;
+      final lastJoinedRoom = userDoc.data()?['last_joined_room'] as String?;
+      final lastRoomPlayedFallback = userDoc.data()?['last_room_played'] as String?;
       
-      if (lastRoomPlayed != null) {
-        final roomDoc = await _getRoomRef(lastRoomPlayed).get();
+      String? targetCode = lastJoinedRoom ?? lastRoomPlayedFallback;
+      
+      if (targetCode != null) {
+        final roomDoc = await _getRoomRef(targetCode).get();
         if (roomDoc.exists) {
           final roomData = roomDoc.data() as Map<String, dynamic>;
+          
+          // Deduplicate: If I am the host, this isn't my "Joined Room"
+          if (roomData['hostId'] == uid) return null;
+
           final status = roomData['status'];
           
           // Expiry check
@@ -919,7 +934,6 @@ class RoomService {
           if (endTs != null) {
             final endDT = AppDate.toIST(endTs.toDate());
             if (AppDate.getISTNow().isAfter(endDT)) {
-              AppLog.d("AI_DEBUG: Joined room $lastRoomPlayed expired, treating as null");
               return null;
             }
           }
@@ -929,14 +943,13 @@ class RoomService {
              final playerDoc = await roomDoc.reference.collection('players').doc(uid).get();
              if (playerDoc.exists) {
                 final playerData = playerDoc.data() as Map<String, dynamic>;
-                if (playerData['hasFinished'] != true) {
-                   return {
-                     'roomCode': lastRoomPlayed,
-                     'status': status,
-                     'subject': roomData['subject'],
-                     'isHost': roomData['hostId'] == uid,
-                   };
-                }
+                return {
+                  'roomCode': targetCode,
+                  'status': status,
+                  'subject': roomData['subject'],
+                  'isHost': false,
+                  'hasFinished': playerData['hasFinished'] == true,
+                };
              }
           }
         }

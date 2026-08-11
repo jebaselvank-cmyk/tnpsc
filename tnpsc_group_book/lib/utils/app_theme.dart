@@ -13,9 +13,11 @@ class AppTheme {
   static const Color darkSurfaceColor = Color(0xFF101F42);
 
   static const Color primaryColor = Color(0xFF0F2D59); // Premium Deep Navy Blue
-  static const Color primaryColorLight = Color(0xFF2C4568); // Premium Deep Navy Blue
+  static const Color primaryColorGlass = Color(0xFF101926); // Premium Deep Navy Blue Glass
+  static const Color primaryColorLight = Color(0xFF7F8B9B); // Premium Deep Navy Blue
   static const Color secondaryColor = Color(0xFFD4AF37); // Premium Gold
-  static const Color secondaryColorLight = Color(0xFFCAB577); // Premium Gold
+  static const Color secondaryColorGlass = Color(0xFF362C0E); // Premium Gold Glass
+  static const Color secondaryColorLight = Color(0xFFE0D3AD); // Premium Gold
   static const Color accentColor = Color(0xFFE5BA73); // Soft Golden Amber Accent
   static const Color backgroundColor = Color(0xFFF4F6F9); // Soft Light Blue/Slate White
   static const Color cardColor = Colors.white;

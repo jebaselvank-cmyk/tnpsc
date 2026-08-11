@@ -392,8 +392,9 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
+        border: Border.all(color: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight,width: 0.6),
         gradient: LinearGradient(
-          colors: [isDark ? AppTheme.primaryColor : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColor : AppTheme.secondaryColorLight],
+          colors: [isDark ? AppTheme.primaryColorGlass : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColorGlass : AppTheme.secondaryColorLight],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -434,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? null
                 : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('daily_quiz'), isDark),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
+                backgroundColor: Colors.white.withOpacity(0.7),
                 foregroundColor: AppTheme.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -979,13 +980,13 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: isDark 
-              ? [Colors.indigo.shade500.withOpacity(0.6), Colors.cyan.shade100.withOpacity(0.5)]
+              ? [Colors.indigo.shade500.withOpacity(0.2), Colors.cyan.shade100.withOpacity(0.2)]
               : [Colors.white, Colors.blue.shade50],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isDark ? Colors.white10 : Colors.blue.shade100),
+          border: Border.all(color: isDark ? Colors.white24 : Colors.blue.shade100),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),

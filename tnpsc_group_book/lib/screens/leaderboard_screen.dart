@@ -178,123 +178,129 @@ class _MyRankStickyCardState extends State<_MyRankStickyCard> {
             final data = snapshot.data!;
             return Stack(
               children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [isDark ? AppTheme.primaryColor : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColor : AppTheme.secondaryColorLight],
-                    ),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(28),
-                      topRight: Radius.circular(28),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 15,
-                        offset: const Offset(0, -5),
+                Padding(
+                  padding: const EdgeInsets.only(left: 6,right: 6),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight,width: 0.6),
+                      gradient: LinearGradient(
+                        colors: [isDark ? AppTheme.primaryColorGlass : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColorGlass : AppTheme.secondaryColorLight],
                       ),
-                    ],
-                  ),
-                  child: SafeArea(
-                    top: false,
-                    child: Row(
-                      children: [
-                        if (data['rank'] != null && data['rank'] > 0)
-                          Container(
-                            margin: const EdgeInsets.only(right: 12),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Text(
-                              "#${data['rank']}",
-                              style: AppTheme.getStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(28),
+                        topRight: Radius.circular(28),
+                        bottomLeft: Radius.circular(28),
+                        bottomRight: Radius.circular(28),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 15,
+                          offset: const Offset(0, -5),
+                        ),
+                      ],
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      child: Row(
+                        children: [
+                          if (data['rank'] != null && data['rank'] > 0)
+                            Container(
+                              margin: const EdgeInsets.only(right: 12),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
                               ),
-                            ),
-                          ),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                AppLanguage.getString('best_performance_today'),
+                              child: Text(
+                                "#${data['rank']}",
                                 style: AppTheme.getStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      "${AppLanguage.getString('you_label')}: ${data['userName'] ?? AppLanguage.getString('anonymous')}",
-                                      style: AppTheme.getStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                            ),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  AppLanguage.getString('best_performance_today'),
+                                  style: AppTheme.getStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  if (data['streak'] != null) ...[
-                                    const SizedBox(width: 2),
-                                    StreakBadge(streak: data['streak']),
+                                ),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        "${AppLanguage.getString('you_label')}: ${data['userName'] ?? AppLanguage.getString('anonymous')}",
+                                        style: AppTheme.getStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (data['streak'] != null) ...[
+                                      const SizedBox(width: 2),
+                                      StreakBadge(streak: data['streak']),
+                                    ],
                                   ],
-                                ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                "${AppLanguage.getString('score')}: ${data['score']}/${data['totalQuestions'] ?? (widget.isDaily ? 20 : 50)}",
+                                style: AppTheme.getStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Builder(
+                                builder: (context) {
+                                  int totalSec = data['timeTaken'] ?? 0;
+                                  int min = totalSec ~/ 60;
+                                  int sec = totalSec % 60;
+                                  String timeDisplay = min > 0
+                                      ? "$min ${AppLanguage.getString('min')} $sec ${AppLanguage.getString('sec')}"
+                                      : "$sec ${AppLanguage.getString('sec')}";
+                                  return Text(
+                                    timeDisplay,
+                                    style: AppTheme.getStyle(
+                                      color: Colors.white70,
+                                      fontSize: 13,
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 5),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              "${AppLanguage.getString('score')}: ${data['score']}/${data['totalQuestions'] ?? (widget.isDaily ? 20 : 50)}",
-                              style: AppTheme.getStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Builder(
-                              builder: (context) {
-                                int totalSec = data['timeTaken'] ?? 0;
-                                int min = totalSec ~/ 60;
-                                int sec = totalSec % 60;
-                                String timeDisplay = min > 0
-                                    ? "$min ${AppLanguage.getString('min')} $sec ${AppLanguage.getString('sec')}"
-                                    : "$sec ${AppLanguage.getString('sec')}";
-                                return Text(
-                                  timeDisplay,
-                                  style: AppTheme.getStyle(
-                                    color: Colors.white70,
-                                    fontSize: 13,
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        // Refresh button
-                        IconButton(
-                          padding: EdgeInsets.all(0),
-                          icon: const AppIcon(AppIcons.refresh, color: Colors.white),
-                          onPressed: () {
-                            _loadFuture(forceRefresh: true);
-                          },
-                        ),
-                      ],
+                          // Refresh button
+                          IconButton(
+                            padding: EdgeInsets.all(0),
+                            icon: const AppIcon(AppIcons.refresh, color: Colors.white),
+                            onPressed: () {
+                              _loadFuture(forceRefresh: true);
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

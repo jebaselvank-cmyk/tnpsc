@@ -228,19 +228,11 @@ class _SubjectScreenState extends State<SubjectScreen> {
                               mainAxisAlignment: MainAxisAlignment.start,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  "${AppLanguage.getString('greeting')},",
-                                  style: AppTheme.getStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark ? Colors.white : AppTheme.textMainColor,
-                                  ),
-                                ),
                                 Row(
                                   children: [
                                     Flexible(
                                       child: Text(
-                                        "$userName!  👋",
+                                        "${AppLanguage.getString('greeting')}, $userName!  👋",
                                         style: AppTheme.getStyle(
                                           fontSize: 22,
                                           fontWeight: FontWeight.bold,
@@ -344,8 +336,9 @@ class _SubjectScreenState extends State<SubjectScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
+        border: Border.all(color: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight,width: 0.6),
         gradient: LinearGradient(
-          colors: [isDark ? AppTheme.primaryColor : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColor : AppTheme.secondaryColorLight],
+          colors: [isDark ? AppTheme.primaryColorGlass : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColorGlass : AppTheme.secondaryColorLight],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -415,7 +408,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
                   ? null
                   : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('mock_quiz'), isDark),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
+                backgroundColor: Colors.white.withOpacity(0.7),
                 foregroundColor: AppTheme.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
