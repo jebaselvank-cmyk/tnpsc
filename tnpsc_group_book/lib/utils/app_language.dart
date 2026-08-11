@@ -822,6 +822,32 @@ class AppLanguage {
         return ta ? 'குழு வரம்பு எட்டியது' : 'Room limit reached';
       case 'room_limit_desc':
         return ta ? 'நீங்கள் குழு வரம்பை எட்டியுள்ளீர்கள். மேலும் குழு உருவாக்க விளம்பரத்தைப் பார்க்கவும்.' : 'You have reached the room limit. Watch an ad to unlock more.';
+      case 'room_time_over_msg':
+        return ta ? "இன்றைய நேரம் முடிந்துவிட்டது. நாளை புதிய ரூம் உருவாக்கலாம்." : "Today's time is over. You can create a new room tomorrow.";
+      case 'room_start_time_error':
+        return ta ? "தொடக்க நேரம் குறைந்தது 2 நிமிடங்கள் எதிர்காலத்தில் இருக்க வேண்டும்" : "Start time must be at least 2 minutes in the future";
+      case 'room_end_time_error':
+        return ta ? "முடிவு நேரம் தொடக்க நேரத்திற்குப் பிறகு இருக்க வேண்டும்" : "End time must be after start time";
+      case 'room_duration_min_error':
+        return ta ? "குறைந்தது 1 மணிநேர இடைவெளி தேவை (எ.கா: 5:40 PM - 6:40 PM)" : "Minimum 1 hour duration required (e.g., 5:40 PM - 6:40 PM)";
+      case 'room_duration_max_error':
+        return ta ? "அதிகபட்சம் 24 மணிநேரம் மட்டுமே அனுமதிக்கப்படுகிறது" : "Maximum duration is 24 hours";
+      case 'room_past_time_error':
+        return ta ? "தொடக்க நேரம் செல்லாது (முடிந்துவிட்டது)" : "Invalid start time (already passed)";
+      case 'room_invalid_date_error':
+        return ta ? "இன்றைய தேதியில் மட்டுமே ரூம் உருவாக்க முடியும்" : "Rooms can only be created for today";
+      case 'enter_valid_code_error':
+        return ta ? "சரியான குறியீட்டை உள்ளிடவும்" : "Please enter a valid code";
+      case 'already_played_error':
+        return ta ? "நீங்கள் ஏற்கனவே இந்தத் தேர்வை முடித்துவிட்டீர்கள்" : "You have already completed this test";
+      case 'test_expired_error':
+        return ta ? "இந்த தேர்வு நேரம் முடிந்துவிட்டது" : "This test time has expired";
+      case 'room_finished_error':
+        return ta ? "இந்த தேர்வு ஏற்கனவே முடிந்துவிட்டது" : "This test has already finished";
+      case 'already_in_room_error':
+        return ta ? "நீங்கள் ஏற்கனவே மற்றொரு தேர்வில் இணைந்துள்ளீர்கள்" : "You are already in another active room";
+      case 'room_not_found_descriptive':
+        return ta ? "இந்த குரூப் இல்லை" : "This group does not exist";
       case 'ads_watched':
         return ta ? 'விளம்பரங்கள் பார்க்கப்பட்டன: {watched}' : 'Ads watched: {watched}';
       case 'close_btn':
@@ -890,20 +916,20 @@ class AppLanguage {
         return ta ? '1. குழுவை உருவாக்குதல் (Create)' : '1. Create Room';
       case 'room_info_create_desc':
         return ta 
-            ? '• ஒரு பாடத்தைத் தேர்ந்தெடுத்து வீரர்களின் எண்ணிக்கையை முடிவு செய்யுங்கள்.\n• ஒரு விளம்பரத்தைப் பார்த்த பிறகு உங்கள் குழு தயாராகிவிடும்.'
-            : '• Select a subject and choose the number of players.\n• Your room will be ready after watching a short ad.';
+            ? '• ஒரு பாடத்தைத் தேர்ந்தெடுக்கவும் (10 - 100 வீரர்கள் வரை).\n• தொடக்க நேரம்: 2 நிமிடங்கள் தள்ளி இருக்க வேண்டும்.\n• முடிவு நேரம்: குறைந்தபட்சம் 1 மணிநேரம் இடைவெளி தேவை.\n• இரவு 11 மணிக்கு மேல் புதிய ரூம் உருவாக்க முடியாது.'
+            : '• Select a subject (10 - 100 players).\n• Start Time: At least 2 minutes in the future.\n• Duration: Minimum 1 hour required.\n• No new rooms can be created after 11 PM.';
       case 'room_info_join_title':
         return ta ? '2. குழுவில் இணைதல் (Join)' : '2. Join Room';
       case 'room_info_join_desc':
         return ta 
-            ? '• உங்கள் நண்பர் கொடுத்த 6 இலக்க கோடை உள்ளிட்டு இணையுங்கள்.\n• குழு முழுமையடைவதற்குள் இணைய வேண்டும்.'
-            : '• Enter the 6-digit code provided by your friend.\n• Join before the room becomes full.';
+            ? '• நண்பர் கொடுத்த 6 இலக்க கோடை உள்ளிட்டு இணையுங்கள்.\n• இது முற்றிலும் இலவசம் (100% Free).\n• ரூம் முழுமையடைவதற்குள் அல்லது தேர்வு தொடங்குவதற்குள் இணைய வேண்டும்.'
+            : '• Enter the 6-digit code provided by your friend.\n• Joining is 100% Free.\n• Join before the room is full or before the test starts.';
       case 'room_info_play_title':
         return ta ? '3. விளையாடுதல் (Play)' : '3. Play';
       case 'room_info_play_desc':
         return ta 
-            ? '• அனைவரும் இணைந்தவுடன் ஹோஸ்ட் தேர்வைத் தொடங்குவார்.\n• அனைவரும் ஒரே கேள்விகளுக்குப் பதிலளிப்பீர்கள்.'
-            : '• The host will start the test once everyone joins.\n• All players will answer the same set of questions.';
+            ? '• அனைவரும் இணைந்தவுடன் ஹோஸ்ட் தேர்வைத் தொடங்குவார்.\n• 30 வினாடிகள் கவுண்ட்டவுனுக்குப் பிறகு தேர்வு தொடங்கும்.\n• முடிவில் உங்கள் ரேங்க் காட்டப்படும் மற்றும் 25 வெகுமதி புள்ளிகள் கிடைக்கும்.'
+            : '• The host will start the test once everyone joins.\n• Test starts after a 30-second countdown.\n• View your rank and earn 25 reward points upon completion.';
       case 'room_info_earn_title':
         return ta ? '4. புள்ளிகளைப் பெறுவது எப்படி? (Earn Points)' : '4. How to Earn Points?';
       case 'room_info_earn_desc':
@@ -914,8 +940,8 @@ class AppLanguage {
         return ta ? '5. புள்ளிகள் எப்போது கழிக்கப்படும்? (Spending)' : '5. Point Deductions';
       case 'room_info_points_spend_desc':
         return ta 
-            ? '• ஒரு நாளைக்கு முதல் குழு உருவாக்கம் இலவசம் (அடிப்படை வீரர்கள்).\n• அதே நாளில் கூடுதல் குழுக்களை உருவாக்க 200 புள்ளிகள் கழிக்கப்படும்.\n• 10 வீரர்களுக்கு மேல் (Max Players) தேர்வு செய்தால் கூடுதல் வீரர்களுக்கு தலா 100 புள்ளிகள் கழிக்கப்படும்.'
-            : '• First room creation of the day is free (for base players).\n• Creating additional rooms on the same day costs 200 points.\n• Selecting more than 10 players costs 100 points extra per player.';
+            ? '• முதல் ரூம் (10 வீரர்கள் வரை): இலவசம்.\n• கூடுதல் வீரர்கள்: ஒவ்வொரு 10 பேருக்கும் 100 புள்ளிகள்.\n• அடுத்தடுத்த ரூம்கள்: 200 புள்ளிகள் அடிப்படை கட்டணம்.'
+            : '• 1st Room (up to 10 players): Free.\n• Extra Players: 100 points per additional 10 players.\n• Subsequent Rooms: 200 points base cost.';
       case 'current_points_label':
         return ta ? 'உங்களிடம் உள்ள புள்ளிகள்' : 'Your Current Points';
       case 'total_deduction_label':

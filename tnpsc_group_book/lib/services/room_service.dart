@@ -64,6 +64,12 @@ class RoomService {
   String? uid = _auth.currentUser?.uid;
   if (uid == null) return false;
 
+  // Admin bypass daily limits
+  bool isAdmin = _auth.currentUser?.phoneNumber == '+918754236411' || 
+                 _auth.currentUser?.email == 'adminjeba@gmail.com' || 
+                 _auth.currentUser?.email == 'kjebaselvan987@gmail.com';
+  if (isAdmin) return true;
+
   String today = AppDate.getTodayString();
   int allowedLimit = HiveService.dailyRoomMatchLimit();
 
@@ -131,8 +137,8 @@ class RoomService {
                    _auth.currentUser?.email == 'adminjeba@gmail.com' || 
                    _auth.currentUser?.email == 'kjebaselvan987@gmail.com';
 
-    // 11:00 PM IST Limit Check
-    if (AppDate.isAfter11PM()) {
+    // 11:00 PM IST Limit Check (Admin bypass)
+    if (!isAdmin && AppDate.isAfter11PM()) {
       return 'too_late_error';
     }
 

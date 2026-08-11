@@ -106,13 +106,11 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
       // Use post frame callback to avoid exception when called from initState
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLanguage.languageNotifier.value == 'ta' 
-                ? "ரூம் கோட் தானாகப் பயன்படுத்தப்பட்டது: $code" 
-                : "Room code applied automatically: $code"),
-            backgroundColor: Colors.blue,
-          ),
+        _showAppSnackBar(
+          AppLanguage.languageNotifier.value == 'ta' 
+              ? "ரூம் கோட் தானாகப் பயன்படுத்தப்பட்டது: $code" 
+              : "Room code applied automatically: $code",
+          color: Colors.blue,
         );
       });
     }
@@ -298,18 +296,15 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
   }
 
   Future<void> _createRoom() async {
-    String lang = AppLanguage.languageNotifier.value;
     // 1. Check App Version
     if (await VersionService.isUpdateRequired()) {
       if (mounted) VersionService.showUpdateDialogIfNeeded(context);
       return;
     }
 
-    // 2. Check Time Limit (11:00 PM)
-    if (AppDate.isAfter11PM()) {
-      _showError(lang == 'ta' 
-        ? "இன்றைய நேரம் முடிந்துவிட்டது. நாளை புதிய ரூம் உருவாக்கலாம்." 
-        : "Today's time is over. You can create a new room tomorrow.");
+    // 2. Check Time Limit (11:00 PM) - Admin bypass
+    if (!_isAdmin && AppDate.isAfter11PM()) {
+      _showError(AppLanguage.getString('room_time_over_msg'));
       return;
     }
 
@@ -330,9 +325,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     if (activeData != null) {
       String code = activeData['roomCode'];
       setState(() { _activeRoomData = activeData; });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLanguage.getString('room_exists_error')), backgroundColor: Colors.orange),
-      );
+      _showAppSnackBar(AppLanguage.getString('room_exists_error'), color: Colors.orange);
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => WaitingRoomScreen(roomCode: code, isHost: true)),
@@ -377,18 +370,14 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     
     // Validation: Start time must be in future (at least 2 mins from now)
     if (finalStartDT.isBefore(nowAtClick.add(const Duration(minutes: 1)))) {
-      _showError(AppLanguage.languageNotifier.value == 'ta' 
-        ? "தொடக்க நேரம் குறைந்தது 2 நிமிடங்கள் எதிர்காலத்தில் இருக்க வேண்டும்" 
-        : "Start time must be at least 2 minutes in the future");
+      _showError(AppLanguage.getString('room_start_time_error'));
       setState(() => _isCreatingProcess = false);
       return;
     }
 
     // Validation: End time cannot be before start time
     if (finalEndDT.isBefore(finalStartDT)) {
-      _showError(AppLanguage.languageNotifier.value == 'ta' 
-        ? "முடிவு நேரம் தொடக்க நேரத்திற்குப் பிறகு இருக்க வேண்டும்" 
-        : "End time must be after start time");
+      _showError(AppLanguage.getString('room_end_time_error'));
       setState(() => _isCreatingProcess = false);
       return;
     }
@@ -397,18 +386,14 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
 
     // Validation: At least 1 hour difference
     if (diffInMinutes < 60) {
-      _showError(AppLanguage.languageNotifier.value == 'ta' 
-        ? "குறைந்தது 1 மணிநேர இடைவெளி தேவை (எ.கா: 5:40 PM - 6:40 PM)" 
-        : "Minimum 1 hour duration required (e.g., 5:40 PM - 6:40 PM)");
+      _showError(AppLanguage.getString('room_duration_min_error'));
       setState(() => _isCreatingProcess = false);
       return;
     }
 
     // Validation: Maximum 24 hours
     if (diffInMinutes > 1440) {
-      _showError(AppLanguage.languageNotifier.value == 'ta' 
-        ? "அதிகபட்சம் 24 மணிநேரம் மட்டுமே அனுமதிக்கப்படுகிறது" 
-        : "Maximum duration is 24 hours");
+      _showError(AppLanguage.getString('room_duration_max_error'));
       setState(() => _isCreatingProcess = false);
       return;
     }
@@ -435,9 +420,9 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
       if (code == 'limit_reached') {
         _showRoomLimitDialog(context);
       } else if (code == 'past_time_error') {
-        _showError(AppLanguage.languageNotifier.value == 'ta' ? "தொடக்க நேரம் செல்லாது (முடிந்துவிட்டது)" : "Invalid start time (already passed)");
+        _showError(AppLanguage.getString('room_past_time_error'));
       } else if (code == 'invalid_date_error') {
-        _showError(AppLanguage.languageNotifier.value == 'ta' ? "இன்றைய தேதியில் மட்டுமே ரூம் உருவாக்க முடியும்" : "Rooms can only be created for today");
+        _showError(AppLanguage.getString('room_invalid_date_error'));
       } else if (code == 'insufficient_points') {
         _showNeedPointsMessage();
       } else if (code == 'no_questions') {
@@ -448,11 +433,9 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
         if (mounted) {
           setState(() {}); 
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppLanguage.getString('room_created_success').replaceAll('{points}', '${_requiredRoomPoints()}')),
-              backgroundColor: Colors.green,
-            ),
+          _showAppSnackBar(
+            AppLanguage.getString('room_created_success').replaceAll('{points}', '${_requiredRoomPoints()}'),
+            color: Colors.green,
           );
         }
 
@@ -476,7 +459,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
 
     String code = _codeController.text.trim().toUpperCase();
     if (code.length < 5) {
-      _showError(AppLanguage.languageNotifier.value == 'ta' ? "சரியான குறியீட்டை உள்ளிடவும்" : "Please enter a valid code");
+      _showError(AppLanguage.getString('enter_valid_code_error'));
       return;
     }
 
@@ -496,24 +479,20 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
         MaterialPageRoute(builder: (context) => WaitingRoomScreen(roomCode: code, isHost: false)),
       );
     } else if (result == 'already_played') {
-       _showError(lang == 'ta' ? "நீங்கள் ஏற்கனவே இந்தத் தேர்வை முடித்துவிட்டீர்கள்" : "You have already completed this test");
+       _showError(AppLanguage.getString('already_played_error'));
        Navigator.push(context, MaterialPageRoute(builder: (context) => RoomLeaderboardScreen(roomCode: code)));
     } else if (result == 'expired') {
-       _showError(lang == 'ta' ? "இந்த தேர்வு நேரம் முடிந்துவிட்டது" : "This test time has expired");
+       _showError(AppLanguage.getString('test_expired_error'));
     } else if (result == 'finished') {
-      final isTamil = AppLanguage.languageNotifier.value == 'ta';
-      _showError(isTamil ? "இந்த தேர்வு ஏற்கனவே முடிந்துவிட்டது" : "This test has already finished");
+      _showError(AppLanguage.getString('room_finished_error'));
     } else if (result == 'already_started') {
       _showError(AppLanguage.getString('room_already_started'));
     } else if (result == 'already_in_room') {
-      _showError(AppLanguage.languageNotifier.value == 'ta' 
-        ? "நீங்கள் ஏற்கனவே மற்றொரு தேர்வில் இணைந்துள்ளீர்கள்" 
-        : "You are already in another active room");
+      _showError(AppLanguage.getString('already_in_room_error'));
     } else if (result == 'room_full') {
       _showError(AppLanguage.getString('room_full'));
     } else if (result == 'not_found') {
-      final isTamil = AppLanguage.languageNotifier.value == 'ta';
-      _showError(isTamil ? "இந்த குரூப் இல்லை" : "This group does not exist");
+      _showError(AppLanguage.getString('room_not_found_descriptive'));
     } else {
       _showError(AppLanguage.getString('room_not_found'));
     }
@@ -636,15 +615,11 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
                             Navigator.pop(context);
                             await _createRoom();
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  ta
-                                      ? 'வாழ்த்துகள்! மற்றொரு குரூப் தேர்வு அன்லாக் செய்யப்பட்டது.'
-                                      : 'Congratulations! Another Room Match attempt has been unlocked.',
-                                ),
-                                backgroundColor: Colors.green,
-                              ),
+                            _showAppSnackBar(
+                              ta
+                                  ? 'வாழ்த்துகள்! மற்றொரு குரூப் தேர்வு அன்லாக் செய்யப்பட்டது.'
+                                  : 'Congratulations! Another Room Match attempt has been unlocked.',
+                              color: Colors.green,
                             );
                           } else {
                             // Update dialog UI
@@ -806,7 +781,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
                   color: isDark ? Colors.grey.shade900 : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 4))
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 4))
                   ],
                 ),
                 child: ListTile(
@@ -854,10 +829,26 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     );
   }
 
-  void _showError(String message) {
+  void _showAppSnackBar(String message, {Color? color}) {
     if (!mounted) return;
-    AppLog.e("UI Error: $message");
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: AppTheme.getStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500),
+        ),
+        backgroundColor: color ?? AppTheme.primaryColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    _showAppSnackBar(message, color: Colors.redAccent);
   }
 
   Future<void> _handleBack(BuildContext context) async {
