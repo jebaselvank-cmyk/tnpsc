@@ -15,11 +15,11 @@ class RoomService {
   static const int baseMaxPlayers = 10;
   static const int maxRoomPlayers = 100;
   static const int roomCreateCostPoints = 200;
-  static const int roomJoinCostPoints = 100;
+  static const int roomJoinCostPoints = 0; // Joining is now fully free
   static const int extraPlayersCostPoints = 100;
 
   /// Centralized logic to calculate room creation cost.
-  /// Admin always pays 0. First attempt of the day is free (base cost).
+  /// Admin always pays 0. First attempt of the day has 0 base cost.
   static int calculateRoomCost({
     required int maxPlayers,
     required int dailyAttempts,
@@ -27,19 +27,14 @@ class RoomService {
   }) {
     if (isAdmin) return 0;
 
-    // First daily attempt is free (no base cost)
+    // First daily attempt has 0 base cost
     int baseCost = dailyAttempts > 0 ? roomCreateCostPoints : 0;
 
-    // Extra cost logic:
-    // 10-30 players: Flat 100 points
-    // 31-100 players: +100 points for every additional 10 players
+    // Extra players cost: 100 points for every additional 10 users beyond the first 10
     int extraCost = 0;
     if (maxPlayers > baseMaxPlayers) {
-      extraCost = 100; // Flat 100 for 11-30 players
-      if (maxPlayers > 30) {
-        int additionalPlayers = maxPlayers - 30;
-        extraCost += ((additionalPlayers + 9) ~/ 10) * 100;
-      }
+      int extraUsers = maxPlayers - baseMaxPlayers;
+      extraCost = ((extraUsers + 9) ~/ 10) * 100;
     }
 
     return baseCost + extraCost;
@@ -329,14 +324,12 @@ class RoomService {
           currentPointsAlt = (userSnap.data()?['points'] as num?)?.toInt() ?? 0;
         }
 
-        // Allow first attempt even if insufficient points
-        if (currentPoints < cost && currentAttempts > 0) {
+        // Strict point enforcement for all attempts
+        if (currentPoints < cost) {
           return 'insufficient_points';
         }
 
-        int pointsToDeduct = (currentAttempts == 0) 
-            ? (currentPoints >= cost ? cost : currentPoints)
-            : cost;
+        int pointsToDeduct = cost;
 
         // 1. Deduct points & Update room history & Set last played
         transaction.set(userRef, {
@@ -520,10 +513,8 @@ class RoomService {
              return 'room_full';
            }
            
-           // Only charge if not admin
-           if (!isAdmin) {
-             cost = roomJoinCostPoints;
-           }
+           // Joining is now free for everyone
+           cost = 0;
         } else {
           // If already a member, check if they already finished
           final pData = playerSnap.data() as Map<String, dynamic>;
@@ -709,36 +700,6 @@ class RoomService {
     await submitScore(roomCode, score, timeTaken, abandoned: true);
   }
 
-  Future<Map<String, int>> _syncRoomProgress(String roomCode) async {
-    final roomRef = _getRoomRef(roomCode);
-    final roomSnap = await roomRef.get();
-    if (!roomSnap.exists) {
-      return {'playing': 0, 'finished': 0, 'abandoned': 0};
-    }
-
-    final room = roomSnap.data() as Map<String, dynamic>;
-    final playerIdsAtStart = List<String>.from(room['playerIdsAtStart'] ?? []);
-    final playersSnap = await roomRef.collection('players').get();
-
-    int playing = 0;
-    int finished = 0;
-    int abandoned = 0;
-
-    for (final doc in playersSnap.docs) {
-      if (!playerIdsAtStart.contains(doc.id)) continue;
-      final data = doc.data();
-      if (data['abandoned'] == true || data['status'] == 'abandoned') {
-        abandoned++;
-      } else if (data['hasFinished'] == true || data['status'] == 'finished') {
-        finished++;
-      } else {
-        playing++;
-      }
-    }
-
-    return {'playing': playing, 'finished': finished, 'abandoned': abandoned};
-  }
-
   /// True when room has expired or been manually finished.
   /// We no longer auto-finish based on player count to allow late joiners.
   Future<bool> _checkAndMarkRoomFinished(String roomCode) async {
@@ -873,6 +834,7 @@ class RoomService {
       // 2. Migration: If field is empty, check old subcollection
       if (historyStrings.isEmpty) {
         AppLog.d("AI_DEBUG: Field room_history is empty, checking subcollection for migration...");
+        String today = AppDate.getTodayString();
         QuerySnapshot oldSnap = await _db
             .collection('users')
             .doc(uid)
@@ -886,7 +848,7 @@ class RoomService {
           for (var doc in oldSnap.docs) {
             var data = doc.data() as Map<String, dynamic>;
             String code = data['roomCode'] ?? "";
-            String date = data['date'] ?? AppDate.getTodayString();
+            String date = data['date'] ?? today;
             if (code.isNotEmpty) {
               migratedStrings.add("$code|$date");
             }

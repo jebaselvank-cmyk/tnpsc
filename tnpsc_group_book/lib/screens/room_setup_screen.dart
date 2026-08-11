@@ -10,7 +10,7 @@ import '../utils/app_icons.dart';
 import 'waiting_room_screen.dart';
 import '../services/hive_service.dart';
 import '../services/reward_service.dart';
-import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../services/version_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -200,95 +200,91 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
       message = AppLanguage.getString('room_cost_second_min_points');
     }
 
-    bool canWatch = HiveService.canWatchRewardAdToday();
-    int watchCount = HiveService.getRewardAdWatchCountToday();
-
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          backgroundColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: Row(
-            children: [
-              const Icon(Icons.stars_rounded, color: Colors.orange, size: 28),
-              const SizedBox(width: 12),
-              Text(
-                isTamil ? "பாயிண்ட்டுகள் தேவை" : "Points Required",
-                style: AppTheme.getStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                message,
-                style: AppTheme.getStyle(fontSize: 15, color: isDark ? Colors.white70 : AppTheme.textSecondaryColor),
-              ),
-              if (canWatch) ...[
-                const SizedBox(height: 16),
-                Text(
-                  isTamil 
-                    ? "விளம்பரம் பார்த்து 50 பாயிண்ட்டுகளை உடனே பெறுங்கள்."
-                    : "Watch an ad to get 50 points instantly.",
-                  style: AppTheme.getStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  isTamil ? "மீதமுள்ளது: ${3 - watchCount}/3" : "Remaining: ${3 - watchCount}/3",
-                  style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ] else if (watchCount >= 3) ...[
-                const SizedBox(height: 16),
-                Text(
-                  isTamil ? "இன்றைய இலவச பாயிண்ட் வரம்பு முடிந்தது. நாளை மீண்டும் முயலவும்." : "Daily free points limit reached. Try again tomorrow.",
-                  style: AppTheme.getStyle(fontSize: 13, color: Colors.redAccent),
-                ),
-              ]
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(isTamil ? "தவிர்" : "Cancel", style: AppTheme.getStyle(color: Colors.grey, fontSize: 14)),
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            const Icon(Icons.stars_rounded, color: Colors.orange, size: 28),
+            const SizedBox(width: 12),
+            Text(
+              isTamil ? "பாயிண்ட்டுகள் தேவை" : "Points Required",
+              style: AppTheme.getStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
-            if (canWatch)
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _earnPointsForRoom(amount: 50);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text(
-                  isTamil ? "50 பாயிண்ட்ஸ் பெற" : "Earn 50 Points",
-                  style: AppTheme.getStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
-                ),
-              ),
           ],
         ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message,
+              style: AppTheme.getStyle(fontSize: 15, color: isDark ? Colors.white70 : AppTheme.textSecondaryColor),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isTamil 
+                ? "தயவுசெய்து Settings ஸ்கிரீனுக்குச் சென்று விளம்பரம் பார்த்து பாயிண்ட்டுகளைப் பெறவும்."
+                : "Please visit Settings to earn points by watching ads.",
+              style: AppTheme.getStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(isTamil ? "சரி" : "OK", style: AppTheme.getStyle(color: AppTheme.primaryColor, fontSize: 14, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
 
-  void _earnPointsForRoom({int amount = 50}) {
-    RewardService.showRewardAdIfAllowed(
-      fixedRewardAmount: amount,
-      useLimit: true,
-      onRewardEarned: () {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppLanguage.languageNotifier.value == 'ta' ? "$amount பாயிண்ட்டுகள் சேர்க்கப்பட்டன!" : "$amount Points added!"),
+  void _showFirstAttemptDowngradeDialog() {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    bool isTamil = AppLanguage.languageNotifier.value == 'ta';
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          isTamil ? "பாயிண்ட்டுகள் போதாது" : "Insufficient Points",
+          style: AppTheme.getStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        content: Text(
+          isTamil 
+            ? "உங்களிடம் போதிய பாயிண்ட்டுகள் இல்லை. 10 வீரர்களுடன் இலவசமாக உருவாக்கவா?"
+            : "You don't have enough points. Would you like to create a 10-player room for free instead?",
+          style: AppTheme.getStyle(fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(isTamil ? "தவிர்" : "Cancel", style: AppTheme.getStyle(color: Colors.grey, fontSize: 14)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                _selectedMaxPlayers = 10;
+              });
+              _createRoom();
+            },
+            style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-          );
-          setState(() {}); // Refresh UI to show new points
-        }
-      },
+            child: Text(
+              isTamil ? "சரி" : "OK",
+              style: AppTheme.getStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -351,12 +347,17 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     int cost = _requiredRoomPoints();
     int currentPoints = userBox.get('totalScore', defaultValue: 0) as int;
 
-    // Strict check ONLY for subsequent rooms. 
-    // First room (attempts == 0) is allowed even with 0 points (with an ad).
-    if (attempts > 0 && currentPoints < cost) {
+    // Strict check for all attempts
+    if (currentPoints < cost) {
       setState(() => _isLoading = false);
       setState(() => _isCreatingProcess = false);
-      _showNeedPointsMessage();
+
+      // If first attempt and point deficiency due to player count, offer downgrade
+      if (attempts == 0 && _selectedMaxPlayers > RoomService.baseMaxPlayers) {
+        _showFirstAttemptDowngradeDialog();
+      } else {
+        _showNeedPointsMessage();
+      }
       return;
     }
 
@@ -447,24 +448,12 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
         if (mounted) {
           setState(() {}); 
 
-          // Show Toast if points were insufficient for first attempt
-          if (attempts == 0 && currentPoints < cost) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(AppLanguage.languageNotifier.value == 'ta' 
-                  ? "10 வீரர்களுக்கு மேல் சேர்க்க பாயிண்ட்டுகள் தேவை, இருப்பினும் முதல் முறை என்பதால் அனுமதிக்கப்படுகிறது."
-                  : "Points required for extra players, but allowed for your first room match."),
-                backgroundColor: Colors.blueAccent,
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(AppLanguage.getString('room_created_success').replaceAll('{points}', '${_requiredRoomPoints()}')),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLanguage.getString('room_created_success').replaceAll('{points}', '${_requiredRoomPoints()}')),
+              backgroundColor: Colors.green,
+            ),
+          );
         }
 
         setState(() { _isFirstAttempt = false; });
@@ -491,12 +480,6 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
       return;
     }
 
-    int currentPoints = Hive.box(HiveService.userBoxName).get('totalScore', defaultValue: 0) as int;
-    if (!_isAdmin && currentPoints < RoomService.roomJoinCostPoints) {
-      _showNeedPointsMessage(requiredPoints: RoomService.roomJoinCostPoints);
-      return;
-    }
-
     setState(() {
       _isLoading = true;
       _isCreatingProcess = false;
@@ -517,8 +500,6 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
        Navigator.push(context, MaterialPageRoute(builder: (context) => RoomLeaderboardScreen(roomCode: code)));
     } else if (result == 'expired') {
        _showError(lang == 'ta' ? "இந்த தேர்வு நேரம் முடிந்துவிட்டது" : "This test time has expired");
-    } else if (result == 'insufficient_points') {
-      _showNeedPointsMessage(requiredPoints: RoomService.roomJoinCostPoints);
     } else if (result == 'finished') {
       final isTamil = AppLanguage.languageNotifier.value == 'ta';
       _showError(isTamil ? "இந்த தேர்வு ஏற்கனவே முடிந்துவிட்டது" : "This test has already finished");
@@ -598,7 +579,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.15),
+                      color: Colors.orange.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
                     child: const AppIcon(Icons.ondemand_video_rounded, color: Colors.orange, size: 40),
@@ -620,7 +601,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
+                      color: Colors.orange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -703,7 +684,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border.all(color: AppTheme.accentColor.withOpacity(0.2)),
+          border: Border.all(color: AppTheme.accentColor.withValues(alpha: 0.2)),
         ),
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
         child: SafeArea(
@@ -716,7 +697,7 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.3),
+                  color: Colors.grey.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -934,65 +915,69 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
   }
 
   Widget _buildPointCalculator(bool isDark) {
-    int currentPoints = Hive.box(HiveService.userBoxName).get('totalScore', defaultValue: 0) as int;
-    int totalCost = _requiredRoomPoints();
-    int balance = currentPoints - totalCost;
-    bool hasEnough = currentPoints >= totalCost;
-    
-    String today = AppDate.getTodayString();
-    int attempts = Hive.box(HiveService.userBoxName).get('room_create_attempts_$today', defaultValue: 0) as int;
-    
-    // Logic matching _requiredRoomPoints()
-    int baseCost = (_isAdmin || attempts == 0) ? 0 : RoomService.roomCreateCostPoints;
-    int extraCost = totalCost - baseCost;
+    return ValueListenableBuilder(
+      valueListenable: Hive.box(HiveService.userBoxName).listenable(keys: ['totalScore']),
+      builder: (context, Box box, child) {
+        int currentPoints = box.get('totalScore', defaultValue: 0) as int;
+        int totalCost = _requiredRoomPoints();
+        int balance = currentPoints - totalCost;
+        bool hasEnough = currentPoints >= totalCost;
+        
+        String today = AppDate.getTodayString();
+        int attempts = box.get('room_create_attempts_$today', defaultValue: 0) as int;
+        
+        // Logic matching _requiredRoomPoints()
+        int baseCost = (_isAdmin || attempts == 0) ? 0 : RoomService.roomCreateCostPoints;
+        int extraCost = totalCost - baseCost;
 
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 300),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.only(top: 10, bottom: 20),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade200),
-        ),
-        child: Column(
-          children: [
-            _buildCalcRow(AppLanguage.getString('current_points_label'), currentPoints.toDouble(), isDark),
-            const Divider(height: 20),
-            if (baseCost == 0)
-              _buildCalcRow(AppLanguage.getString('base_cost_label'), 0, isDark, overrideValue: AppLanguage.getString('free'))
-            else
-              _buildCalcRow(AppLanguage.getString('base_cost_label'), baseCost.toDouble(), isDark, isDeduction: true, prefix: "-"),
-            
-            if (extraCost > 0)
-              _buildCalcRow(AppLanguage.getString('extra_cost_label'), extraCost.toDouble(), isDark, isDeduction: true, prefix: "-"),
-            
-            const Divider(height: 20),
-            
-            if (totalCost == 0)
-               _buildCalcRow(AppLanguage.getString('total_deduction_label'), 0, isDark, isBold: true, overrideValue: AppLanguage.getString('free'))
-            else
-              _buildCalcRow(
-                AppLanguage.getString('total_deduction_label'), 
-                totalCost.toDouble(), 
-                isDark, 
-                isBold: true,
-                isDeduction: true,
-                prefix: "-",
-              ),
-            const Divider(height: 20),
-            // const SizedBox(height: 8),
-            _buildCalcRow(
-              AppLanguage.getString('remaining_points_label'), 
-              balance.toDouble(), 
-              isDark, 
-              isBold: true, 
-              valueColor: hasEnough ? Colors.green : Colors.red,
+        return AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(top: 10, bottom: 20),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade200),
             ),
-          ],
-        ),
-      ),
+            child: Column(
+              children: [
+                _buildCalcRow(AppLanguage.getString('current_points_label'), currentPoints.toDouble(), isDark),
+                const Divider(height: 20),
+                if (baseCost == 0)
+                  _buildCalcRow(AppLanguage.getString('base_cost_label'), 0, isDark, overrideValue: AppLanguage.getString('free'))
+                else
+                  _buildCalcRow(AppLanguage.getString('base_cost_label'), baseCost.toDouble(), isDark, isDeduction: true, prefix: "-"),
+                
+                if (extraCost > 0)
+                  _buildCalcRow(AppLanguage.getString('extra_cost_label'), extraCost.toDouble(), isDark, isDeduction: true, prefix: "-"),
+                
+                const Divider(height: 20),
+                
+                if (totalCost == 0)
+                  _buildCalcRow(AppLanguage.getString('total_deduction_label'), 0, isDark, isBold: true, overrideValue: AppLanguage.getString('free'))
+                else
+                  _buildCalcRow(
+                    AppLanguage.getString('total_deduction_label'), 
+                    totalCost.toDouble(), 
+                    isDark, 
+                    isBold: true,
+                    isDeduction: true,
+                    prefix: "-",
+                  ),
+                const Divider(height: 20),
+                _buildCalcRow(
+                  AppLanguage.getString('remaining_points_label'), 
+                  balance.toDouble(), 
+                  isDark, 
+                  isBold: true, 
+                  valueColor: hasEnough ? Colors.green : Colors.red,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
     );
   }
 
