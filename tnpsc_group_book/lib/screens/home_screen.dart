@@ -46,6 +46,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   Future<DocumentSnapshot?>? _userDataFuture;
+  bool _isCheckingNews = false;
 
   @override
   void initState() {
@@ -59,9 +60,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkAutoNews() async {
+    if (!mounted) return;
+    setState(() => _isCheckingNews = true);
     // Wait a bit to not interfere with initial UI load
     await Future.delayed(const Duration(seconds: 2));
     await AiService.checkAndAutoGenerateNews();
+    if (mounted) {
+      setState(() => _isCheckingNews = false);
+    }
   }
 
   Future<void> _ensurePointsRestored() async {
@@ -878,7 +884,7 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
             Text(
               isTamil ? "இன்றைய நடப்பு நிகழ்வுகள்" : "Daily Current Affairs",
@@ -888,6 +894,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: isDark ? AppTheme.secondaryColor : AppTheme.textMainColor,
               ),
             ),
+            if (_isCheckingNews) ...[
+              const SizedBox(width: 8),
+              const SizedBox(
+                height: 14,
+                width: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+                ),
+              ),
+            ]
           ],
         ),
         const SizedBox(height: 12),
