@@ -369,6 +369,8 @@ class _SubjectScreenState extends State<SubjectScreen> {
               Tooltip(
                 margin: const EdgeInsets.only(left: 25, right: 25, top: 8),
                 triggerMode: TooltipTriggerMode.tap,
+                showDuration: Duration(seconds: 10),
+                textStyle: AppTheme.getStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w700),
                 message: AppLanguage.languageNotifier.value == 'ta'
                     ? "வினாடி வினா அட்டவணை: ஞாயிறு, செவ்வாய், வியாழன், சனி"
                     : "Quiz Schedule: Sunday, Tuesday, Thursday, Saturday",

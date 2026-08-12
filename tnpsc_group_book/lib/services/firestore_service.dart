@@ -41,16 +41,86 @@ class FirestoreService {
     String? uid = _auth.currentUser?.uid;
     if (uid == null) return;
     try {
-      await _db.collection('users').doc(uid).set({
+      WriteBatch batch = _db.batch();
+      final userRef = _db.collection('users').doc(uid);
+      
+      batch.set(userRef, {
         'name': name,
         'lastNameUpdateDate': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-      AppLog.d("AI_DEBUG: User profile name updated in Firestore: $name");
+
+      // Sync with today's Leaderboards
+      String today = AppDate.getTodayString();
+      String mockId = _getMockLeaderboardDocId();
+      String monday = _getMondayDateString();
+
+      final dailyRef = _db.collection('leaderboards').doc('daily_$today').collection('scores').doc(uid);
+      final mockRef = _db.collection('leaderboards').doc(mockId).collection('scores').doc(uid);
+      final weeklyRef = _db.collection('leaderboards').doc('weekly_$monday').collection('scores').doc(uid);
+
+      final update = {
+        'userName': name,
+        'photoURL': _auth.currentUser?.photoURL,
+      };
+      batch.set(dailyRef, update, SetOptions(merge: true));
+      batch.set(mockRef, update, SetOptions(merge: true));
+      batch.set(weeklyRef, update, SetOptions(merge: true));
+
+      await batch.commit();
+      AppLog.d("AI_DEBUG: User profile name updated in Firestore and Leaderboards: $name");
+
+      // Invalidate local cache
+      await HiveService.invalidateLeaderboardCache();
 
       // Refresh user data immediately after save
       await getUserData(forceRefresh: true);
     } catch (e) {
       AppLog.e("Error updating profile name", e);
+    }
+  }
+
+  /// Updates user gender in Firestore
+  Future<void> updateGender(String gender) async {
+    String? uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      WriteBatch batch = _db.batch();
+      final userRef = _db.collection('users').doc(uid);
+
+      batch.set(userRef, {
+        'gender': gender,
+      }, SetOptions(merge: true));
+
+      // Sync with today's Leaderboards
+      String today = AppDate.getTodayString();
+      String mockId = _getMockLeaderboardDocId();
+      String monday = _getMondayDateString();
+
+      final dailyRef = _db.collection('leaderboards').doc('daily_$today').collection('scores').doc(uid);
+      final mockRef = _db.collection('leaderboards').doc(mockId).collection('scores').doc(uid);
+      final weeklyRef = _db.collection('leaderboards').doc('weekly_$monday').collection('scores').doc(uid);
+
+      final update = {
+        'gender': gender,
+        'photoURL': _auth.currentUser?.photoURL,
+      };
+      batch.set(dailyRef, update, SetOptions(merge: true));
+      batch.set(mockRef, update, SetOptions(merge: true));
+      batch.set(weeklyRef, update, SetOptions(merge: true));
+
+      await batch.commit();
+      AppLog.d("AI_DEBUG: User gender updated in Firestore and Leaderboards: $gender");
+
+      // Save to Hive locally
+      await HiveService.saveGender(gender);
+      
+      // Invalidate local cache
+      await HiveService.invalidateLeaderboardCache();
+
+      // Refresh user data immediately after save
+      await getUserData(forceRefresh: true);
+    } catch (e) {
+      AppLog.e("Error updating gender", e);
     }
   }
 
@@ -190,6 +260,7 @@ class FirestoreService {
           if (data.containsKey('quizzesCompleted')) await userBox.put('quizzesCompleted', data['quizzesCompleted'] ?? 0);
           if (data.containsKey('streak')) await userBox.put('streak', data['streak'] ?? 0);
           if (data.containsKey('lastActiveDate')) await userBox.put('lastActiveDate', data['lastActiveDate'] ?? "");
+          if (data.containsKey('gender')) await userBox.put('user_gender', data['gender']);
         } catch (e) {
           AppLog.e("Error processing user data for Hive", e);
         }
@@ -687,7 +758,7 @@ class FirestoreService {
   }
 
   // Get current user's accumulated score for today (Daily or Mock)
-  Future<Map<String, dynamic>?> getUserBestResultToday({bool isDaily = true, bool forceRefresh = false}) async {
+  Future<Map<String, dynamic>?> getUserBestResultToday({bool isDaily = true, bool forceRefresh = false, String? dateStr}) async {
     String? uid = _auth.currentUser?.uid;
     if (uid == null) return null;
 
@@ -698,10 +769,10 @@ class FirestoreService {
 
       String docId;
       if (isDaily) {
-        String today = AppDate.getTodayString();
+        String today = dateStr ?? AppDate.getTodayString();
         docId = 'daily_$today';
       } else {
-        docId = _getMockLeaderboardDocId();
+        docId = dateStr != null ? 'mock_$dateStr' : _getMockLeaderboardDocId();
       }
 
       // Try cache first if not forcing refresh
@@ -808,20 +879,46 @@ class FirestoreService {
       // 3. Update Leaderboard ONLY if it's a new best score (Saves huge amount of Writes)
       if (score > 0 && (isDaily || isMock) && isNewBest) {
         String userName = AppLanguage.getString('user_fallback');
+        String? photoURL;
+        String? gender = HiveService.getGender();
         var cachedData = HiveService.getCachedUserData();
         if (cachedData != null) {
           userName = cachedData['name'] ?? userName;
+          photoURL = cachedData['photoURL'] ?? _auth.currentUser?.photoURL;
+          gender ??= cachedData['gender'];
+        } else {
+          photoURL = _auth.currentUser?.photoURL;
         }
 
         String docId = isDaily ? 'daily_$today' : _getMockLeaderboardDocId();
         
+        // --- REAL TREND LOGIC ---
+        // Fetch yesterday's final rank to store it in today's entry for comparison
+        int? yesterdayRank;
+        try {
+          String yesterdayStr = AppDate.format(AppDate.getISTNow().subtract(const Duration(days: 1)));
+          final yesterdayData = await getUserBestResultToday(
+            isDaily: isDaily, 
+            dateStr: yesterdayStr,
+            forceRefresh: false, // Cache is fine here
+          );
+          if (yesterdayData != null && yesterdayData['rank'] != null) {
+            yesterdayRank = yesterdayData['rank'];
+          }
+        } catch (e) {
+          AppLog.d("AI_DEBUG: Error fetching yesterday's rank for trend: $e");
+        }
+
         var scoreData = {
           'userId': uid,
           'userName': userName,
+          'photoURL': photoURL,
+          'gender': gender,
           'score': score, 
           'totalQuestions': totalQuestions,
           'timeTaken': timeTaken,
           'streak': userBox.get('streak', defaultValue: 0) as int,
+          'yesterdayRank': yesterdayRank, // Storing real rank history
           'timestamp': FieldValue.serverTimestamp(),
           'expiresAt': AppDate.getISTNow().add(const Duration(days: 7)), 
         };
@@ -1163,6 +1260,24 @@ class FirestoreService {
     } catch (e) {
       AppLog.e("Error sending feedback: $e");
       return false;
+    }
+  }
+
+  Future<void> saveAppRating(int rating, String comment) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      await _db.collection('app_ratings').add({
+        'userId': user.uid,
+        'userName': user.displayName ?? 'Anonymous',
+        'userEmail': user.email ?? 'No Email',
+        'rating': rating,
+        'comment': comment,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      AppLog.e("Error saving app rating: $e");
     }
   }
 

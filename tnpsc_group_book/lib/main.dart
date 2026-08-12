@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hive/hive.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -38,6 +39,7 @@ import 'services/version_service.dart';
 // Widgets
 import 'widgets/lazy_indexed_stack.dart';
 import 'widgets/error_state_widget.dart';
+import 'widgets/app_rating_dialog.dart';
 
 
 // ============================================================
@@ -578,7 +580,7 @@ class _MainWrapperState
   // PERIODIC CHECKS
   // ----------------------------------------------------------
 
-  void _runPeriodicChecks() {
+  Future<void> _runPeriodicChecks() async {
     if (!mounted) return;
 
     try {
@@ -594,8 +596,19 @@ class _MainWrapperState
     }
 
     try {
-      FirestoreService()
+      await FirestoreService()
           .updateStreak();
+      
+      // AI_DEBUG: Check for app rating prompt (every 5 streak days)
+      if (!HiveService.isAppRated()) {
+        final userBox = Hive.box(HiveService.userBoxName);
+        int streak = userBox.get('streak', defaultValue: 0) as int;
+        if (streak > 0 && streak % 5 == 0) {
+          if (mounted) {
+            AppRatingDialog.show(context);
+          }
+        }
+      }
     } catch (e, stack) {
       AppLog.e(
         'MAIN WRAPPER: Streak update error: $e',

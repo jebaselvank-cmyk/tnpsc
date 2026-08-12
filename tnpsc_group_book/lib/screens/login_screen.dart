@@ -61,6 +61,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await userDoc.set({
         'name': name,
         'email': user.email,
+        'photoURL': user.photoURL,
         'streak': 1,
         'points': 0,
         'totalScore': 0,
@@ -70,6 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       await userDoc.update({
         'lastActive': FieldValue.serverTimestamp(),
+        'photoURL': user.photoURL,
       });
     }
 

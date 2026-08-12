@@ -518,6 +518,32 @@ class HiveService {
     return AppDate.getISTNow().difference(lastUpdate).inDays >= 30;
   }
 
+  // ------------------- Gender Management -------------------
+  static Future<void> saveGender(String gender) async {
+    await Hive.box(userBoxName).put('user_gender', gender);
+  }
+
+  static String? getGender() {
+    return Hive.box(userBoxName).get('user_gender') as String?;
+  }
+
+  // ------------------- App Rating -------------------
+  static bool isAppRated() {
+    return Hive.box(userBoxName).get('is_app_rated', defaultValue: false) as bool;
+  }
+
+  static Future<void> setAppRated(bool rated) async {
+    await Hive.box(userBoxName).put('is_app_rated', rated);
+  }
+
+  static Future<void> invalidateLeaderboardCache() async {
+    final box = Hive.box(userBoxName);
+    await box.delete('leaderboard_data_daily');
+    await box.delete('leaderboard_data_mock');
+    await box.put('session_leaderboard_fetched', false);
+    AppLog.d("AI_DEBUG: Leaderboard cache invalidated.");
+  }
+
   // ------------------- Sticky AI Config -------------------
   static Future<void> saveStickyAiConfig(String key, String model, String version) async {
     var box = Hive.box(userBoxName);
