@@ -9,6 +9,7 @@ import '../utils/app_theme.dart';
 import '../utils/app_icons.dart';
 import 'waiting_room_screen.dart';
 import '../services/hive_service.dart';
+import '../services/firestore_service.dart';
 import '../services/reward_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../services/version_service.dart';
@@ -309,14 +310,36 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
     }
 
     // 3. Check Daily Quiz Status
+    if (!_isAdmin && !HiveService.isDailyQuizDone()) {
+      setState(() {
+        _isLoading = true;
+        _isCreatingProcess = true;
+      });
+      _startSpinnerTimer();
 
-    // 3. Check for Existing Room (Server sync)
-    setState(() {
-      _isLoading = true;
-      _isCreatingProcess = true;
-    });
-    _startSpinnerTimer();
-    
+      final dailyData = await FirestoreService().getUserBestResultToday(isDaily: true);
+      
+      if (dailyData == null || dailyData['score'] == null) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _isCreatingProcess = false;
+          });
+          _showError(AppLanguage.getString('daily_quiz_first_error'));
+        }
+        return;
+      }
+      // Sync back to local for faster checks
+      await HiveService.setDailyQuizDone();
+    } else {
+      // Start loading process for normal flow
+      setState(() {
+        _isLoading = true;
+        _isCreatingProcess = true;
+      });
+      _startSpinnerTimer();
+    }
+
     // Check Hosting room - Only block if hosting
     final activeData = await _roomService.getActiveHostRoom();
     
