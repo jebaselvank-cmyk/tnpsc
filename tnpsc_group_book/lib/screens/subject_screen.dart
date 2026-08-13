@@ -279,10 +279,10 @@ class _SubjectScreenState extends State<SubjectScreen> {
                           ),
 
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 32, 20, 16),
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                             child: Text(
                               AppLanguage.getString('subjects'),
-                              style: AppTheme.getStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? AppTheme.secondaryColor : AppTheme.textMainColor),
+                              style: AppTheme.getStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? AppTheme.secondaryColor : AppTheme.textMainColor),
                             ),
                           ),
                         ]),
@@ -291,13 +291,13 @@ class _SubjectScreenState extends State<SubjectScreen> {
 
                     // Subjects Grid
                     SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       sliver: SliverGrid(
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 1.0,
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 7,
+                          mainAxisSpacing: 7,
+                          childAspectRatio: 0.82,
                         ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
@@ -305,7 +305,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
                             return AnimationConfiguration.staggeredGrid(
                               position: index,
                               duration: const Duration(milliseconds: 375),
-                              columnCount: 2,
+                              columnCount: 3,
                               child: ScaleAnimation(
                                 child: FadeInAnimation(
                                   child: RepaintBoundary(child: _SubjectCard(subject: subject)),
@@ -313,10 +313,51 @@ class _SubjectScreenState extends State<SubjectScreen> {
                               ),
                             );
                           },
-                          childCount: tnpscSubjects.length,
+                          childCount: (tnpscSubjects.length ~/ 3) * 3,
                         ),
                       ),
                     ),
+
+                    if (tnpscSubjects.length % 3 != 0)
+                      SliverPadding(
+                        padding: const EdgeInsets.only(left: 10, right: 10, top: 7),
+                        sliver: SliverToBoxAdapter(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final double itemWidth = (constraints.maxWidth - (2 * 7)) / 3;
+                              final int startIndex = (tnpscSubjects.length ~/ 3) * 3;
+                              final int remainingCount = tnpscSubjects.length % 3;
+                              
+                              return Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(remainingCount, (i) {
+                                  final index = startIndex + i;
+                                  final subject = tnpscSubjects[index];
+                                  return Padding(
+                                    padding: EdgeInsets.only(left: i > 0 ? 7 : 0),
+                                    child: SizedBox(
+                                      width: itemWidth,
+                                      child: AspectRatio(
+                                        aspectRatio: 0.82,
+                                        child: AnimationConfiguration.staggeredGrid(
+                                          position: index,
+                                          duration: const Duration(milliseconds: 375),
+                                          columnCount: 3,
+                                          child: ScaleAnimation(
+                                            child: FadeInAnimation(
+                                              child: RepaintBoundary(child: _SubjectCard(subject: subject)),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
                     const SliverToBoxAdapter(child: SizedBox(height: 50)),
                   ],
                 );
@@ -529,7 +570,7 @@ class _SubjectCard extends StatelessWidget {
                   top: BorderSide(color: AppTheme.glassBorder(context), width: 0),
                 ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -541,7 +582,7 @@ class _SubjectCard extends StatelessWidget {
                         child: Text(
                           subject.title,
                           style: AppTheme.getStyle(
-                            fontSize: 16,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: isDark ? Colors.white : AppTheme.textMainColor,
                           ),
@@ -558,7 +599,7 @@ class _SubjectCard extends StatelessWidget {
                     child: Text(
                       AppLanguage.getString('select_category'),
                       style: AppTheme.getStyle(
-                        fontSize: 14,
+                        fontSize: 15,
                         color: isDark ? Colors.white70 : AppTheme.textSecondaryColor,
                       ),
                     ),
@@ -670,7 +711,7 @@ class _SubjectCard extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             decoration: BoxDecoration(
               color: AppTheme.glassWhite(context),
               borderRadius: BorderRadius.circular(24),
@@ -681,24 +722,25 @@ class _SubjectCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: subject.color.withAlpha(26),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(subject.icon, color: subject.color, size: 28),
+                  child: Icon(subject.icon, color: subject.color, size: 24),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Flexible(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         subject.title,
                         textAlign: TextAlign.center,
                         style: AppTheme.getStyle(
-                          fontSize: 16,
+                          fontSize: 13,
                           fontWeight: FontWeight.bold,
                           color: Theme.of(context).brightness == Brightness.dark ? Colors.white : AppTheme.textMainColor,
                         ),
@@ -710,7 +752,7 @@ class _SubjectCard extends StatelessWidget {
                         subject.subtitle,
                         textAlign: TextAlign.center,
                         style: AppTheme.getStyle(
-                          fontSize: 12,
+                          fontSize: 10,
                           color: Theme.of(context).brightness == Brightness.dark ? Colors.white70 : AppTheme.textSecondaryColor,
                         ),
                         maxLines: 1,

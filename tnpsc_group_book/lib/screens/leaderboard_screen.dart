@@ -259,6 +259,7 @@ class _TopThreeUser extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
     bool isFirst = rank == 1;
     double avatarSize = isFirst ? 70 : 50;
     String name = user['userName'] ?? AppLanguage.getString('anonymous');
@@ -310,7 +311,7 @@ class _TopThreeUser extends StatelessWidget {
                             style: AppTheme.getStyle(
                               fontSize: isFirst ? 30 : 20,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white10,
+                              color: Colors.transparent,
                             ),
                           )
                         : null,
@@ -325,15 +326,15 @@ class _TopThreeUser extends StatelessWidget {
                   child: Text(
                     "#$rank",
                     style: AppTheme.getStyle(
-                      color: Colors.white,
-                      fontSize: 12,
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontSize: 13,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ],
             ),
-            if ((user['streak'] ?? 0) <= 7) const SizedBox(height: 9),
+            if ((user['streak'] ?? 0) < 7) const SizedBox(height: 9),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -343,7 +344,7 @@ class _TopThreeUser extends StatelessWidget {
                     style: AppTheme.getStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: isDark ? Colors.white : Colors.black,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 1,
@@ -356,21 +357,22 @@ class _TopThreeUser extends StatelessWidget {
                 ],
               ],
             ),
-            if ((user['streak'] ?? 0) <= 7) const SizedBox(height: 8),
+            if ((user['streak'] ?? 0) < 7) const SizedBox(height: 8),
             Text(
               _formatTime(user['timeTaken'] ?? 0),
               style: AppTheme.getStyle(
                 fontSize: 11,
-                color: Colors.white70,
+                color: isDark ? Colors.white70 : Colors.black54,
               ),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 2),
             Text(
               "$score / ${user['totalQuestions'] ?? (isDaily ? 20 : 50)}",
               style: AppTheme.getStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w900,
-                color: rank == 1 ? Colors.amber : Colors.white,
+                color: rank == 1 ? Colors.amber : (isDark ? Colors.white70 : Colors.black54),
               ),
             ),
             const SizedBox(height: 4),
