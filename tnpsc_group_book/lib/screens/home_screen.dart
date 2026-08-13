@@ -791,7 +791,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.only(left: 20,right: 20,top: 15,bottom: 15),
       decoration: BoxDecoration(
         color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -839,7 +839,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               // Progress bar (Mastery style)
               Row(
                 children: [
@@ -854,7 +854,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 20),
                   Text(
                     isTamil ? "$correct / $total சரி" : "$correct / $total Correct",
                     style: AppTheme.getStyle(
@@ -863,13 +863,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Colors.green,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Sub-info row (Optional detail)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
                 ],
               ),
             ],
