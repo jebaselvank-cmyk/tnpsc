@@ -105,38 +105,25 @@ class AiService {
   ];
 
   static String _getLanguageTopicsForDate(DateTime date, int count) {
-    // Deterministic selection based on day of month + year to ensure rotation
-    int seed = date.day + date.month + date.year;
-    List<Map<String, dynamic>> selected = [];
-    
-    for (int i = 0; i < count; i++) {
-      int index = (seed + i) % _languageTopics.length;
-      selected.add(_languageTopics[index]);
-    }
+    // Truly random selection by shuffling the list
+    List<Map<String, dynamic>> shuffled = List<Map<String, dynamic>>.from(_languageTopics)..shuffle();
+    List<Map<String, dynamic>> selected = shuffled.take(count).toList();
 
     return selected.map((t) => "- ${t['title']}: ${t['desc']}").join("\n");
   }
 
   static String _getAptitudeTopicsForDate(DateTime date, int count) {
-    int seed = date.day + (date.month * 2) + date.year; // Different seed than language
-    List<Map<String, dynamic>> selected = [];
-    
-    for (int i = 0; i < count; i++) {
-      int index = (seed + i) % _aptitudeTopics.length;
-      selected.add(_aptitudeTopics[index]);
-    }
+    // Truly random selection by shuffling the list
+    List<Map<String, dynamic>> shuffled = List<Map<String, dynamic>>.from(_aptitudeTopics)..shuffle();
+    List<Map<String, dynamic>> selected = shuffled.take(count).toList();
 
     return selected.map((t) => "- ${t['title']}: ${t['desc']}").join("\n");
   }
 
   static String _getGsTopicsForDate(DateTime date, int count) {
-    int seed = date.day + (date.month * 3) + date.year; // Different seed
-    List<Map<String, dynamic>> selected = [];
-    
-    for (int i = 0; i < count; i++) {
-      int index = (seed + i) % _gsTopics.length;
-      selected.add(_gsTopics[index]);
-    }
+    // Truly random selection by shuffling the list
+    List<Map<String, dynamic>> shuffled = List<Map<String, dynamic>>.from(_gsTopics)..shuffle();
+    List<Map<String, dynamic>> selected = shuffled.take(count).toList();
 
     return selected.map((t) => "- ${t['title']}: ${t['desc']}").join("\n");
   }
@@ -627,6 +614,9 @@ $commonRules
 
     if (allQuestions.length != 20) return false; // Ensure exactly 20 total
 
+    // Shuffle the final list to mix Tamil, GS, and Aptitude
+    allQuestions.shuffle();
+
     // Store / update in Firestore
     final querySnapshot = await FirebaseFirestore.instance
         .collection('quizzes')
@@ -836,6 +826,9 @@ $commonRules
 
     // --------------------------------------------------------------------
     if (allQuestions.length == 50) {
+      // Shuffle the final list to mix Tamil, GS, and Aptitude
+      allQuestions.shuffle();
+      
       // Final check for 50 questions total
       final querySnapshot = await FirebaseFirestore.instance
           .collection('mock_tests')
