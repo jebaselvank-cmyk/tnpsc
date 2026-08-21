@@ -96,90 +96,40 @@ Future<void> main() async {
     return true;
   };
 
-  // ----------------------------------------------------------
-  // Portrait orientation
-  // ----------------------------------------------------------
-
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-
-  // Initialize localized date formatting
-  await initializeDateFormatting('ta', null);
-  await initializeDateFormatting('en', null);
-
-  // ==========================================================
-  // FIREBASE INITIALIZATION
-  // IMPORTANT:
-  // Firebase MUST be initialized BEFORE runApp()
-  // ==========================================================
-
+  // Initialize localized date formatting and preferred orientations in parallel
+  // Also start Firebase and Hive initialization immediately
   bool firebaseReady = false;
 
   try {
-    AppLog.d('========================================');
-    AppLog.d('MAIN: Firebase initialization START');
-    AppLog.d('========================================');
-
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-
-    firebaseReady = true;
-
-    AppLog.d(
-      'MAIN: Firebase.initializeApp() SUCCESS',
-    );
-
-    // Verify Firebase app
-    final firebaseApp = Firebase.app();
-
-    AppLog.d(
-      'MAIN: Firebase App = ${firebaseApp.name}',
-    );
-
-    // Verify Firebase Auth
-    final User? user =
-        FirebaseAuth.instance.currentUser;
-
-    AppLog.d(
-      'MAIN: Firebase Auth ready',
-    );
-
-    AppLog.d(
-      'MAIN: Current UID = ${user?.uid}',
-    );
-
-    AppLog.d(
-      'MAIN: Current Email = ${user?.email}',
-    );
-  } catch (e, stack) {
-    firebaseReady = false;
-
-    AppLog.e(
-      'MAIN: FIREBASE INITIALIZATION FAILED: $e',
-      e,
-      stack,
-    );
-  }
-
-  // ==========================================================
-  // HIVE
-  // ==========================================================
-
-  try {
-    await HiveService.init();
-
-    AppLog.d(
-      'MAIN: Hive initialization SUCCESS',
-    );
-  } catch (e, stack) {
-    AppLog.e(
-      'MAIN: Hive initialization FAILED: $e',
-      e,
-      stack,
-    );
+    await Future.wait([
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]),
+      initializeDateFormatting('ta', null),
+      initializeDateFormatting('en', null),
+      () async {
+        try {
+          await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
+          firebaseReady = true;
+          AppLog.d('MAIN: Firebase.initializeApp() SUCCESS');
+        } catch (e, stack) {
+          AppLog.e('MAIN: FIREBASE INITIALIZATION FAILED: $e', e, stack);
+        }
+      }(),
+      () async {
+        try {
+          await HiveService.init();
+          AppLog.d('MAIN: Hive initialization SUCCESS');
+        } catch (e, stack) {
+          AppLog.e('MAIN: Hive initialization FAILED: $e', e, stack);
+        }
+      }(),
+    ]);
+  } catch (e) {
+    AppLog.e('MAIN: Parallel initialization error: $e');
   }
 
   // ==========================================================

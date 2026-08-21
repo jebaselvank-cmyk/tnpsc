@@ -414,134 +414,130 @@ class _LeaderboardItem extends StatelessWidget {
     // Real trend logic
     int? yesterdayRank = user['yesterdayRank'];
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
+    return RepaintBoundary(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark 
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
             color: isDark 
-                ? Colors.white.withOpacity(0.15)
-                : Colors.white.withOpacity(0.6),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isDark 
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.black.withOpacity(0.05),
-              width: 1,
+                ? Colors.white.withOpacity(0.1)
+                : Colors.black.withOpacity(0.05),
+            width: 1,
+          ),
+          boxShadow: [
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Diamond Rank Indicator
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Transform.rotate(
+                  angle: math.pi / 4,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isDark ? Colors.white24 : Colors.black12, width: 1.5),
+                    ),
+                  ),
+                ),
+                Text(
+                  "#$rank",
+                  style: AppTheme.getStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+              ],
             ),
-            boxShadow: [
-              if (!isDark)
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-            ],
-          ),
-          child: Row(
-            children: [
-              // Diamond Rank Indicator
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  Transform.rotate(
-                    angle: math.pi / 2,
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(50),
-                        border: Border.all(color: isDark ? Colors.white24 : Colors.black12, width: 1.5),
-                      ),
-                    ),
-                  ),
-                  Text(
-                    "#$rank",
-                    style: AppTheme.getStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white70 : Colors.black87,
-                    ),
-                  ),
-                ],
+            const SizedBox(width: 16),
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Colors.grey.shade900,
+              backgroundImage: NetworkImage(
+                  user['photoURL'] != null && user['photoURL'].toString().isNotEmpty
+                      ? user['photoURL']
+                      : "https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(name)}${user['gender'] == 'female' ? '-female' : user['gender'] == 'male' ? '-male' : ''}&backgroundColor=b6e3f4,c0aede,d1d4f9"
               ),
-              const SizedBox(width: 16),
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.grey.shade900,
-                backgroundImage: NetworkImage(
-                    user['photoURL'] != null && user['photoURL'].toString().isNotEmpty
-                        ? user['photoURL']
-                        : "https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(name)}${user['gender'] == 'female' ? '-female' : user['gender'] == 'male' ? '-male' : ''}&backgroundColor=b6e3f4,c0aede,d1d4f9"
-                ),
-                child: user['photoURL'] == null || user['photoURL'].toString().isEmpty
-                    ? Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : "?",
-                        style: AppTheme.getStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white10,
-                        ),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            name,
-                            style: AppTheme.getStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : AppTheme.textMainColor,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if ((user['streak'] ?? 0) >= 7) ...[
-                          const SizedBox(width: 2),
-                          StreakBadge(streak: user['streak']),
-                        ],
-                      ],
-                    ),
-                    Text(
-                      _formatTime(user['timeTaken'] ?? 0),
+              child: user['photoURL'] == null || user['photoURL'].toString().isEmpty
+                  ? Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : "?",
                       style: AppTheme.getStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white10,
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 15,),
-              Column(
-                mainAxisSize: MainAxisSize.min,
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          style: AppTheme.getStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : AppTheme.textMainColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if ((user['streak'] ?? 0) >= 7) ...[
+                        const SizedBox(width: 2),
+                        StreakBadge(streak: user['streak']),
+                      ],
+                    ],
+                  ),
                   Text(
-                    "$score / ${user['totalQuestions'] ?? (isDaily ? 20 : 50)}",
+                    _formatTime(user['timeTaken'] ?? 0),
                     style: AppTheme.getStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : AppTheme.textMainColor,
+                      fontSize: 12,
+                      color: Colors.grey,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  _buildTrendIcon(yesterdayRank, rank),
                 ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 15,),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "$score / ${user['totalQuestions'] ?? (isDaily ? 20 : 50)}",
+                  style: AppTheme.getStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppTheme.textMainColor,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                _buildTrendIcon(yesterdayRank, rank),
+              ],
+            ),
+          ],
         ),
       ),
     );

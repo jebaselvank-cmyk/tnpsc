@@ -8,6 +8,7 @@ import '../utils/app_language.dart';
 import '../utils/app_date.dart';
 import '../utils/app_icons.dart';
 import '../utils/app_log.dart';
+import '../services/firestore_service.dart';
 
 import 'admin_feedback_screen.dart';
 import 'admin_quiz_manage_screen.dart';
@@ -120,6 +121,31 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               onTap: () {
                 // TODO: navigate to manual content editor
               },
+            ),
+            const SizedBox(height: 12),
+            // System Maintenance Card
+            _buildAdminCard(
+              context,
+              title: "System & DB Maintenance",
+              icon: Icons.cleaning_services_rounded,
+              color: Colors.blueGrey,
+              onTap: () {},
+              extra: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: _isGenerating ? null : _runManualMaintenance,
+                    icon: const Icon(Icons.auto_delete_rounded),
+                    label: const Text("Run Database Cleanup"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueGrey.withValues(alpha: 0.1),
+                      foregroundColor: Colors.blueGrey,
+                      elevation: 0,
+                      minimumSize: const Size(double.infinity, 45),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             // User Feedbacks
@@ -564,5 +590,89 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     });
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text("Failed to generate $quizType for $dateStr")));
+  }
+
+  Future<void> _runManualMaintenance() async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Run DB Maintenance?"),
+        content: const Text("This will purge all Leaderboards, Quizzes, Mock Tests, Results, News, and Room data older than 14 days (or 10 days for news/rooms)."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            child: const Text("Run Now"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _isGenerating = true;
+      _currentStatus = "Running Comprehensive DB Maintenance...";
+    });
+
+    try {
+      final firestoreService = FirestoreService();
+      Map<String, int> results = await firestoreService.checkAndPerformSilentMaintenance(force: true);
+
+      setState(() {
+        _isGenerating = false;
+        _currentStatus = "Maintenance completed successfully!";
+      });
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Maintenance Results"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildResultRow("Leaderboards", results['leaderboards']),
+                  _buildResultRow("Quizzes", results['quizzes']),
+                  _buildResultRow("Mock Tests", results['mockTests']),
+                  _buildResultRow("Results History", results['results']),
+                  _buildResultRow("News Items", results['news']),
+                  _buildResultRow("Room Data", results['rooms']),
+                  _buildResultRow("Room Attempts", results['roomAttempts']),
+                  const SizedBox(height: 16),
+                  const Text("Database cleanup complete. Documents older than 10-14 days have been removed.", 
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("Awesome!")),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isGenerating = false;
+        _currentStatus = "Maintenance failed: $e";
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+    }
+  }
+
+  Widget _buildResultRow(String label, int? count) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 14)),
+          Text(count?.toString() ?? "0", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+        ],
+      ),
+    );
   }
 }

@@ -57,6 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _checkAutoNews();
     // AI_DEBUG: Check clipboard on home screen entry for room codes
     DeepLinkService().checkClipboard();
+    // Silently purge old leaderboard data after a delay to not affect startup performance
+    Future.delayed(const Duration(seconds: 5), () {
+       _firestoreService.checkAndPerformSilentMaintenance();
+    });
   }
 
   Future<void> _checkAutoNews() async {
@@ -266,29 +270,33 @@ class _HomeScreenState extends State<HomeScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // Daily Quiz Highlight
-                                ValueListenableBuilder(
-                                  valueListenable: Hive.box(HiveService.userBoxName).listenable(),
-                                  builder: (context, box, child) {
-                                    return RepaintBoundary(child: _buildDailyQuizCard(context, isDark));
-                                  },
+                                RepaintBoundary(
+                                  child: ValueListenableBuilder(
+                                    valueListenable: Hive.box(HiveService.userBoxName).listenable(keys: ['dailyquiz_last_completed_date']),
+                                    builder: (context, box, child) {
+                                      return _buildDailyQuizCard(context, isDark);
+                                    },
+                                  ),
                                 ),
                                 const SizedBox(height: 32),
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8.0),
-                                  child: Row(
-                                        children: [
-                                          _buildQuickActionCard(context, title: AppLanguage.getString('mistake_bank'), icon: "📝", color: Colors.orange, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MistakeBankScreen()))),
-                                          const SizedBox(width: 12),
-                                          _buildQuickActionCard(context, title: AppLanguage.getString('saved_quizzes'), icon: "🔖", color: Colors.blue, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BookmarkScreen()))),
-                                          const SizedBox(width: 12),
-                                          _buildQuickActionCard(context, title: AppLanguage.getString('group_test_lobby'), icon: "👥", color: Colors.green, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RoomSetupScreen()))),
-                                        ],
-                                      ),
+                                  child: RepaintBoundary(
+                                    child: Row(
+                                          children: [
+                                            _buildQuickActionCard(context, title: AppLanguage.getString('mistake_bank'), icon: "📝", color: Colors.orange, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MistakeBankScreen()))),
+                                            const SizedBox(width: 12),
+                                            _buildQuickActionCard(context, title: AppLanguage.getString('saved_quizzes'), icon: "🔖", color: Colors.blue, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BookmarkScreen()))),
+                                            const SizedBox(width: 12),
+                                            _buildQuickActionCard(context, title: AppLanguage.getString('group_test_lobby'), icon: "👥", color: Colors.green, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RoomSetupScreen()))),
+                                          ],
+                                        ),
+                                  ),
                                 ),
                                 const SizedBox(height: 32),
 
                                 // Current Affairs Section
-                                _buildCurrentAffairsSection(context, isDark),
+                                RepaintBoundary(child: _buildCurrentAffairsSection(context, isDark)),
                                 const SizedBox(height: 32),
 
                                 // Smart Weak Area Analysis Card

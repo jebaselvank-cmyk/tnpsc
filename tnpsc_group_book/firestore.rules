@@ -1,12 +1,24 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Admin Helper
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'adminjeba@gmail.com' ||
+        request.auth.token.email == 'kjebaselvan987@gmail.com' ||
+        request.auth.token.phone_number == '+918754236411'
+      );
+    }
+
     // Users collection – owner only
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
       // All sub‑collections under a user (profile, quizProgress, etc.)
       match /{sub=**} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow delete: if isAdmin();
       }
     }
 
@@ -15,48 +27,69 @@ service cloud.firestore {
     match /currentAffairs/versions/{docId} { allow read: if true; }
     match /subjects/{docId} { allow read: if true; }
     match /subject_study_material/{docId} { allow read: if true; }
-    match /quizzes/{docId} { allow read: if true; }
-    match /mock_tests/{docId} { allow read: if true; }
+    match /quizzes/{docId} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+    match /mock_tests/{docId} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
 
     // Room tests – realtime, listener only while active
     match /roomTests/rooms/{roomCode} {
       allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && request.auth.uid == resource.data.hostUid;
-      match /players/{uid} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow create, update, delete: if request.auth != null && (request.auth.uid == resource.data.hostUid || isAdmin());
+      match /{sub=**} {
+        allow read, write, delete: if request.auth != null;
       }
     }
 
     // Leaderboard – public read, admin write
     match /leaderboard/{type}/{docId} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.token.admin == true;
+      allow write, delete: if isAdmin();
+      match /{sub=**} {
+        allow read, write, delete: if isAdmin() || request.auth != null;
+      }
     }
 
     // User generated data (results, leaderboards, feedback)
-    match /results/{docId} { allow read, write: if request.auth != null; }
-    match /leaderboards/{docId} { allow read, write: if request.auth != null; }
-    match /feedbacks/{docId} { allow read, write: if request.auth != null; }
+    match /results/{docId} {
+      allow read, write: if request.auth != null;
+      allow delete: if isAdmin();
+    }
+    match /leaderboards/{docId} {
+      allow read, write: if request.auth != null;
+      allow delete: if isAdmin();
+      match /{sub=**} {
+        allow read, write, delete: if isAdmin() || request.auth != null;
+      }
+    }
+    match /feedbacks/{docId} {
+      allow read, write: if request.auth != null;
+      allow delete: if isAdmin();
+    }
 
     // Existing rules retained for compatibility
     match /auth_users/{docId} { allow read, write: if request.auth != null; }
     match /rooms/{roomCode} {
       allow read: if request.auth != null;
-      allow create, update: if request.auth != null;
-      match /players/{playerId} {
-        allow read: if request.auth != null;
-        allow create, update: if request.auth != null && request.auth.uid == playerId;
+      allow create, update, delete: if request.auth != null;
+      match /{sub=**} {
+        allow read, write, delete: if request.auth != null;
       }
     }
     match /daily_room_attempts/{dateDoc} {
       allow read, write: if request.auth != null;
-      match /attempts/{uid} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow delete: if isAdmin();
+      match /{sub=**} {
+        allow read, write, delete: if request.auth != null;
       }
     }
-    match /subject_questions/{document=**} { allow read, write: if request.auth != null; }
-    match /quizzes/{document=**} { allow read, write: if request.auth != null; }
-    match /mock_tests/{document=**} { allow read, write: if request.auth != null; }
-    match /subject_study_material/{document=**} { allow read, write: if request.auth != null; }
+    match /subject_questions/{document=**} {
+      allow read: if request.auth != null;
+      allow write, delete: if isAdmin();
+    }
   }
 }

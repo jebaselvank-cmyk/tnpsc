@@ -25,6 +25,7 @@ import 'admin_panel_screen.dart';
 import '../widgets/streak_badge.dart';
 import '../widgets/share_poster.dart';
 import '../widgets/app_rating_dialog.dart';
+import 'avatar_selection_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../services/credential_storage.dart';
@@ -182,6 +183,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       final String email = userData?['email'] ?? user?.email ?? AppLanguage.getString('no_email_linked');
                       final String rankVal = globalRank > 0 ? globalRank.toString() : "--";
 
+                      final int totalPoints = userData?['totalScore'] ?? 0;
+
                       return ListView(
                         padding: const EdgeInsets.symmetric(horizontal: 20.0),
                         children: [
@@ -189,25 +192,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Center(
                             child: Column(
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: AppTheme.accentColor, width: 2),
-                                  ),
-                                  child: CircleAvatar(
-                                    radius: 40,
-                                    backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                                    backgroundImage: (user?.photoURL != null && user!.photoURL!.isNotEmpty)
-                                        ? NetworkImage(user!.photoURL!)
-                                        : NetworkImage("https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(name)}${userData?['gender'] == 'female' ? '-female' : userData?['gender'] == 'male' ? '-male' : ''}&backgroundColor=b6e3f4,c0aede,d1d4f9"),
-                                    child: (user?.photoURL == null || user!.photoURL!.isEmpty)
-                                        ? Text(
-                                            name.isNotEmpty ? name[0].toUpperCase() : "?",
-                                            style: AppTheme.getStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white10),
-                                          )
-                                        : null,
-                                  ),
+                                Stack(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: AppTheme.accentColor, width: 2),
+                                      ),
+                                      child: CircleAvatar(
+                                        radius: 40,
+                                        backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                        backgroundImage: (userData?['avatar'] != null && userData!['avatar']!.isNotEmpty)
+                                            ? NetworkImage(userData!['avatar']!)
+                                            : (user?.photoURL != null && user!.photoURL!.isNotEmpty)
+                                                ? NetworkImage(user!.photoURL!)
+                                                : NetworkImage("https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(name)}${userData?['gender'] == 'female' ? '-female' : userData?['gender'] == 'male' ? '-male' : ''}&backgroundColor=b6e3f4,c0aede,d1d4f9"),
+                                        child: (userData?['avatar'] == null && (user?.photoURL == null || user!.photoURL!.isEmpty))
+                                            ? Text(
+                                                name.isNotEmpty ? name[0].toUpperCase() : "?",
+                                                style: AppTheme.getStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white10),
+                                              )
+                                            : null,
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 0,
+                                      right: 0,
+                                      child: GestureDetector(
+                                        onTap: () async {
+                                          final result = await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => AvatarSelectionScreen(
+                                                currentAvatar: userData?['avatar'] ?? user?.photoURL ?? "",
+                                                currentPoints: totalPoints,
+                                              ),
+                                            ),
+                                          );
+                                          if (result == true) {
+                                            _refreshData();
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryColor,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: isDark ? AppTheme.darkSurfaceColor : Colors.white, width: 2),
+                                          ),
+                                          child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 16),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(height: 16),
                                 Row(

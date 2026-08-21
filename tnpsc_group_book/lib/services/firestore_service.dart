@@ -60,7 +60,6 @@ class FirestoreService {
 
       final update = {
         'userName': name,
-        'photoURL': _auth.currentUser?.photoURL,
       };
       batch.set(dailyRef, update, SetOptions(merge: true));
       batch.set(mockRef, update, SetOptions(merge: true));
@@ -102,7 +101,6 @@ class FirestoreService {
 
       final update = {
         'gender': gender,
-        'photoURL': _auth.currentUser?.photoURL,
       };
       batch.set(dailyRef, update, SetOptions(merge: true));
       batch.set(mockRef, update, SetOptions(merge: true));
@@ -122,6 +120,432 @@ class FirestoreService {
     } catch (e) {
       AppLog.e("Error updating gender", e);
     }
+  }
+
+  /// Updates user avatar in Firestore and deducts points
+  Future<bool> updateAvatar(String avatarUrl, int cost) async {
+    String? uid = _auth.currentUser?.uid;
+    if (uid == null) return false;
+    try {
+      // Server-side check for points
+      DocumentSnapshot userDoc = await _db.collection('users').doc(uid).get(const GetOptions(source: Source.server));
+      if (!userDoc.exists) return false;
+      
+      int currentPoints = (userDoc.data() as Map<String, dynamic>)['totalScore'] ?? 0;
+      if (currentPoints < cost) return false;
+
+      WriteBatch batch = _db.batch();
+      final userRef = _db.collection('users').doc(uid);
+
+      batch.set(userRef, {
+        'avatar': avatarUrl,
+        'totalScore': FieldValue.increment(-cost),
+      }, SetOptions(merge: true));
+
+      // Sync with Leaderboards
+      String today = AppDate.getTodayString();
+      String mockId = _getMockLeaderboardDocId();
+      String monday = _getMondayDateString();
+
+      final dailyRef = _db.collection('leaderboards').doc('daily_$today').collection('scores').doc(uid);
+      final mockRef = _db.collection('leaderboards').doc(mockId).collection('scores').doc(uid);
+      final weeklyRef = _db.collection('leaderboards').doc('weekly_$monday').collection('scores').doc(uid);
+
+      final update = {
+        'photoURL': avatarUrl,
+      };
+      
+      final data = userDoc.data() as Map<String, dynamic>;
+      final String? lastDaily = data['completedDailyQuizzes'];
+      final String? lastMock = data['completedMockQuizzes'];
+
+      // Only update leaderboard if the user has actually played today
+      if (lastDaily == today) {
+        batch.set(dailyRef, update, SetOptions(merge: true));
+        batch.set(weeklyRef, update, SetOptions(merge: true));
+      }
+      
+      if (lastMock == today) {
+        batch.set(mockRef, update, SetOptions(merge: true));
+      }
+
+      await batch.commit();
+      AppLog.d("AI_DEBUG: User avatar updated and points deducted: $avatarUrl (-$cost)");
+
+      // Local Hive updates
+      await HiveService.saveAvatar(avatarUrl);
+      final userBox = Hive.box(HiveService.userBoxName);
+      int localPoints = userBox.get('totalScore', defaultValue: 0) as int;
+      await userBox.put('totalScore', localPoints - cost);
+
+      // Invalidate caches
+      await HiveService.invalidateLeaderboardCache();
+      await HiveService.invalidateRankCache(true);
+      await HiveService.invalidateRankCache(false);
+      await HiveService.invalidateGlobalRankCache();
+
+      // Refresh data
+      await getUserData(forceRefresh: true);
+      return true;
+    } catch (e) {
+      AppLog.e("Error updating avatar", e);
+      return false;
+    }
+  }
+
+  /// Silently cleans up leaderboard data older than 14 days.
+  /// Runs once per day globally using a system flag.
+  /// Returns a map of deletion counts for verification.
+  Future<Map<String, int>> checkAndPerformSilentMaintenance({bool force = false}) async {
+    Map<String, int> results = {
+      'leaderboards': 0,
+      'quizzes': 0,
+      'mockTests': 0,
+      'results': 0,
+      'news': 0,
+      'rooms': 0,
+      'roomAttempts': 0,
+    };
+    try {
+      final String today = AppDate.getTodayString();
+      final maintenanceRef = _db.collection('system').doc('maintenance');
+
+      // 1. Check if maintenance was already done today
+      if (!force) {
+        final mSnap = await maintenanceRef.get();
+        if (mSnap.exists) {
+          final lastPurge = (mSnap.data() as Map<String, dynamic>)['lastLeaderboardPurge'];
+          if (lastPurge == today) {
+            AppLog.d("MAINTENANCE: Already checked today. Skipping.");
+            return results; 
+          }
+        }
+      }
+
+      // 2. Mark as done immediately to prevent race conditions from other users
+      await maintenanceRef.set({'lastLeaderboardPurge': today}, SetOptions(merge: true));
+      
+      AppLog.d("MAINTENANCE: Starting comprehensive parallel database purge...");
+
+      // 3. Calculate cutoffs
+      final DateTime now = AppDate.getISTNow();
+      
+      // Standard cutoff (14 days ago)
+      final DateTime cutoff = now.subtract(const Duration(days: 14));
+      final cutoffDate = DateTime(cutoff.year, cutoff.month, cutoff.day);
+
+      // News cutoff (10 days ago)
+      final DateTime cutoff10 = now.subtract(const Duration(days: 10));
+      final cutoffDate10 = DateTime(cutoff10.year, cutoff10.month, cutoff10.day);
+
+      // 4. Execute all purges in parallel for maximum efficiency
+      await Future.wait([
+        // Leaderboards
+        () async {
+          try {
+            results['leaderboards'] = await _purgeLeaderboards(cutoffDate);
+          } catch (e) { AppLog.e("MAINTENANCE ERROR (Leaderboards): $e"); }
+        }(),
+        
+        // Quizzes
+        () async {
+          try {
+            results['quizzes'] = await _purgeCollectionByDate('quizzes', cutoffDate);
+          } catch (e) { AppLog.e("MAINTENANCE ERROR (Quizzes): $e"); }
+        }(),
+
+        // Mock Tests
+        () async {
+          try {
+            results['mockTests'] = await _purgeCollectionByDate('mock_tests', cutoffDate);
+          } catch (e) { AppLog.e("MAINTENANCE ERROR (MockTests): $e"); }
+        }(),
+
+        // Results
+        () async {
+          try {
+            results['results'] = await _purgeCollectionByTimestamp('results', cutoff);
+          } catch (e) { AppLog.e("MAINTENANCE ERROR (Results): $e"); }
+        }(),
+
+        // News
+        () async {
+          try {
+            results['news'] = await _purgeCollectionByDate('current_affairs_points', cutoffDate10);
+          } catch (e) { AppLog.e("MAINTENANCE ERROR (News): $e"); }
+        }(),
+
+        // Rooms
+        () async {
+          try {
+            results['rooms'] = await _purgeRoomsRecursively(cutoffDate10);
+          } catch (e) { AppLog.e("MAINTENANCE ERROR (Rooms): $e"); }
+        }(),
+
+        // Room Attempts
+        () async {
+          try {
+            results['roomAttempts'] = await _purgeDailyDatedCollection('daily_room_attempts', 'attempts', cutoffDate10);
+          } catch (e) { AppLog.e("MAINTENANCE ERROR (RoomAttempts): $e"); }
+        }(),
+      ]);
+
+      if (results.values.any((v) => v > 0)) {
+        AppLog.d("MAINTENANCE: Comprehensive purge done. Results: $results");
+      }
+
+    } catch (e) {
+      AppLog.e("MAINTENANCE CRITICAL ERROR: $e");
+    }
+    return results;
+  }
+
+  /// Internal helper for leaderboards specifically
+  Future<int> _purgeLeaderboards(DateTime cutoffDate) async {
+    int deletedCount = 0;
+    
+    // 1. First, try to get existing real documents
+    final lSnap = await _db.collection('leaderboards').get();
+    Set<String> processedIds = {};
+
+    for (var doc in lSnap.docs) {
+      processedIds.add(doc.id);
+      if (await _shouldDeleteLeaderboard(doc.id, cutoffDate)) {
+        AppLog.d("MAINTENANCE: Deleting real leaderboard: ${doc.id}");
+        await _deleteCollectionRecursively(doc.reference.collection('scores'));
+        await doc.reference.delete();
+        deletedCount++;
+      }
+    }
+
+    // 2. Tackle "Virtual" parents by constructing IDs for the past 60 days
+    // This is necessary because virtual parents don't show up in get()
+    AppLog.d("MAINTENANCE: Checking for virtual leaderboards (past 60 days)...");
+    DateTime checkDate = cutoffDate.subtract(const Duration(days: 45)); // Go back further
+    while (checkDate.isBefore(cutoffDate)) {
+      String dateStr = AppDate.format(checkDate);
+      List<String> potentialIds = [
+        'daily_$dateStr',
+        'mock_$dateStr',
+        'weekly_$dateStr'
+      ];
+
+      for (String id in potentialIds) {
+        if (!processedIds.contains(id)) {
+          final docRef = _db.collection('leaderboards').doc(id);
+          // Check if it has a sub-collection scores even if doc doesn't exist
+          final scoresSnap = await docRef.collection('scores').limit(1).get();
+          if (scoresSnap.docs.isNotEmpty) {
+             AppLog.d("MAINTENANCE: Deleting virtual leaderboard scores: $id");
+             await _deleteCollectionRecursively(docRef.collection('scores'));
+             // Try to delete the doc too just in case it exists now
+             await docRef.delete();
+             deletedCount++;
+          }
+        }
+      }
+      checkDate = checkDate.add(const Duration(days: 1));
+    }
+
+    return deletedCount;
+  }
+
+  /// Helper to decide if a leaderboard ID should be deleted
+  Future<bool> _shouldDeleteLeaderboard(String id, DateTime cutoffDate) async {
+    DateTime? docDate;
+    try {
+      String datePart = "";
+      if (id.startsWith('daily_')) datePart = id.replaceFirst('daily_', '');
+      else if (id.startsWith('mock_')) datePart = id.replaceFirst('mock_', '');
+      else if (id.startsWith('weekly_')) datePart = id.replaceFirst('weekly_', '');
+      
+      if (datePart.isNotEmpty) {
+        // Handle invalid dates like 2026-07-36 by checking components
+        List<String> parts = datePart.split('-');
+        if (parts.length == 3) {
+          int year = int.parse(parts[0]);
+          int month = int.parse(parts[1]);
+          int day = int.parse(parts[2]);
+          
+          if (month < 1 || month > 12 || day < 1 || day > 31) {
+            return true; // Corrupt date format, delete it
+          }
+          docDate = DateTime(year, month, day);
+        }
+      }
+    } catch (_) {
+      return true; // If parsing fails, it's likely old/weird data, delete it
+    }
+
+    return docDate != null && docDate.isBefore(cutoffDate);
+  }
+
+  /// Generic helper to delete a collection in batches
+  Future<int> _deleteCollectionRecursively(CollectionReference col) async {
+    int total = 0;
+    while (true) {
+      final snap = await col.limit(500).get();
+      if (snap.docs.isEmpty) break;
+      
+      WriteBatch batch = _db.batch();
+      for (var doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      total += snap.docs.length;
+      if (snap.docs.length < 500) break;
+    }
+    return total;
+  }
+
+  /// Helper to delete documents in a collection where the 'date' field is before the cutoff.
+  Future<int> _purgeCollectionByDate(String collectionName, DateTime cutoffDate) async {
+    final String cutoffStr = AppDate.format(cutoffDate);
+    final snap = await _db.collection(collectionName)
+        .where('date', isLessThan: cutoffStr)
+        .get();
+
+    if (snap.docs.isEmpty) return 0;
+
+    WriteBatch batch = _db.batch();
+    int count = 0;
+    for (var doc in snap.docs) {
+      batch.delete(doc.reference);
+      count++;
+      if (count >= 500) {
+        await batch.commit();
+        batch = _db.batch();
+        count = 0;
+      }
+    }
+    if (count > 0) await batch.commit();
+    return snap.docs.length;
+  }
+
+  /// Helper to delete documents in a collection where the 'timestamp' field is before the cutoff.
+  Future<int> _purgeCollectionByTimestamp(String collectionName, DateTime cutoff) async {
+    final snap = await _db.collection(collectionName)
+        .where('timestamp', isLessThan: cutoff)
+        .get();
+
+    if (snap.docs.isEmpty) return 0;
+
+    WriteBatch batch = _db.batch();
+    int count = 0;
+    for (var doc in snap.docs) {
+      batch.delete(doc.reference);
+      count++;
+      if (count >= 500) {
+        await batch.commit();
+        batch = _db.batch();
+        count = 0;
+      }
+    }
+    if (count > 0) await batch.commit();
+    return snap.docs.length;
+  }
+
+  /// Helper to purge collections structured with 'daily_yyyy-MM-dd' document IDs.
+  /// Example: daily_room_attempts -> daily_2026-08-01 -> attempts (sub-col)
+  Future<int> _purgeDailyDatedCollection(String collectionName, String subCollectionName, DateTime cutoffDate) async {
+    int deletedCount = 0;
+    
+    // 1. Get real documents
+    final lSnap = await _db.collection(collectionName).get();
+    Set<String> processedIds = {};
+
+    for (var doc in lSnap.docs) {
+      processedIds.add(doc.id);
+      if (await _shouldDeleteGenericDailyId(doc.id, cutoffDate)) {
+        await _deleteCollectionRecursively(doc.reference.collection(subCollectionName));
+        await doc.reference.delete();
+        deletedCount++;
+      }
+    }
+
+    // 2. Handle Virtual Parents (past 60 days)
+    DateTime checkDate = cutoffDate.subtract(const Duration(days: 45));
+    while (checkDate.isBefore(cutoffDate)) {
+      String id = 'daily_${AppDate.format(checkDate)}';
+      if (!processedIds.contains(id)) {
+        final docRef = _db.collection(collectionName).doc(id);
+        final subSnap = await docRef.collection(subCollectionName).limit(1).get();
+        if (subSnap.docs.isNotEmpty) {
+           AppLog.d("MAINTENANCE: Deleting virtual $collectionName: $id");
+           await _deleteCollectionRecursively(docRef.collection(subCollectionName));
+           await docRef.delete();
+           deletedCount++;
+        }
+      }
+      checkDate = checkDate.add(const Duration(days: 1));
+    }
+
+    return deletedCount;
+  }
+
+  /// Specialized recursive purge for rooms: rooms -> daily_date -> matches -> match_id -> players
+  Future<int> _purgeRoomsRecursively(DateTime cutoffDate) async {
+    int deletedCount = 0;
+    
+    // 1. Get real documents
+    final lSnap = await _db.collection('rooms').get();
+    Set<String> processedIds = {};
+
+    for (var dayDoc in lSnap.docs) {
+      processedIds.add(dayDoc.id);
+      if (await _shouldDeleteGenericDailyId(dayDoc.id, cutoffDate)) {
+        await _performDeepRoomDelete(dayDoc.reference);
+        deletedCount++;
+      }
+    }
+
+    // 2. Handle Virtual Parents (past 60 days)
+    DateTime checkDate = cutoffDate.subtract(const Duration(days: 45));
+    while (checkDate.isBefore(cutoffDate)) {
+      String id = 'daily_${AppDate.format(checkDate)}';
+      if (!processedIds.contains(id)) {
+        final docRef = _db.collection('rooms').doc(id);
+        final matchesSnap = await docRef.collection('matches').limit(1).get();
+        if (matchesSnap.docs.isNotEmpty) {
+           AppLog.d("MAINTENANCE: Deleting virtual rooms: $id");
+           await _performDeepRoomDelete(docRef);
+           deletedCount++;
+        }
+      }
+      checkDate = checkDate.add(const Duration(days: 1));
+    }
+
+    return deletedCount;
+  }
+
+  /// Internal helper to delete a daily room doc and all its sub-sub-collections
+  Future<void> _performDeepRoomDelete(DocumentReference dayDocRef) async {
+    final matchesSnap = await dayDocRef.collection('matches').get();
+    for (var matchDoc in matchesSnap.docs) {
+      // Delete players sub-collection of this match
+      await _deleteCollectionRecursively(matchDoc.reference.collection('players'));
+      // Delete the match itself
+      await matchDoc.reference.delete();
+    }
+    // Delete the day document
+    await dayDocRef.delete();
+  }
+
+  /// Generic helper to validate a 'daily_yyyy-MM-dd' style ID for deletion
+  Future<bool> _shouldDeleteGenericDailyId(String id, DateTime cutoffDate) async {
+    if (!id.startsWith('daily_')) return false;
+    try {
+      String datePart = id.replaceFirst('daily_', '');
+      List<String> parts = datePart.split('-');
+      if (parts.length == 3) {
+        int year = int.parse(parts[0]);
+        int month = int.parse(parts[1]);
+        int day = int.parse(parts[2]);
+        if (month < 1 || month > 12 || day < 1 || day > 31) return true; // Corrupt
+        return DateTime(year, month, day).isBefore(cutoffDate);
+      }
+    } catch (_) {}
+    return true; // Parsing failed, likely safe to delete
   }
 
   /// Fetches relevant study content and questions to provide context to the AI
@@ -261,6 +685,7 @@ class FirestoreService {
           if (data.containsKey('streak')) await userBox.put('streak', data['streak'] ?? 0);
           if (data.containsKey('lastActiveDate')) await userBox.put('lastActiveDate', data['lastActiveDate'] ?? "");
           if (data.containsKey('gender')) await userBox.put('user_gender', data['gender']);
+          if (data.containsKey('avatar')) await userBox.put('user_avatar', data['avatar']);
         } catch (e) {
           AppLog.e("Error processing user data for Hive", e);
         }
@@ -881,13 +1306,14 @@ class FirestoreService {
         String userName = AppLanguage.getString('user_fallback');
         String? photoURL;
         String? gender = HiveService.getGender();
+        String? avatar = HiveService.getAvatar();
         var cachedData = HiveService.getCachedUserData();
         if (cachedData != null) {
           userName = cachedData['name'] ?? userName;
-          photoURL = cachedData['photoURL'] ?? _auth.currentUser?.photoURL;
+          photoURL = avatar ?? cachedData['avatar'] ?? cachedData['photoURL'] ?? _auth.currentUser?.photoURL;
           gender ??= cachedData['gender'];
         } else {
-          photoURL = _auth.currentUser?.photoURL;
+          photoURL = avatar ?? _auth.currentUser?.photoURL;
         }
 
         String docId = isDaily ? 'daily_$today' : _getMockLeaderboardDocId();

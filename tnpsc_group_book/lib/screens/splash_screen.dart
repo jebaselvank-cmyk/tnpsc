@@ -73,249 +73,101 @@ AppLog.d(
 );
 }
 
-// =========================================================
-// STEP 2
-// Initialize remaining services.
-//
-// IMPORTANT:
-// Firebase is already ready before initializeServices()
-// is called.
-// =========================================================
+    // =========================================================
+    // STEP 2 & 3 & 4
+    // Parallelize Service Init and Auth check
+    // =========================================================
 
-AppLog.d('SPLASH: Starting initializeServices()...');
+    AppLog.d('SPLASH: Starting parallel initialization...');
 
-try {
-await initializeServices().timeout(
-const Duration(seconds: 10),
-onTimeout: () {
-AppLog.e(
-'SPLASH: initializeServices timeout. '
-'Continuing anyway.',
-);
-},
-);
+    User? user;
+    
+    await Future.wait([
+      // Init Services
+      initializeServices().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          AppLog.e('SPLASH: initializeServices timeout.');
+        },
+      ),
+      // Auth Check with a shorter, smarter wait
+      () async {
+        user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          AppLog.d('SPLASH: Waiting for Auth session restore...');
+          // Give it a bit of time but not too much
+          await Future.delayed(const Duration(milliseconds: 800));
+          user = FirebaseAuth.instance.currentUser;
+        }
+      }(),
+    ]);
 
-AppLog.d('SPLASH: initializeServices completed.');
-} catch (e, stack) {
-AppLog.e(
-'SPLASH: initializeServices error: $e',
-e,
-stack,
-);
+    AppLog.d('SPLASH: currentUser = ${user?.uid ?? "NULL"}');
 
-// Do NOT stop the app here.
-// Firebase is already initialized.
-}
+    // =========================================================
+    // STEP 5
+    // Remove native splash.
+    // =========================================================
 
-// =========================================================
-// STEP 3
-// IMPORTANT:
-// FirebaseAuth is accessed ONLY after Firebase.initializeApp.
-// =========================================================
+    try {
+      FlutterNativeSplash.remove();
+      AppLog.d('SPLASH: Native splash removed.');
+    } catch (e) {
+      AppLog.e('SPLASH: Native splash remove error: $e');
+    }
 
-AppLog.d('SPLASH: Checking Firebase Auth session...');
+    if (!mounted) return;
 
-User? user;
+    // =========================================================
+    // STEP 6 & 7
+    // Navigation Decision
+    // =========================================================
 
-try {
-user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      AppLog.d('SPLASH: NO USER FOUND -> LOGIN SCREEN');
+      _navigateToLogin();
+      return;
+    }
 
-AppLog.d(
-'SPLASH: currentUser = '
-'${user?.uid ?? "NULL"}',
-);
+    AppLog.d('SPLASH: EXISTING USER FOUND. Refreshing data in parallel...');
 
-AppLog.d(
-'SPLASH: currentUser email = '
-'${user?.email ?? "NULL"}',
-);
-} catch (e, stack) {
-AppLog.e(
-'SPLASH: FirebaseAuth currentUser error: $e',
-e,
-stack,
-);
+    // =========================================================
+    // STEP 8 & 9
+    // Parallelize Firestore refresh and FCM token save
+    // =========================================================
 
-user = null;
-}
+    try {
+      final firestoreService = FirestoreService();
+      
+      await Future.wait([
+        firestoreService.getUserData(forceRefresh: true).timeout(
+          const Duration(seconds: 8),
+          onTimeout: () {
+            AppLog.e('SPLASH: Firestore refresh timeout.');
+            return null;
+          },
+        ),
+        NotificationService.saveFCMToken().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            AppLog.e('SPLASH: FCM token timeout.');
+          },
+        ),
+      ]);
+      
+      AppLog.d('SPLASH: Background data refresh complete.');
+    } catch (e, stack) {
+      AppLog.e('SPLASH: Data refresh error: $e', e, stack);
+    }
 
-// =========================================================
-// STEP 4
-// Give Firebase Auth a short time to restore persisted
-// session if currentUser is temporarily null.
-//
-// This is important when app is completely closed and
-// reopened.
-// =========================================================
+    if (!mounted) return;
 
-if (user == null) {
-AppLog.d(
-'SPLASH: currentUser is NULL. '
-'Waiting for Firebase Auth session restore...',
-);
+    // =========================================================
+    // STEP 10
+    // Navigate to MainWrapper.
+    // =========================================================
 
-try {
-await Future.delayed(
-const Duration(milliseconds: 1500),
-);
-
-user = FirebaseAuth.instance.currentUser;
-
-AppLog.d(
-'SPLASH: After 1.5 sec currentUser = '
-'${user?.uid ?? "NULL"}',
-);
-
-AppLog.d(
-'SPLASH: After 1.5 sec email = '
-'${user?.email ?? "NULL"}',
-);
-} catch (e, stack) {
-AppLog.e(
-'SPLASH: Auth restore check failed: $e',
-e,
-stack,
-);
-}
-}
-
-// =========================================================
-// STEP 5
-// Remove native splash.
-// =========================================================
-
-try {
-FlutterNativeSplash.remove();
-AppLog.d('SPLASH: Native splash removed.');
-} catch (e) {
-AppLog.e(
-'SPLASH: Native splash remove error: $e',
-);
-}
-
-if (!mounted) {
-AppLog.d('SPLASH: Widget no longer mounted.');
-return;
-}
-
-// =========================================================
-// STEP 6
-// USER NOT LOGGED IN
-// =========================================================
-
-if (user == null) {
-AppLog.d(
-'SPLASH: NO USER FOUND -> LOGIN SCREEN',
-);
-
-_navigateToLogin();
-return;
-}
-
-// =========================================================
-// STEP 7
-// USER ALREADY LOGGED IN
-// =========================================================
-
-AppLog.d(
-'========================================',
-);
-
-AppLog.d(
-'SPLASH: EXISTING USER FOUND',
-);
-
-AppLog.d(
-'SPLASH: UID = ${user.uid}',
-);
-
-AppLog.d(
-'SPLASH: EMAIL = ${user.email}',
-);
-
-AppLog.d(
-'SPLASH: Going directly to MainWrapper',
-);
-
-AppLog.d(
-'========================================',
-);
-
-// =========================================================
-// STEP 8
-// Refresh Firestore user data.
-//
-// IMPORTANT:
-// Failure here should NOT send user to Login.
-// =========================================================
-
-try {
-final firestoreService = FirestoreService();
-
-AppLog.d(
-'SPLASH: Refreshing Firestore user data...',
-);
-
-await firestoreService
-    .getUserData(forceRefresh: true)
-    .timeout(
-const Duration(seconds: 8),
-onTimeout: () {
-AppLog.e(
-'SPLASH: Firestore refresh timeout.',
-);
-return null;
-},
-);
-
-AppLog.d(
-'SPLASH: Firestore user data refreshed.',
-);
-} catch (e, stack) {
-AppLog.e(
-'SPLASH: Firestore refresh failed: $e',
-e,
-stack,
-);
-
-// Continue to MainWrapper.
-}
-
-// =========================================================
-// STEP 9
-// Refresh FCM token.
-// =========================================================
-
-try {
-AppLog.d(
-'SPLASH: Saving FCM token...',
-);
-
-await NotificationService.saveFCMToken().timeout(
-const Duration(seconds: 5),
-);
-
-AppLog.d(
-'SPLASH: FCM token saved.',
-);
-} catch (e, stack) {
-AppLog.e(
-'SPLASH: FCM token error: $e',
-e,
-stack,
-);
-
-// Continue anyway.
-}
-
-if (!mounted) return;
-
-// =========================================================
-// STEP 10
-// Navigate to MainWrapper.
-// =========================================================
-
-_navigateToHome();
+    _navigateToHome();
 } catch (e, stack) {
 AppLog.e(
 '========================================',

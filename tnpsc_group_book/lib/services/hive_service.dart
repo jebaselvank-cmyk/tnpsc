@@ -527,6 +527,15 @@ class HiveService {
     return Hive.box(userBoxName).get('user_gender') as String?;
   }
 
+  // ------------------- Avatar Management -------------------
+  static Future<void> saveAvatar(String avatarUrl) async {
+    await Hive.box(userBoxName).put('user_avatar', avatarUrl);
+  }
+
+  static String? getAvatar() {
+    return Hive.box(userBoxName).get('user_avatar') as String?;
+  }
+
   // ------------------- App Rating -------------------
   static bool isAppRated() {
     return Hive.box(userBoxName).get('is_app_rated', defaultValue: false) as bool;
