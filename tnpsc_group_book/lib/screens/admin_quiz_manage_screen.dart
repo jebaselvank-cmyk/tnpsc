@@ -7,6 +7,7 @@ import '../utils/app_theme.dart';
 import '../utils/app_date.dart';
 import '../utils/app_icons.dart';
 import '../widgets/bilingual_text.dart';
+import '../services/telegram_service.dart';
 
 class AdminQuizManageScreen extends StatefulWidget {
   const AdminQuizManageScreen({super.key});
@@ -240,6 +241,26 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
     );
   }
 
+  Future<void> _handleSendToTelegram(Question q) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Sending to Telegram..."), duration: Duration(seconds: 1)),
+    );
+
+    final result = await TelegramService.sendQuestionAsPoll(q);
+
+    if (mounted) {
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Quiz Poll sent to Telegram!"), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed: ${result['error']}"), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -368,9 +389,19 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
                                         "Question ${index + 1}",
                                         style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
                                       ),
-                                      IconButton(
-                                        icon: const AppIcon(AppIcons.edit, size: 20),
-                                        onPressed: () => _editQuestion(index),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.send_rounded, size: 20, color: Colors.blue),
+                                            onPressed: () => _handleSendToTelegram(q),
+                                            tooltip: "Send to Telegram",
+                                          ),
+                                          IconButton(
+                                            icon: const AppIcon(AppIcons.edit, size: 20),
+                                            onPressed: () => _editQuestion(index),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),

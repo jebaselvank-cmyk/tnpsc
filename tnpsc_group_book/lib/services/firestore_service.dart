@@ -169,8 +169,21 @@ class FirestoreService {
         batch.set(mockRef, update, SetOptions(merge: true));
       }
 
+      // 4. Sync with today's Room Matches (If user is in any)
+      try {
+        final roomSnap = await _db.collection('rooms').doc('daily_$today').collection('matches').get();
+        for (var roomDoc in roomSnap.docs) {
+          final playerDoc = await roomDoc.reference.collection('players').doc(uid).get();
+          if (playerDoc.exists) {
+            batch.set(playerDoc.reference, {'photoURL': avatarUrl}, SetOptions(merge: true));
+          }
+        }
+      } catch (e) {
+        AppLog.e("Error syncing avatar to rooms", e);
+      }
+
       await batch.commit();
-      AppLog.d("AI_DEBUG: User avatar updated and points deducted: $avatarUrl (-$cost)");
+      AppLog.d("AI_DEBUG: User avatar updated in Users, Leaderboards, and Rooms: $avatarUrl");
 
       // Local Hive updates
       await HiveService.saveAvatar(avatarUrl);

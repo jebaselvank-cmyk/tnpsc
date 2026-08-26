@@ -244,3 +244,74 @@ exports.changePassword = functions.https.onCall(async (data, context) => {
   return { success: true, message: "PASSWORD_CHANGED" };
 });
 
+/**
+ * Send Quiz Question to Telegram as a native Quiz Poll.
+ */
+exports.sendQuizToTelegram = functions.https.onCall(async (data, context) => {
+  // 1. Admin check (Must be signed in as admin)
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "NOT_SIGNED_IN");
+  }
+
+  // You can add stricter admin UID/Email check here if needed
+
+  const botToken = functions.config().telegram?.bot_token;
+  const channelId = functions.config().telegram?.channel_id;
+
+  if (!botToken || !channelId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "TELEGRAM_NOT_CONFIGURED"
+    );
+  }
+
+  const { question_en, question_ta, options, correctOptionIndex, explanation_en, explanation_ta } = data;
+
+  if (!question_ta || !options || correctOptionIndex === undefined) {
+    throw new functions.https.HttpsError("invalid-argument", "MISSING_DATA");
+  }
+
+  // Combine English and Tamil for Telegram's single-field limit
+  const combinedQuestion = `${question_ta}\n\n(${question_en})`;
+
+  // Format options: "Tamil / English"
+  const formattedOptions = options.map(opt => {
+    const text = `${opt.ta} / ${opt.en}`;
+    // Telegram limit: 100 characters per option
+    return text.length > 100 ? text.substring(0, 97) + "..." : text;
+  });
+
+  const combinedExplanation = explanation_ta || explanation_en
+    ? `${explanation_ta || ""}\n\n${explanation_en || ""}`.substring(0, 200) // Telegram limit: 200 chars
+    : undefined;
+
+  try {
+    const url = `https://api.telegram.org/bot${botToken}/sendPoll`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: channelId,
+        question: combinedQuestion.substring(0, 300), // Telegram limit: 300 chars
+        options: formattedOptions,
+        is_anonymous: false,
+        type: "quiz",
+        correct_option_id: correctOptionIndex,
+        explanation: combinedExplanation,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!result.ok) {
+      console.error("Telegram API Error:", result);
+      return { success: false, error: result.description };
+    }
+
+    return { success: true, message_id: result.result.message_id };
+  } catch (error) {
+    console.error("Cloud Function Error:", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
