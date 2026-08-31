@@ -180,6 +180,8 @@ class AiService {
     
     // AI_DEBUG: Whitelist of stable models that are known to work
     const whitelist = [
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
       'gemini-2.5-flash',
       'gemini-2.5-flash-lite',
       'gemini-2.0-flash',
@@ -199,6 +201,8 @@ class AiService {
 
     // Default stable list if Remote Config is empty or invalid
     return [
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
       'gemini-2.5-flash',
       'gemini-2.5-flash-lite',
       'gemini-2.0-flash',
