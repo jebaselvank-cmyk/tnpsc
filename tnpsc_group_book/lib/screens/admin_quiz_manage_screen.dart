@@ -8,6 +8,7 @@ import '../utils/app_date.dart';
 import '../utils/app_icons.dart';
 import '../widgets/bilingual_text.dart';
 import '../services/telegram_service.dart';
+import '../services/share_service.dart';
 
 class AdminQuizManageScreen extends StatefulWidget {
   const AdminQuizManageScreen({super.key});
@@ -241,7 +242,56 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
     );
   }
 
-  Future<void> _handleSendToTelegram(Question q) async {
+  Future<void> _handleShareQuestion(Question q) async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Share Question", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.send, color: Colors.blue),
+              title: const Text("Telegram (Real Quiz Poll)"),
+              onTap: () {
+                Navigator.pop(context);
+                _sendToTelegram(q);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.message, color: Colors.green),
+              title: const Text("WhatsApp (Poll Format)"),
+              onTap: () {
+                Navigator.pop(context);
+                ShareService.shareToWhatsApp(q);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.facebook, color: Colors.blueAccent),
+              title: const Text("Facebook (Poll Format)"),
+              onTap: () {
+                Navigator.pop(context);
+                ShareService.shareToFacebook(q);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share, color: Colors.grey),
+              title: const Text("Other Apps"),
+              onTap: () {
+                Navigator.pop(context);
+                ShareService.shareGeneric(q);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendToTelegram(Question q) async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Sending to Telegram..."), duration: Duration(seconds: 1)),
     );
@@ -393,9 +443,9 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           IconButton(
-                                            icon: const Icon(Icons.send_rounded, size: 20, color: Colors.blue),
-                                            onPressed: () => _handleSendToTelegram(q),
-                                            tooltip: "Send to Telegram",
+                                            icon: const AppIcon(AppIcons.share, size: 20, color: Colors.blue),
+                                            onPressed: () => _handleShareQuestion(q),
+                                            tooltip: "Share Question",
                                           ),
                                           IconButton(
                                             icon: const AppIcon(AppIcons.edit, size: 20),
