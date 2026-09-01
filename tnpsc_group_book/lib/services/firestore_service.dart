@@ -655,21 +655,25 @@ class FirestoreService {
     String? uid = _auth.currentUser?.uid;
     if (uid == null) return null;
 
-    // 1. Try Cache First for immediate UI response
+    // 1. Try Cache First (2 hour fresh window)
     if (!forceRefresh) {
       try {
-        DocumentSnapshot cachedDoc = await _db.collection('users').doc(uid).get(
-            const GetOptions(source: Source.cache));
-        if (cachedDoc.exists) {
-          AppLog.d("AI_DEBUG: User data fetched from FIRESTORE CACHE (Initial)");
-          var data = cachedDoc.data() as Map<String, dynamic>;
-          // Sync to Hive in background to not block return
-          _syncCompletedQuizzesToHive(data);
-          return cachedDoc;
+        final box = Hive.box(HiveService.userBoxName);
+        String? lastFetchStr = box.get('last_user_data_fetch_time') as String?;
+        
+        if (lastFetchStr != null) {
+          DateTime lastFetch = DateTime.parse(lastFetchStr);
+          if (DateTime.now().difference(lastFetch).inHours < 2) {
+             AppLog.d("FIRESTORE_OPT: Using local data, last fetch was less than 2 hours ago.");
+             DocumentSnapshot cachedDoc = await _db.collection('users').doc(uid).get(const GetOptions(source: Source.cache));
+             if (cachedDoc.exists) {
+                var data = cachedDoc.data() as Map<String, dynamic>;
+                _syncCompletedQuizzesToHive(data);
+                return cachedDoc;
+             }
+          }
         }
-      } catch (_) {
-        AppLog.d("AI_DEBUG: No User Data in Firestore Cache");
-      }
+      } catch (_) {}
     }
 
     try {
@@ -699,6 +703,8 @@ class FirestoreService {
           if (data.containsKey('lastActiveDate')) await userBox.put('lastActiveDate', data['lastActiveDate'] ?? "");
           if (data.containsKey('gender')) await userBox.put('user_gender', data['gender']);
           if (data.containsKey('avatar')) await userBox.put('user_avatar', data['avatar']);
+
+          await userBox.put('last_user_data_fetch_time', DateTime.now().toIso8601String());
         } catch (e) {
           AppLog.e("Error processing user data for Hive", e);
         }
@@ -1274,6 +1280,8 @@ class FirestoreService {
     bool isDaily = false,
     bool isMock = false,
   }) async {
+    if (score <= 0) return; // DON'T SAVE 0 SCORES TO REDUCE WRITES
+
     String? uid = _auth.currentUser?.uid;
     if (uid != null) {
       // 1. Update local Hive immediately for real-time UI update (Fast & Free)

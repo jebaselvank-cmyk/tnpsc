@@ -392,30 +392,27 @@ class HiveService {
 
   static bool shouldFetchLeaderboard(bool isDaily) {
     final box = Hive.box(userBoxName);
-    final key = isDaily ? 'last_leaderboard_fetch_daily' : 'last_leaderboard_fetch_mock';
+    final key = isDaily ? 'last_leaderboard_fetch_time' : 'last_leaderboard_fetch_time_mock';
     final dataKey = isDaily ? 'leaderboard_data_daily' : 'leaderboard_data_mock';
     
-    String? lastFetch = box.get(key) as String?;
+    String? lastFetchStr = box.get(key) as String?;
     String? cachedData = box.get(dataKey) as String?;
 
-    // AI_DEBUG: Check if this is the first time fetching in the current session
-    bool sessionFetched = box.get('session_leaderboard_fetched', defaultValue: false) as bool;
+    if (cachedData == null || cachedData == "[]") return true;
+    if (lastFetchStr == null) return true;
 
-    // Fetch if never fetched today OR if cache was explicitly cleared (after a quiz)
-    bool shouldFetch = lastFetch != _todayDate() || cachedData == null || cachedData == "[]";
-    
-    // If it's a "login/app start" fresh fetch, we allow it once per session regardless of date
-    if (!shouldFetch && !sessionFetched) {
-       AppLog.d("AI_DEBUG: Forcing leaderboard fetch for new session");
-       return true;
-    }
-
-    return shouldFetch;
+    DateTime lastFetch = DateTime.parse(lastFetchStr);
+    // Fetch only if last fetch was more than 6 hours ago
+    return DateTime.now().difference(lastFetch).inHours >= 6;
   }
 
   static Future<void> markSessionLeaderboardFetched() async {
     final box = Hive.box(userBoxName);
     await box.put('session_leaderboard_fetched', true);
+    
+    // Also update the exact fetch time for the 6-hour window
+    final key = 'last_leaderboard_fetch_time'; // Default to daily or handle both
+    await box.put(key, DateTime.now().toIso8601String());
   }
 
   static Future<void> resetSessionLeaderboardFetched() async {
