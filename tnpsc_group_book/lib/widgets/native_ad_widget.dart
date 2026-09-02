@@ -7,11 +7,19 @@ import '../utils/app_log.dart';
 class NativeAdWidget extends StatefulWidget {
   final bool isSmall;
   final int? refreshIntervalSeconds;
+  final double? width;
+  final double? height;
+  final EdgeInsetsGeometry? margin;
+  final Decoration? decoration;
 
   const NativeAdWidget({
     super.key,
     this.isSmall = true,
     this.refreshIntervalSeconds,
+    this.width,
+    this.height,
+    this.margin,
+    this.decoration,
   });
 
   @override
@@ -118,8 +126,10 @@ class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObse
 
     if (_nativeAd != null && _isAdLoaded) {
       return Container(
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        height: widget.isSmall ? 80 : 300,
+        margin: widget.margin ?? const EdgeInsets.symmetric(vertical: 10),
+        width: widget.width,
+        height: widget.height ?? (widget.isSmall ? 80 : 300),
+        decoration: widget.decoration,
         alignment: Alignment.center,
         child: AdWidget(ad: _nativeAd!),
       );

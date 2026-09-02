@@ -944,7 +944,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemCount: snapshot.data!.docs.length + 1, // +1 for the Ad card
                 itemBuilder: (context, index) {
                   if (index == snapshot.data!.docs.length) {
-                    return _buildHorizontalAdCard(isDark);
+                    return NativeAdWidget(
+                      isSmall: false, 
+                      refreshIntervalSeconds: 90,
+                      width: 280,
+                      height: 180,
+                      margin: const EdgeInsets.only(right: 16),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: isDark ? Colors.white10 : Colors.blue.shade50),
+                      ),
+                    );
                   }
                   try {
                     NewsItem news = NewsItem.fromFirestore(snapshot.data!.docs[index]);
@@ -1056,24 +1067,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHorizontalAdCard(bool isDark) {
-    return Container(
-      width: 280,
-      margin: const EdgeInsets.only(right: 16),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.blue.shade50),
-      ),
-      child: const Center(
-        child: Padding(
-          padding: EdgeInsets.all(8.0),
-          child: NativeAdWidget(isSmall: false,  refreshIntervalSeconds: 90),
         ),
       ),
     );
