@@ -15,6 +15,7 @@ import 'package:tnpsc_group_book/utils/app_language.dart';
 import '../services/notification_service.dart';
 import '../services/firestore_service.dart';
 import '../services/hive_service.dart';
+import '../widgets/app_rating_dialog.dart';
 import 'quiz_screen.dart';
 import 'sub_topic_screen.dart';
 import 'mistake_bank_screen.dart';
@@ -60,7 +61,36 @@ class _HomeScreenState extends State<HomeScreen> {
     // Silently purge old leaderboard data after a delay to not affect startup performance
     Future.delayed(const Duration(seconds: 5), () {
        _firestoreService.checkAndPerformSilentMaintenance();
+       _checkAndShowRatingDialog();
     });
+  }
+
+  Future<void> _checkAndShowRatingDialog() async {
+    if (HiveService.isAppRated()) return;
+
+    final lastPrompt = HiveService.getLastRatingPromptDate();
+    final today = AppDate.getTodayString();
+
+    if (lastPrompt == null) {
+      // First time, set today as last prompt date to start the 10-day cycle
+      await HiveService.setLastRatingPromptDate(today);
+      return;
+    }
+
+    try {
+      DateTime lastDate = AppDate.parse(lastPrompt);
+      DateTime now = AppDate.getISTNow();
+      int daysSinceLastPrompt = now.difference(lastDate).inDays;
+
+      if (daysSinceLastPrompt >= 10) {
+        if (mounted) {
+          AppRatingDialog.show(context);
+          await HiveService.setLastRatingPromptDate(today);
+        }
+      }
+    } catch (e) {
+      AppLog.e("Error checking rating dialog logic", e);
+    }
   }
 
   Future<void> _checkAutoNews() async {

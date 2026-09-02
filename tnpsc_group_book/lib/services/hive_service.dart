@@ -542,6 +542,14 @@ class HiveService {
     await Hive.box(userBoxName).put('is_app_rated', rated);
   }
 
+  static String? getLastRatingPromptDate() {
+    return Hive.box(userBoxName).get('last_rating_prompt_date') as String?;
+  }
+
+  static Future<void> setLastRatingPromptDate(String date) async {
+    await Hive.box(userBoxName).put('last_rating_prompt_date', date);
+  }
+
   static Future<void> invalidateLeaderboardCache() async {
     final box = Hive.box(userBoxName);
     await box.delete('leaderboard_data_daily');
