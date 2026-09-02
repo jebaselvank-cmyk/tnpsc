@@ -21,8 +21,8 @@ class NativeAdWidget extends StatefulWidget {
 class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObserver {
   NativeAd? _nativeAd;
   bool _isAdLoaded = false;
-  Timer? _refreshTimer;
   bool _isPaused = false;
+  Timer? _nextRequestTimer;
 
   final String adUnitId = 'ca-app-pub-9952621231526514/5355753081';
 
@@ -31,13 +31,10 @@ class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (!HiveService.isAdFree()) {
-      // Add a small delay before loading to ensure it's not a fast scroll-by
+      // Load the first ad with a small initial delay
       Future.delayed(const Duration(milliseconds: 800), () {
         if (mounted && !_isPaused) {
           _loadAd();
-          if (widget.refreshIntervalSeconds != null) {
-            _startRefreshTimer();
-          }
         }
       });
     }
@@ -47,23 +44,10 @@ class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObse
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _isPaused = true;
-      _refreshTimer?.cancel();
+      _nextRequestTimer?.cancel();
     } else if (state == AppLifecycleState.resumed) {
       _isPaused = false;
-      if (widget.refreshIntervalSeconds != null) {
-        _startRefreshTimer();
-      }
     }
-  }
-
-  void _startRefreshTimer() {
-    _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(Duration(seconds: widget.refreshIntervalSeconds!), (timer) {
-      if (!_isPaused && mounted) {
-        AppLog.d('AI_DEBUG: Refreshing Native Ad...');
-        _loadAd();
-      }
-    });
   }
 
   void _loadAd() {
@@ -93,11 +77,16 @@ class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObse
                 _isAdLoaded = false;
               });
             }
+            // Optional: Retry after failure
+            _scheduleNextLoad(30); 
           },
-          // Triggered when an ad is clicked
-          onAdClicked: (ad) => AppLog.d('Ad Clicked'),
-          // Triggered when an ad impression is recorded
-          onAdImpression: (ad) => AppLog.d('Ad Impression recorded'),
+          onAdImpression: (ad) {
+            AppLog.d('AI_DEBUG: Ad Impression recorded. Scheduling next refresh...');
+            // Only when the user SEES the ad, we schedule the next one
+            if (widget.refreshIntervalSeconds != null) {
+              _scheduleNextLoad(widget.refreshIntervalSeconds!);
+            }
+          },
         ),
       );
     }
@@ -106,10 +95,19 @@ class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObse
     nextAd.load();
   }
 
+  void _scheduleNextLoad(int seconds) {
+    _nextRequestTimer?.cancel();
+    _nextRequestTimer = Timer(Duration(seconds: seconds), () {
+      if (!_isPaused && mounted) {
+        _loadAd();
+      }
+    });
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _refreshTimer?.cancel();
+    _nextRequestTimer?.cancel();
     _nativeAd?.dispose();
     super.dispose();
   }
