@@ -13,7 +13,7 @@ import '../utils/app_language.dart';
 import '../main.dart'; // To navigate Home
 import 'review_screen.dart';
 import 'package:lottie/lottie.dart';
-import '../widgets/ad_banner.dart';
+import '../widgets/native_ad_widget.dart';
 import '../services/reward_service.dart';
 import '../services/hive_service.dart';
 import '../utils/app_log.dart';
@@ -558,7 +558,7 @@ class _ResultScreenState extends State<ResultScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Center(child: AdBanner()),
+                    const Center(child: NativeAdWidget(isSmall: true)),
                     const SizedBox(height: 20),
                   ],
                 ),

@@ -35,6 +35,7 @@ import '../services/ai_service.dart';
 import '../models/news_item.dart';
 import 'news_detail_screen.dart';
 import '../services/reward_service.dart';
+import '../widgets/native_ad_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -302,6 +303,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 // Smart Weak Area Analysis Card
                                 RepaintBoundary(child: _buildSmartWeakAreaAnalysis(context, isDark)),
 
+                                const SizedBox(height: 32),
+                                const NativeAdWidget(isSmall: true),
                                 const SizedBox(height: 50),
                               ],
                             ),
@@ -942,8 +945,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 shrinkWrap: true,
-                itemCount: snapshot.data!.docs.length,
+                itemCount: snapshot.data!.docs.length + 1, // +1 for the Ad card
                 itemBuilder: (context, index) {
+                  if (index == snapshot.data!.docs.length) {
+                    return _buildHorizontalAdCard(isDark);
+                  }
                   try {
                     NewsItem news = NewsItem.fromFirestore(snapshot.data!.docs[index]);
                     return _buildNewsCard(context, news, isDark, isTamil);
@@ -1054,6 +1060,24 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHorizontalAdCard(bool isDark) {
+    return Container(
+      width: 280,
+      margin: const EdgeInsets.only(right: 16),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.blue.shade50),
+      ),
+      child: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(8.0),
+          child: NativeAdWidget(isSmall: false),
         ),
       ),
     );

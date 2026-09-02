@@ -27,6 +27,7 @@ import '../widgets/streak_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../widgets/ad_banner.dart';
+import '../widgets/native_ad_widget.dart';
 import '../services/version_service.dart';
 
 class SubjectScreen extends StatefulWidget {
@@ -358,6 +359,12 @@ class _SubjectScreenState extends State<SubjectScreen> {
                           ),
                         ),
                       ),
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                        child: NativeAdWidget(isSmall: true),
+                      ),
+                    ),
                     const SliverToBoxAdapter(child: SizedBox(height: 50)),
                   ],
                 );

@@ -8,6 +8,8 @@ import '../utils/app_icons.dart';
 import 'package:tnpsc_group_book/utils/app_language.dart';
 import 'quiz_screen.dart';
 import 'topic_detail_screen.dart';
+import '../widgets/native_ad_widget.dart';
+import '../services/hive_service.dart';
 
 class SubTopicScreen extends StatelessWidget {
   final Subject subject;
@@ -24,9 +26,30 @@ class SubTopicScreen extends StatelessWidget {
     return ValueListenableBuilder<String>(
       valueListenable: AppLanguage.languageNotifier,
       builder: (context, lang, child) {
-        final subTopics = subject.getSubTopics(topicIndex);
+        final List<String> subTopics = subject.getSubTopics(topicIndex);
         final parentTopic = subject.topics[topicIndex];
         final isDark = Theme.of(context).brightness == Brightness.dark;
+
+        // Ad Insertion Logic: Insert an ad every 6 items
+        const int adInterval = 6;
+        List<dynamic> itemsWithAds = [];
+        bool adAdded = false;
+        
+        // Add description at top
+        itemsWithAds.add({'type': 'description'});
+        
+        for (int i = 0; i < subTopics.length; i++) {
+          itemsWithAds.add({'type': 'topic', 'index': i, 'data': subTopics[i]});
+          if ((i + 1) % adInterval == 0 && i != subTopics.length - 1) {
+            itemsWithAds.add({'type': 'ad'});
+            adAdded = true;
+          }
+        }
+
+        // If no ad was added (because list is short), add one at the end
+        if (!adAdded && subTopics.isNotEmpty) {
+          itemsWithAds.add({'type': 'ad'});
+        }
 
         return Scaffold(
           appBar: AppBar(
@@ -47,9 +70,11 @@ class SubTopicScreen extends StatelessWidget {
           body: ListView.builder(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            itemCount: subTopics.length + 1, // +1 for the description text
+            itemCount: itemsWithAds.length,
             itemBuilder: (context, index) {
-              if (index == 0) {
+              final item = itemsWithAds[index];
+
+              if (item['type'] == 'description') {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 20),
                   child: Text(
@@ -63,17 +88,25 @@ class SubTopicScreen extends StatelessWidget {
                 );
               }
 
-              final topicIndex = index - 1;
-              final topic = subTopics[topicIndex];
+              if (item['type'] == 'ad') {
+                return const Padding(
+                  padding: EdgeInsets.only(bottom: 12.0),
+                  child: NativeAdWidget(isSmall: false, refreshIntervalSeconds: 30),
+                );
+              }
+
+              final topicIndexInOriginalList = item['index'];
+              final topic = item['data'];
+              
               return AnimationConfiguration.staggeredList(
-                position: topicIndex,
+                position: topicIndexInOriginalList,
                 duration: const Duration(milliseconds: 375),
                 child: SlideAnimation(
                   verticalOffset: 30.0,
                   child: FadeInAnimation(
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 12.0),
-                      child: _buildTopicCard(context, topic, subTopics, topicIndex, parentTopic, isDark),
+                      child: _buildTopicCard(context, topic, subTopics, topicIndexInOriginalList, parentTopic, isDark),
                     ),
                   ),
                 ),
