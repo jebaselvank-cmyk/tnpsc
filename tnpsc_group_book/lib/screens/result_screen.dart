@@ -551,7 +551,7 @@ class _ResultScreenState extends State<ResultScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Center(child: NativeAdWidget(isSmall: true)),
+                    const Center(child: NativeAdWidget(isSmall: true,  refreshIntervalSeconds: 90)),
                     const SizedBox(height: 20),
                   ],
                 ),

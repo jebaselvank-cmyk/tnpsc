@@ -91,7 +91,7 @@ class SubTopicScreen extends StatelessWidget {
               if (item['type'] == 'ad') {
                 return const Padding(
                   padding: EdgeInsets.only(bottom: 12.0),
-                  child: NativeAdWidget(isSmall: false, refreshIntervalSeconds: 30),
+                  child: NativeAdWidget(isSmall: false, refreshIntervalSeconds: 90),
                 );
               }
 

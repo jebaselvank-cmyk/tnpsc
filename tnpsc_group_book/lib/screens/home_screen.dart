@@ -301,9 +301,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
                                 // Smart Weak Area Analysis Card
                                 RepaintBoundary(child: _buildSmartWeakAreaAnalysis(context, isDark)),
-
-                                const SizedBox(height: 32),
-                                const NativeAdWidget(isSmall: true),
                                 const SizedBox(height: 50),
                               ],
                             ),
@@ -1076,7 +1073,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: const Center(
         child: Padding(
           padding: EdgeInsets.all(8.0),
-          child: NativeAdWidget(isSmall: false),
+          child: NativeAdWidget(isSmall: false,  refreshIntervalSeconds: 90),
         ),
       ),
     );

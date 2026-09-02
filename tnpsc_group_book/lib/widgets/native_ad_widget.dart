@@ -18,18 +18,38 @@ class NativeAdWidget extends StatefulWidget {
   State<NativeAdWidget> createState() => _NativeAdWidgetState();
 }
 
-class _NativeAdWidgetState extends State<NativeAdWidget> {
+class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObserver {
   NativeAd? _nativeAd;
   bool _isAdLoaded = false;
   Timer? _refreshTimer;
+  bool _isPaused = false;
 
   final String adUnitId = 'ca-app-pub-9952621231526514/5355753081';
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (!HiveService.isAdFree()) {
-      _loadAd();
+      // Add a small delay before loading to ensure it's not a fast scroll-by
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted && !_isPaused) {
+          _loadAd();
+          if (widget.refreshIntervalSeconds != null) {
+            _startRefreshTimer();
+          }
+        }
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _isPaused = true;
+      _refreshTimer?.cancel();
+    } else if (state == AppLifecycleState.resumed) {
+      _isPaused = false;
       if (widget.refreshIntervalSeconds != null) {
         _startRefreshTimer();
       }
@@ -39,13 +59,16 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(Duration(seconds: widget.refreshIntervalSeconds!), (timer) {
-      AppLog.d('AI_DEBUG: Refreshing Native Ad...');
-      _loadAd();
+      if (!_isPaused && mounted) {
+        AppLog.d('AI_DEBUG: Refreshing Native Ad...');
+        _loadAd();
+      }
     });
   }
 
   void _loadAd() {
-    // Helper to create ad instance
+    if (_isPaused || !mounted) return;
+
     NativeAd createAdInstance() {
       return NativeAd(
         adUnitId: adUnitId,
@@ -53,10 +76,8 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
         request: const AdRequest(),
         listener: NativeAdListener(
           onAdLoaded: (ad) {
-            AppLog.d('AI_DEBUG: Native Ad loaded and ready to swap.');
             if (mounted) {
               setState(() {
-                // IMPORTANT: Dispose the old ad ONLY after new one is ready
                 if (_nativeAd != null && _nativeAd != ad) {
                   _nativeAd!.dispose();
                 }
@@ -66,16 +87,17 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
             }
           },
           onAdFailedToLoad: (ad, error) {
-            AppLog.e('AI_DEBUG: Native Ad failed to load: $error');
             ad.dispose();
-            // If we have no ad showing yet, update state. 
-            // If we already have one showing, we keep it as is.
             if (_nativeAd == null && mounted) {
               setState(() {
                 _isAdLoaded = false;
               });
             }
           },
+          // Triggered when an ad is clicked
+          onAdClicked: (ad) => AppLog.d('Ad Clicked'),
+          // Triggered when an ad impression is recorded
+          onAdImpression: (ad) => AppLog.d('Ad Impression recorded'),
         ),
       );
     }
@@ -86,6 +108,7 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _nativeAd?.dispose();
     super.dispose();
