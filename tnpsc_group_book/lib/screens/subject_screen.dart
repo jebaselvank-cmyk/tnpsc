@@ -26,7 +26,6 @@ import 'leaderboard_screen.dart';
 import '../widgets/streak_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../widgets/ad_banner.dart';
 import '../widgets/native_ad_widget.dart';
 import '../services/version_service.dart';
 

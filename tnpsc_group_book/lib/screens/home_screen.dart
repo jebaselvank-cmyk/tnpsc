@@ -26,7 +26,6 @@ import 'leaderboard_screen.dart';
 import '../widgets/streak_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../widgets/ad_banner.dart';
 import '../services/version_service.dart';
 import '../services/tts_service.dart';
 import 'room_setup_screen.dart';

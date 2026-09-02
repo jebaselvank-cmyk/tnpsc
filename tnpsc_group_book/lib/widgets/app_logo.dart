@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../constants/app_assets.dart';
 import '../utils/app_theme.dart';
 import '../utils/app_icons.dart';
 
@@ -21,7 +20,7 @@ class AppLogo extends StatelessWidget {
     final double radius = borderRadius ?? 24;
 
     Widget image = Image.asset(
-      AppAssets.logo,
+      'asset/images/logo.png',
       height: size,
       width: size,
       fit: BoxFit.contain,

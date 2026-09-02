@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
 
 import 'hive_service.dart';
 import 'firestore_service.dart';
@@ -25,7 +24,7 @@ class RewardService {
 
   /// Interstitial Ad IDs
   static const String testInterstitialId = 'ca-app-pub-3940256099942544/1033173712';
-  static const String realInterstitialId = 'ca-app-pub-9952621231526514/2643599886'; // Replace with real ID later
+  static const String realInterstitialId = 'ca-app-pub-9952621231526514/2643599886'; 
 
   // Toggle this for testing
   static bool useTestAds = false;

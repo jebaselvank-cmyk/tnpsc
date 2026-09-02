@@ -217,7 +217,7 @@ class HiveService {
 
   // Premium Checks
   static bool isPremium() {
-    return true; // Unlocked for all users
+    return false; // Premium disabled
   }
 
   static String getPremiumPlan() {
@@ -225,7 +225,7 @@ class HiveService {
   }
 
   /// Starter, Pro, Elite — 10 room matches per day while subscription is active.
-  static bool hasRoomMatchBoost() => true;
+  static bool hasRoomMatchBoost() => false;
 
   static String _todayDate() {
     return AppDate.getTodayString();
@@ -291,7 +291,7 @@ class HiveService {
 
   /// Users are NO LONGER ad-free by default to ensure AdMob revenue.
   static bool isAdFree() {
-    return false; // Changed from true to false to enable ads
+    return false; // Show ads to all users
   }
 
   /// Pro (₹99) & Elite (₹259).

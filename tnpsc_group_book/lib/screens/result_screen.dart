@@ -69,13 +69,6 @@ class _ResultScreenState extends State<ResultScreen> {
     // Show rewarded ad on Daily Quiz completion
     if (HiveService.isDailyQuizDone()) {
       RewardService.loadRewardedAd();
-      // Future.delayed(const Duration(seconds: 1), () {
-      //   RewardService.showRewardAdIfAllowed(
-      //     onRewardEarned: () {
-      //       AppLog.d("Ad reward earned on result screen");
-      //     },
-      //   );
-      // });
     }
   }
 
