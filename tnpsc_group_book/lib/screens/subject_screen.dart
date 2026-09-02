@@ -143,6 +143,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 50),
             ],
           ),
         );

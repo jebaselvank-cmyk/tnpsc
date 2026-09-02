@@ -106,6 +106,16 @@ Future<void> main() async {
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,
       ]),
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
+      () async {
+        SystemChrome.setSystemUIOverlayStyle(
+          const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarDividerColor: Colors.transparent,
+          ),
+        );
+      }(),
       initializeDateFormatting('ta', null),
       initializeDateFormatting('en', null),
       () async {
