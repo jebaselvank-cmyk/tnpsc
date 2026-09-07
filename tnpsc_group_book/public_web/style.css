@@ -1,0 +1,49 @@
+/* App Promotion Card - Super Slim & Clean */
+.app-promo-card {
+    background: #0d47a1;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin: 5px 0 15px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-height: 50px; /* உயரத்தைக் கட்டுப்படுத்துகிறது */
+    overflow: hidden;
+}
+
+.promo-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.promo-logo {
+    width: 28px !important;
+    height: 28px !important;
+    object-fit: cover; /* லோகோ கட் ஆகாமல் இருக்க */
+    border-radius: 4px;
+    background: white;
+}
+
+.promo-text h3 {
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.promo-text p {
+    display: none; /* அதிகப்படியான வரிகளை மறைக்கிறோம் */
+}
+
+.download-btn {
+    background: #ffffff;
+    color: #0d47a1;
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+}
