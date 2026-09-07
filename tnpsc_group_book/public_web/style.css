@@ -1,40 +1,413 @@
+/* Professional TNPSC Web Portal Style - FULL RESTORED */
+:root {
+    --primary-color: #1a73e8;
+    --primary-hover: #1557b0;
+    --bg-color: #f8f9fa;
+    --text-main: #202124;
+    --text-muted: #5f6368;
+    --card-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    --card-shadow-hover: 0 4px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
+    --correct-color: #34a853;
+    --wrong-color: #ea4335;
+    --white: #ffffff;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', 'Hind Madurai', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header */
+.app-header {
+    background-color: var(--white);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 15px 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-content {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+}
+
+.logo-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo-img {
+    width: 64px;
+    height: 64px;
+}
+
+.logo-text {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+/* Sections */
+.section-title {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    margin: 30px 0 15px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Cards */
+.quiz-card {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: var(--card-shadow);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.quiz-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--card-shadow-hover);
+}
+
+.quiz-card.featured {
+    border-left: 5px solid var(--primary-color);
+}
+
+.card-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.date {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.q-count {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.start-btn {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* History List */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.history-item {
+    background: var(--white);
+    padding: 16px 20px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.history-item:hover {
+    background: #f1f3f4;
+}
+
+.history-item.active {
+    border-right: 4px solid var(--primary-color);
+}
+
+.q-tag {
+    font-size: 0.75rem;
+    background: #e8f0fe;
+    color: var(--primary-color);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.arrow {
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+/* Quiz Interface */
+.quiz-container {
+    background: var(--white);
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+}
+
+.progress-bar {
+    height: 8px;
+    background: #e8eaed;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.progress {
+    height: 100%;
+    background: var(--primary-color);
+    transition: width 0.3s;
+}
+
+.quiz-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.back-mini-btn {
+    background: #f1f3f4;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.back-mini-btn:hover {
+    background: #e8eaed;
+    color: var(--primary-color);
+}
+
+.question-text {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 25px;
+    color: var(--text-main);
+}
+
+.options-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+.option-btn {
+    background: var(--white);
+    border: 1px solid #dadce0;
+    padding: 15px 20px;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.option-btn:hover:not(:disabled) {
+    background: #f8f9fa;
+    border-color: var(--primary-color);
+}
+
+.option-btn.correct {
+    background: var(--correct-color);
+    color: white;
+    border-color: var(--correct-color);
+}
+
+.option-btn.wrong {
+    background: var(--wrong-color);
+    color: white;
+    border-color: var(--wrong-color);
+}
+
+/* Results */
+.result-card {
+    text-align: center;
+    padding: 40px;
+}
+
+.score-circle {
+    width: 150px;
+    height: 150px;
+    border: 8px solid var(--primary-color);
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: 30px auto;
+}
+
+.score-num {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.score-percent {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+}
+
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 30px;
+}
+
+.share-btn {
+    background-color: #25d366;
+    color: white;
+    border: none;
+    padding: 15px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.home-btn {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 15px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* Ad Slots */
+.ad-slot {
+    margin: 30px 0;
+    background: #eeeeee;
+    min-height: 100px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+.ad-label {
+    font-size: 0.7rem;
+    color: #999;
+    text-transform: uppercase;
+    position: absolute;
+    top: 5px;
+    right: 10px;
+}
+
+/* Loader */
+.loader-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255,255,255,0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Footer */
+.app-footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.footer-note {
+    margin-top: 5px;
+    font-style: italic;
+}
+
 /* App Promotion Card - Super Slim & Clean */
 .app-promo-card {
     background: #0d47a1;
     color: white;
-    padding: 6px 12px;
+    padding: 5px 12px;
     border-radius: 6px;
     margin: 5px 0 15px 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    max-height: 50px; /* உயரத்தைக் கட்டுப்படுத்துகிறது */
+    height: 65px; /* Height increased to 60px */
+    max-height: 65px;
     overflow: hidden;
 }
 
 .promo-content {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .promo-logo {
     width: 28px !important;
     height: 28px !important;
-    object-fit: cover; /* லோகோ கட் ஆகாமல் இருக்க */
+    object-fit: contain;
     border-radius: 4px;
     background: white;
 }
 
-.promo-text h3 {
-    font-size: 0.85rem;
+.promo-text h2 {
+    font-size: 0.8rem;
     font-weight: 500;
     margin: 0;
     white-space: nowrap;
-}
-
-.promo-text p {
-    display: none; /* அதிகப்படியான வரிகளை மறைக்கிறோம் */
 }
 
 .download-btn {
@@ -44,6 +417,12 @@
     padding: 4px 10px;
     border-radius: 4px;
     font-weight: 700;
-    font-size: 0.7rem;
+    font-size: 0.8rem;
     text-transform: uppercase;
+}
+
+@media (max-width: 600px) {
+    .container { padding: 10px; }
+    .quiz-container { padding: 20px; }
+    .question-text { font-size: 1.1rem; }
 }

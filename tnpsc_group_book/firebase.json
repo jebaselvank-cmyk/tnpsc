@@ -1,12 +1,24 @@
 {
-  "hosting": {
-    "public": "public_web",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ]
-  },
+  "hosting": [
+    {
+      "site": "tnpsc-masterapp-dailyquiz",
+      "public": "public_web",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
+    },
+    {
+      "site": "tnpsc-prepare-app-koilra-c9998",
+      "public": "public_web",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
+    }
+  ],
   "functions": {
     "source": "functions",
     "runtime": "nodejs20"

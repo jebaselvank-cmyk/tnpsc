@@ -4,11 +4,18 @@
  */
 
 const CONFIG = {
-    // Replace with your Google Sheet CSV Link (File -> Share -> Publish to Web -> CSV)
-    // Or use the gviz/tq format: https://docs.google.com/spreadsheets/d/ID/gviz/tq?tqx=out:csv
+    // Replace with your Google Sheet CSV Link
     sheetUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnufG0r1c65d6DOXTX8ssI0sDhfKYVRehjAKg7LerHdq8ZfIk2hz3FI5cQNdehsAVfqf7Yr6XLrk9E/pub?gid=0&single=true&output=csv',
     yesterdayQuizCount: 20,
-    istOffset: 5.5 * 60 * 60 * 1000
+    istOffset: 5.5 * 60 * 60 * 1000,
+
+    // ADSENSE CONFIGURATION
+    adsense: {
+        publisherId: 'ca-pub-9952621231526514', // உங்கள் Publisher ID இங்கே இணைக்கப்பட்டுள்ளது
+        bannerSlot: '1111111111',           // ஹோம் பேஜ் விளம்பர ID (தேவைப்பட்டால் மாற்றவும்)
+        inlineSlot: '2222222222',           // கேள்விக்கு இடையில் வரும் விளம்பர ID
+        resultSlot: '3333333333'            // ரிசல்ட் பேஜ் விளம்பர ID
+    }
 };
 
 let allQuizzes = [];
@@ -39,42 +46,41 @@ async function initApp() {
 }
 
 async function fetchQuizData() {
-    // Add timestamp to URL to prevent browser caching (?t=...)
+    // Add timestamp to URL to prevent browser caching
     const response = await fetch(`${CONFIG.sheetUrl}${CONFIG.sheetUrl.includes('?') ? '&' : '?'}t=${Date.now()}`);
     const csvData = await response.text();
     allQuizzes = parseCSV(csvData);
 
-    // Filter by date (Only Yesterday and Older)
     const now = new Date(new Date().getTime() + CONFIG.istOffset);
     const todayStr = now.toISOString().split('T')[0];
 
     // Group by date
     const grouped = {};
     allQuizzes.forEach(q => {
-        // Change < to <= to show today's quiz as well
         if (q.date <= todayStr) {
             if (!grouped[q.date]) grouped[q.date] = [];
             grouped[q.date].push(q);
         }
     });
 
-    // Convert to sorted array (Show EVERYTHING in the sheet)
+    // Convert to sorted array (Latest first)
     allQuizzes = Object.keys(grouped).map(date => ({
         date: date,
         questions: grouped[date]
     }))
     .sort((a, b) => b.date.localeCompare(a.date));
-    // .slice(0, 60); // Limit removed for infinite history
 }
 
 function parseCSV(csv) {
     const lines = csv.split('\n');
     const result = [];
+    if (lines.length === 0) return result;
+
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
 
     for (let i = 1; i < lines.length; i++) {
-        if (!lines[i]) continue;
-        const currentLine = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); // Handle commas inside quotes
+        if (!lines[i].trim()) continue;
+        const currentLine = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
         const obj = {};
         headers.forEach((header, index) => {
             let val = currentLine[index] ? currentLine[index].trim().replace(/"/g, '') : '';
@@ -83,6 +89,23 @@ function parseCSV(csv) {
         result.push(obj);
     }
     return result;
+}
+
+function getAdHtml(slotId) {
+    if (!CONFIG.adsense.publisherId || CONFIG.adsense.publisherId.includes('XXXXX')) {
+        return '<div class="ad-label">Advertisement Slot</div>';
+    }
+    return `
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="${CONFIG.adsense.publisherId}"
+             data-ad-slot="${slotId}"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+    `;
 }
 
 function renderHome() {
@@ -97,19 +120,17 @@ function renderHome() {
         return;
     }
 
-    // Default to the latest quiz (Yesterday's)
     const latestQuiz = allQuizzes[0];
-    const history = allQuizzes.slice(1);
 
     let html = `
-        <div class="app-promo-card" style="max-height: 65px; overflow: hidden; display: flex; align-items: center; justify-content: space-between; background: #0d47a1; padding: 5px 15px; border-radius: 8px; margin-bottom: 15px;">
-            <div class="promo-content" style="display: flex; align-items: center; gap: 10px;">
-                <img src="asset/images/logo.png" alt="App Logo" style="width: 50px !important; height: 50px !important; object-fit: contain; border-radius: 4px; background: white;">
+        <div class="app-promo-card">
+            <div class="promo-content">
+                <img src="logo.png" alt="App Logo" style="width: 50px ; height: 50px ; object-fit: contain; border-radius: 6px; padding: 3px;">
                 <div class="promo-text">
-                    <h3 style="font-size: 0.9rem; margin: 0; color: white;">TNPSC Group Book App</h3>
+                    <h5>TNPSC Master: Group 1, 2, 4 --> App Link</h5>
                 </div>
             </div>
-            <a href="https://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book" target="_blank" class="download-btn" style="background: white; color: #0d47a1; text-decoration: none; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">Download</a>
+            <a href="https://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book" target="_blank" class="download-btn">Download</a>
         </div>
 
         <div class="featured-section">
@@ -124,7 +145,7 @@ function renderHome() {
         </div>
 
         <div class="ad-slot banner-ad">
-            <div class="ad-label">Advertisement</div>
+            ${getAdHtml(CONFIG.adsense.bannerSlot)}
         </div>
 
         <div class="history-section">
@@ -132,8 +153,10 @@ function renderHome() {
             <div class="history-list">
                 ${allQuizzes.map(q => `
                     <div class="history-item ${q.date === latestQuiz.date ? 'active' : ''}" onclick="startQuiz('${q.date}')">
-                        <span class="date">${formatDate(q.date)}</span>
-                        <span class="q-tag">${q.date === latestQuiz.date ? 'New' : 'Quiz'}</span>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="date">${formatDate(q.date)}</span>
+                            <span class="q-tag">${q.date === latestQuiz.date ? 'New' : 'Quiz'}</span>
+                        </div>
                         <span class="arrow">Play →</span>
                     </div>
                 `).join('')}
@@ -192,8 +215,7 @@ function renderQuestion() {
             </div>
 
             <div class="ad-slot inline-ad">
-                <!-- AdSense Inline Placeholder -->
-                <div class="ad-label">Advertisement</div>
+                ${getAdHtml(CONFIG.adsense.inlineSlot)}
             </div>
         </div>
     `;
@@ -202,7 +224,7 @@ function renderQuestion() {
 function checkAnswer(selectedIndex) {
     const question = currentQuiz.questions[currentQuestionIndex];
     const buttons = document.querySelectorAll('.option-btn');
-    const correctIndex = parseAnswer(question.answer);
+    const correctIndex = parseInt(question.answer);
 
     buttons.forEach((btn, idx) => {
         btn.disabled = true;
@@ -218,17 +240,8 @@ function checkAnswer(selectedIndex) {
     }
 
     setTimeout(() => {
-        nextQuestion();
+        if (currentQuiz) nextQuestion(); // Safety check if user backed out
     }, 1500);
-}
-
-function parseAnswer(ans) {
-    ans = ans.toUpperCase();
-    if (ans === 'A' || ans === '0') return 0;
-    if (ans === 'B' || ans === '1') return 1;
-    if (ans === 'C' || ans === '2') return 2;
-    if (ans === 'D' || ans === '3') return 3;
-    return -1;
 }
 
 function nextQuestion() {
@@ -253,13 +266,12 @@ function renderResults() {
             </div>
 
             <div class="ad-slot large-ad">
-                <!-- AdSense Large Rectangular Placeholder -->
-                <div class="ad-label">Advertisement</div>
+                ${getAdHtml(CONFIG.adsense.resultSlot)}
             </div>
 
             <div class="action-buttons">
                 <button class="share-btn" onclick="shareResult()">Share Result on WhatsApp</button>
-                <button class="home-btn" onclick="location.reload()">Back to Home</button>
+                <button class="home-btn" onclick="renderHome()">Back to Home</button>
             </div>
         </div>
     `;
