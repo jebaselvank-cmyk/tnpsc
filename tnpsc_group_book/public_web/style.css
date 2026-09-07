@@ -1,428 +1,374 @@
-/* Professional TNPSC Web Portal Style - FULL RESTORED */
+/*
+ * TNPSC Master - Premium UI 3.0
+ * Inspired by Google Play & Education Portals
+ */
+
 :root {
-    --primary-color: #1a73e8;
-    --primary-hover: #1557b0;
-    --bg-color: #f8f9fa;
+    --primary: #1a73e8;
+    --primary-bg: #e8f0fe;
+    --success: #1e8e3e;
+    --danger: #d93025;
+    --bg: #f8f9fa;
+    --surface: #ffffff;
     --text-main: #202124;
-    --text-muted: #5f6368;
-    --card-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-    --card-shadow-hover: 0 4px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
-    --correct-color: #34a853;
-    --wrong-color: #ea4335;
-    --white: #ffffff;
+    --text-sub: #5f6368;
+    --border: #dadce0;
+    --radius: 12px;
 }
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
     font-family: 'Inter', 'Hind Madurai', sans-serif;
-    background-color: var(--bg-color);
+    background-color: var(--bg);
     color: var(--text-main);
-    line-height: 1.6;
+    line-height: 1.5;
 }
 
-.container {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 20px;
-}
+.container { max-width: 650px; margin: 0 auto; padding: 16px; }
 
-/* Header */
-.app-header {
-    background-color: var(--white);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    padding: 15px 0;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-}
+/* --- App Header --- */
+.app-header { background: white; height: 60px; display: flex; align-items: center; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+.header-content { max-width: 650px; width: 100%; margin: 0 auto; display: flex; align-items: center; padding: 0 16px; }
+.logo-area { display: flex; align-items: center; gap: 10px; }
+.logo-text { font-size: 1.2rem; font-weight: 800; color: var(--primary); }
 
-.header-content {
-    max-width: 800px;
-    margin: 0 auto;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 20px;
-}
-
-.logo-area {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.logo-img {
-    width: 64px;
-    height: 64px;
-}
-
-.logo-text {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--primary-color);
-}
-
-/* Sections */
-.section-title {
-    font-size: 1.2rem;
-    color: var(--text-muted);
-    margin: 30px 0 15px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Cards */
-.quiz-card {
-    background: var(--white);
-    border-radius: 12px;
+/* --- Ultra Modern Premium Header --- */
+.premium-header-banner {
+    background: linear-gradient(90deg, #1a73e8 0%, #4285f4 50%, #00d2ff 100%);
+    border-radius: 16px;
     padding: 24px;
-    box-shadow: var(--card-shadow);
-    cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    color: white;
     display: flex;
     justify-content: space-between;
     align-items: center;
-}
-
-.quiz-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--card-shadow-hover);
-}
-
-.quiz-card.featured {
-    border-left: 5px solid var(--primary-color);
-}
-
-.card-info {
-    display: flex;
-    flex-direction: column;
-}
-
-.date {
-    font-size: 1.1rem;
-    font-weight: 600;
-}
-
-.q-count {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-}
-
-.start-btn {
-    background-color: var(--primary-color);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-/* History List */
-.history-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.history-item {
-    background: var(--white);
-    padding: 16px 20px;
-    border-radius: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.history-item:hover {
-    background: #f1f3f4;
-}
-
-.history-item.active {
-    border-right: 4px solid var(--primary-color);
-}
-
-.q-tag {
-    font-size: 0.75rem;
-    background: #e8f0fe;
-    color: var(--primary-color);
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-weight: 600;
-}
-
-.arrow {
-    color: var(--primary-color);
-    font-weight: bold;
-}
-
-/* Quiz Interface */
-.quiz-container {
-    background: var(--white);
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: var(--card-shadow);
-}
-
-.progress-bar {
-    height: 8px;
-    background: #e8eaed;
-    border-radius: 4px;
-    margin-bottom: 20px;
-    overflow: hidden;
-}
-
-.progress {
-    height: 100%;
-    background: var(--primary-color);
-    transition: width 0.3s;
-}
-
-.quiz-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 25px;
-    color: var(--text-muted);
-    font-weight: 500;
-}
-
-.back-mini-btn {
-    background: #f1f3f4;
-    border: none;
-    padding: 5px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-muted);
-}
-
-.back-mini-btn:hover {
-    background: #e8eaed;
-    color: var(--primary-color);
-}
-
-.question-text {
-    font-size: 1.3rem;
-    font-weight: 600;
-    margin-bottom: 25px;
-    color: var(--text-main);
-}
-
-.options-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-}
-
-.option-btn {
-    background: var(--white);
-    border: 1px solid #dadce0;
-    padding: 15px 20px;
-    border-radius: 8px;
-    text-align: left;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.option-btn:hover:not(:disabled) {
-    background: #f8f9fa;
-    border-color: var(--primary-color);
-}
-
-.option-btn.correct {
-    background: var(--correct-color);
-    color: white;
-    border-color: var(--correct-color);
-}
-
-.option-btn.wrong {
-    background: var(--wrong-color);
-    color: white;
-    border-color: var(--wrong-color);
-}
-
-/* Results */
-.result-card {
-    text-align: center;
-    padding: 40px;
-}
-
-.score-circle {
-    width: 150px;
-    height: 150px;
-    border: 8px solid var(--primary-color);
-    border-radius: 50%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    margin: 30px auto;
-}
-
-.score-num {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--primary-color);
-}
-
-.score-percent {
-    font-size: 1.1rem;
-    color: var(--text-muted);
-}
-
-.action-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    margin-top: 30px;
-}
-
-.share-btn {
-    background-color: #25d366;
-    color: white;
-    border: none;
-    padding: 15px;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.home-btn {
-    background-color: var(--primary-color);
-    color: white;
-    border: none;
-    padding: 15px;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-/* Ad Slots */
-.ad-slot {
-    margin: 30px 0;
-    background: #eeeeee;
-    min-height: 100px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border-radius: 8px;
+    margin-bottom: 24px;
+    box-shadow: 0 10px 25px rgba(26, 115, 232, 0.2);
     position: relative;
     overflow: hidden;
 }
 
-.ad-label {
-    font-size: 0.7rem;
-    color: #999;
-    text-transform: uppercase;
-    position: absolute;
-    top: 5px;
-    right: 10px;
-}
-
-/* Loader */
-.loader-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255,255,255,0.9);
+.banner-branding {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
     align-items: center;
-    z-index: 1000;
+    gap: 20px;
 }
 
-.spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid var(--primary-color);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 10px;
+.banner-main-logo {
+    width: 70px;
+    height: 70px;
+    background: white;
+    padding: 3px;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    object-fit: contain;
 }
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+.banner-main-title {
+    font-size: 1.8rem;
+    font-weight: 900;
+    margin: 0;
+    letter-spacing: -1px;
 }
 
-/* Footer */
-.app-footer {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--text-muted);
-    font-size: 0.9rem;
+.banner-slogan {
+    font-size: 0.95rem;
+    font-weight: 500;
+    opacity: 0.95;
+    margin-top: 2px;
 }
 
-.footer-note {
-    margin-top: 5px;
-    font-style: italic;
+/* Right Side Badge */
+.badge-card-white {
+    background: white;
+    padding: 16px;
+    border-radius: 14px;
+    min-width: 200px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
 }
 
-/* App Promotion Card - Super Slim & Clean */
-.app-promo-card {
-    background: #0d47a1;
+.badge-header-info {
+    margin-bottom: 12px;
+}
+
+.badge-top-title {
+    display: block;
+    color: #1a73e8;
+    font-weight: 800;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.badge-top-sub {
+    color: #5f6368;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.download-app-pill {
+    background: #1a73e8;
     color: white;
-    padding: 5px 12px;
-    border-radius: 6px;
-    margin: 5px 0 15px 0;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 30px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.download-app-pill:hover {
+    background: #1557b0;
+    transform: translateY(-2px);
+}
+
+.dl-arrow { font-size: 1.2rem; }
+
+@media (max-width: 600px) {
+    .premium-header-banner { flex-direction: column; text-align: center; gap: 20px; padding: 20px; }
+    .banner-branding { flex-direction: column; gap: 10px; }
+    .badge-card-white { width: 100%; }
+}
+
+/* --- Premium Quiz Card (New) --- */
+.premium-quiz-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    height: 65px; /* Height increased to 60px */
-    max-height: 65px;
-    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    transition: all 0.2s;
+}
+.premium-quiz-card:hover { border-color: var(--primary); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+
+.quiz-type-tag { display: flex; align-items: center; gap: 6px; color: var(--primary); font-size: 0.8rem; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; }
+.quiz-date-text { font-size: 1.25rem; font-weight: 800; color: #202124; margin-bottom: 6px; }
+.quiz-meta { display: flex; align-items: center; gap: 8px; color: var(--text-sub); font-size: 0.85rem; font-weight: 500; }
+.dot { font-weight: bold; }
+
+.premium-start-btn {
+    background: #1a73e8;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 25px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+.btn-arrow { font-size: 1.2rem; line-height: 1; }
+
+/* --- Common Sections --- */
+.section-title { font-size: 0.85rem; color: var(--text-sub); font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin: 30px 0 12px; }
+.history-list { display: grid; gap: 10px; }
+.history-item { background: white; padding: 14px 20px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); cursor: pointer; }
+.history-item:hover { border-color: var(--primary); background: #f8f9fa; }
+.history-item .date { font-weight: 600; }
+.q-tag { background: #f1f3f4; color: var(--text-sub); padding: 2px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; }
+.arrow { color: var(--primary); font-weight: 700; }
+
+/* --- Quiz Play UI --- */
+.quiz-container { background: white; padding: 24px; border-radius: 16px; border: 1px solid var(--border); }
+.progress-bar { height: 6px; background: #f1f3f4; border-radius: 10px; margin-bottom: 24px; overflow: hidden; }
+.progress { height: 100%; background: var(--primary); }
+.quiz-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.back-mini-btn { background: #f8f9fa; border: 1px solid var(--border); padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.score-display { color: var(--primary); font-weight: 800; }
+.question-text { font-size: 1.2rem; font-weight: 700; margin-bottom: 24px; line-height: 1.5; color: #174ea6; }
+.options-grid { display: grid; gap: 10px; }
+.option-btn { background: white; border: 1.5px solid var(--border); padding: 16px; border-radius: 12px; text-align: left; font-size: 1rem; font-weight: 500; cursor: pointer; font-family: inherit; }
+.option-btn:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-bg); }
+.option-btn.correct { background: #e6f4ea; border-color: var(--success); color: var(--success); font-weight: 700; }
+.option-btn.wrong { background: #fce8e6; border-color: var(--danger); color: var(--danger); }
+
+/* --- Result --- */
+.result-card { text-align: center; padding: 30px 10px; }
+.score-circle { width: 130px; height: 130px; border-radius: 50%; background: #f1f3f4; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; border: 8px solid var(--primary-bg); }
+.score-num { font-size: 2rem; font-weight: 900; color: var(--primary); display: block; }
+.score-percent { font-size: 0.8rem; color: var(--text-sub); font-weight: 700; }
+.share-btn { background: #25d366; color: white; border: none; padding: 14px; border-radius: 25px; font-weight: 800; width: 100%; margin-bottom: 12px; cursor: pointer; }
+.home-btn { background: #f1f3f4; color: var(--text-main); border: none; padding: 14px; border-radius: 25px; font-weight: 700; width: 100%; cursor: pointer; }
+
+/* --- History Section Header --- */
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 32px 0 16px;
 }
 
-.promo-content {
+.section-title-area {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-.promo-logo {
-    width: 28px !important;
-    height: 28px !important;
-    object-fit: contain;
-    border-radius: 4px;
-    background: white;
+.calendar-icon {
+    font-size: 1.2rem;
+    color: var(--primary);
 }
 
-.promo-text h2 {
-    font-size: 0.8rem;
-    font-weight: 500;
+.section-title-new {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #174ea6;
     margin: 0;
-    white-space: nowrap;
 }
 
-.download-btn {
-    background: #ffffff;
-    color: #0d47a1;
+.view-calendar-link {
     text-decoration: none;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-weight: 700;
-    font-size: 0.8rem;
-    text-transform: uppercase;
+    color: var(--primary);
+    font-size: 0.85rem;
+    font-weight: 600;
 }
 
-@media (max-width: 600px) {
-    .container { padding: 10px; }
-    .quiz-container { padding: 20px; }
-    .question-text { font-size: 1.1rem; }
+/* --- Horizontal Date Scroller --- */
+.date-scroller {
+    display: flex;
+    overflow-x: auto;
+    gap: 12px;
+    padding: 10px 0 20px;
+    scrollbar-width: none; /* Hide scrollbar for Firefox */
+    -ms-overflow-style: none; /* Hide scrollbar for IE/Edge */
+}
+
+.date-scroller::-webkit-scrollbar {
+    display: none; /* Hide scrollbar for Chrome/Safari */
+}
+
+.date-card {
+    min-width: 80px;
+    height: 80px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.date-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.date-card.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+    box-shadow: 0 4px 10px rgba(26, 115, 232, 0.3);
+}
+
+.day-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+    opacity: 0.8;
+}
+
+.date-card.active .day-label { opacity: 1; }
+
+.date-label {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+/* --- Calendar View UI --- */
+.calendar-view-container {
+    background: white;
+    padding: 24px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+}
+
+.calendar-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 24px;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 15px;
+}
+
+.calendar-item {
+    background: #f8f9fa;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.calendar-item:hover {
+    background: var(--primary-bg);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.cal-month {
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--danger);
+    margin-bottom: 4px;
+}
+
+.cal-day {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1;
+}
+
+.cal-year {
+    font-size: 0.7rem;
+    color: var(--text-sub);
+    margin-top: 4px;
+}
+
+/* --- Ad Slots --- */
+.ad-slot {
+    margin: 24px 0;
+    text-align: center;
+    overflow: hidden;
+}
+
+.ad-label {
+    display: none; /* Hide the advertisement label */
+}
+
+/* --- Loader --- */
+.loader-overlay { position: fixed; inset: 0; background: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
+.spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 12px; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+.app-footer { text-align: center; padding: 40px 16px; color: var(--text-sub); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; }
+
+@media (max-width: 500px) {
+    .premium-banner { flex-direction: column; text-align: center; gap: 15px; }
+    .banner-tagline { max-width: 100%; }
+    .app-badge-card { width: 100%; justify-content: space-between; }
+    .premium-quiz-card { flex-direction: column; gap: 20px; align-items: flex-start; }
+    .premium-start-btn { width: 100%; justify-content: center; }
 }

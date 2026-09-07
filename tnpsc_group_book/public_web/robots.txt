@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tnpsc-masterapp-dailyquiz.web.app/sitemap.xml
