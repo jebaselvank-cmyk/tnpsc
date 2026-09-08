@@ -167,8 +167,8 @@ function renderHomeUI() {
         <div class="premium-header-banner">
             <div class="banner-left-content">
                 <div class="banner-branding">
-                    <div class="logo-white-box" onclick="navigateTo('home')" style="background: white; padding: 5px; border-radius: 14px; display: flex; align-items: center; justify-content: center; width: 60px; height: 60px; margin-right: 10px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-                        <img src="logo.png" alt="TNPSC Master Logo" style=" border-radius: 14px; width: 53px; height: 53px; object-fit: contain;">
+                    <div class="logo-white-box" onclick="navigateTo('home')" style="background: white; padding: 5px; border-radius: 14px; display: flex; align-items: center; justify-content: center; width: 60px; height: 60px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                        <img src="logo.png" alt="TNPSC Master Logo" style=" border-radius: 10px; width: 53px; height: 53px; object-fit: contain;">
                     </div>
                     <div class="banner-title-group"><h1 class="banner-main-title">TNPSC Master</h1><p class="banner-slogan">Learn &nbsp;•&nbsp; Practice &nbsp;•&nbsp; Succeed</p></div>
                 </div>
