@@ -161,8 +161,13 @@ function renderHomeUI() {
     };
 
     container.innerHTML = `
-        <div class="lang-area" style="text-align: right; margin-bottom: 15px;">
-            <button class="back-mini-btn" onclick="toggleLanguage()" style="background: #1a73e8; color: white; border: none;">${currentLang === 'ta' ? 'English' : 'தமிழ்'}</button>
+        <div class="lang-switch-container">
+            <span class="switch-label ${currentLang === 'ta' ? 'active' : ''}">தமிழ்</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="lang-checkbox" ${currentLang === 'en' ? 'checked' : ''} onchange="toggleLanguage()">
+                <span class="slider"></span>
+            </label>
+            <span class="switch-label ${currentLang === 'en' ? 'active' : ''}">EN</span>
         </div>
         <div class="premium-header-banner">
             <div class="banner-left-content">
