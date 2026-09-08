@@ -1,6 +1,5 @@
 /**
- * TNPSC Master - Advanced Router & Quiz Logic
- * Features: Question-by-question Back, Smart Fallback, No Lag
+ * TNPSC Master - Dual Mode Router (Daily + Current Affairs)
  */
 
 const CONFIG = {
@@ -18,8 +17,8 @@ let allQuizzes = [];
 let currentQuiz = null;
 let currentQuestionIndex = 0;
 let score = 0;
+let activeDate = null;
 
-// --- 🚀 ADVANCED ROUTER ---
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
     window.addEventListener('hashchange', () => handleRouting());
@@ -29,11 +28,15 @@ async function initApp() {
     showLoading(true);
     try {
         await fetchQuizData();
-        if (!window.location.hash) {
-            window.location.hash = 'home';
-        } else {
-            handleRouting();
+        if (allQuizzes.length === 0) {
+            showError("No data found. Please check Google Sheet.");
+            return;
         }
+        // Base state setup
+        if (!window.location.hash || window.location.hash === '#home') {
+            history.replaceState({page: 'home'}, '', '#home');
+        }
+        handleRouting();
     } catch (error) {
         showError("Data Error. Please refresh.");
     } finally {
@@ -47,20 +50,13 @@ function handleRouting() {
     const page = parts[0];
 
     if (page === 'home') {
+        activeDate = parts[1] || activeDate || allQuizzes[0]?.date;
         renderHomeUI();
     } else if (page === 'calendar') {
         renderCalendarUI();
-    } else if (page === 'quiz' && parts[1]) {
-        const date = parts[1];
-        const qIndex = parts[2] ? parseInt(parts[2]) - 1 : 0;
-
-        // Quiz Restart or Direct Access handling
-        if (!currentQuiz || currentQuiz.date !== date) {
-            startNewQuizSession(date, qIndex);
-        } else {
-            currentQuestionIndex = qIndex;
-            renderQuestionUI();
-        }
+    } else if (page === 'quiz' && parts[1] && parts[2]) {
+        // Quiz Route: #quiz/type/date
+        startQuizSession(parts[1], parts[2], 0);
     } else if (page === 'results') {
         if (!currentQuiz) navigateTo('home');
         else renderResultsUI();
@@ -70,35 +66,34 @@ function handleRouting() {
     window.scrollTo(0,0);
 }
 
-function navigateTo(target) {
-    window.location.hash = target;
-}
+function navigateTo(target) { window.location.hash = target; }
 
-// --- 📊 DATA & LOGIC ---
 async function fetchQuizData() {
     const response = await fetch(`${CONFIG.sheetUrl}${CONFIG.sheetUrl.includes('?') ? '&' : '?'}t=${Date.now()}`);
     const csvData = await response.text();
-    allQuizzes = parseCSV(csvData);
+    const rawQuestions = parseCSV(csvData);
+
     const now = new Date(new Date().getTime() + CONFIG.istOffset);
     const todayStr = now.toISOString().split('T')[0];
+
     const grouped = {};
-    allQuizzes.forEach(q => {
-        if (q.date <= todayStr) {
-            if (!grouped[q.date]) grouped[q.date] = [];
-            grouped[q.date].push(q);
+    rawQuestions.forEach(q => {
+        if (!q.date) return;
+        const d = q.date.trim();
+        if (d <= todayStr) {
+            if (!grouped[d]) grouped[d] = { date: d, daily: [], ca: [] };
+            if (q.type && q.type.trim() === 'current_affairs') grouped[d].ca.push(q);
+            else grouped[d].daily.push(q);
         }
     });
-    allQuizzes = Object.keys(grouped).map(date => ({
-        date: date,
-        questions: grouped[date]
-    })).sort((a, b) => b.date.localeCompare(a.date));
+    allQuizzes = Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date));
 }
 
 function parseCSV(csv) {
     const lines = csv.split('\n');
     const result = [];
-    if (lines.length === 0) return result;
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    if (lines.length < 2) return result;
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
     for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
         const currentLine = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
@@ -111,33 +106,29 @@ function parseCSV(csv) {
     return result;
 }
 
-function startNewQuizSession(date, index = 0) {
-    const quiz = allQuizzes.find(q => q.date === date);
-    if (!quiz) { navigateTo('home'); return; }
-    currentQuiz = { ...quiz, questions: shuffleArray([...quiz.questions]) };
+function getAdHtml(slotId) {
+    if (!CONFIG.adsense.publisherId || CONFIG.adsense.publisherId.includes('XXXXX')) return '';
+    return `<ins class="adsbygoogle" style="display:block" data-ad-client="${CONFIG.adsense.publisherId}" data-ad-slot="${slotId}" data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({});</script>`;
+}
+
+function startQuizSession(type, date, index = 0) {
+    const dayData = allQuizzes.find(q => q.date === date);
+    if (!dayData) { navigateTo('home'); return; }
+    const questions = type === 'ca' ? dayData.ca : dayData.daily;
+    if (!questions || questions.length === 0) { navigateTo('home'); return; }
+
+    currentQuiz = { date, type, questions: shuffleArray([...questions]) };
     currentQuestionIndex = index;
     score = 0;
     renderQuestionUI();
 }
 
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-}
-
-// --- 🏠 UI COMPONENTS ---
 function renderHomeUI() {
     currentQuiz = null;
     const container = document.getElementById('main-content');
-    if (allQuizzes.length === 0) { container.innerHTML = '<div class="info-msg">Updating quizzes...</div>'; return; }
-
-    const now = new Date(new Date().getTime() + CONFIG.istOffset);
-    const todayStr = now.toISOString().split('T')[0];
-    let fQuiz = allQuizzes.find(q => q.date === todayStr) || allQuizzes[0];
-    let label = fQuiz.date === todayStr ? "Today's Featured Quiz" : "Latest Available Quiz";
+    if (allQuizzes.length === 0) return;
+    const selectedDay = allQuizzes.find(q => q.date === activeDate) || allQuizzes[0];
+    const todayStr = new Date(new Date().getTime() + CONFIG.istOffset).toISOString().split('T')[0];
 
     container.innerHTML = `
         <div class="premium-header-banner">
@@ -154,29 +145,17 @@ function renderHomeUI() {
                 </div>
             </div>
         </div>
-
         <div class="featured-section">
-            <div class="premium-quiz-card" onclick="navigateTo('quiz/' + '${fQuiz.date}' + '/1')">
-                <div class="quiz-details">
-                    <div class="quiz-type-tag"><span>📅</span><span>${label}</span></div>
-                    <h2 class="quiz-date-text">${formatDate(fQuiz.date)}</h2>
-                    <div class="quiz-meta"><span>${fQuiz.questions.length} Questions</span></div>
-                </div>
-                <button class="premium-start-btn">Start Quiz ›</button>
+            <div class="quiz-row-flex" style="display: flex; gap: 15px; flex-wrap: wrap;">
+                ${selectedDay.daily.length > 0 ? `<div class="premium-quiz-card" style="flex: 1; min-width: 280px;" onclick="navigateTo('quiz/daily/' + '${selectedDay.date}')"><div class="quiz-details"><div class="quiz-type-tag">📅 Daily Quiz</div><h2 class="quiz-date-text">${formatDate(selectedDay.date)}</h2><div class="quiz-meta">${selectedDay.daily.length} Questions</div></div><button class="premium-start-btn">Start ›</button></div>` : ''}
+                ${selectedDay.ca.length > 0 ? `<div class="premium-quiz-card" style="flex: 1; min-width: 280px; border-left: 6px solid #34a853;" onclick="navigateTo('quiz/ca/' + '${selectedDay.date}')"><div class="quiz-details"><div class="quiz-type-tag" style="color: #34a853;">🔥 Current Affairs</div><h2 class="quiz-date-text">${formatDate(selectedDay.date)}</h2><div class="quiz-meta">${selectedDay.ca.length} Questions</div></div><button class="premium-start-btn" style="background: #34a853;">Start ›</button></div>` : ''}
             </div>
         </div>
-
         <div class="ad-slot banner-ad">${getAdHtml(CONFIG.adsense.bannerSlot)}</div>
-
         <div class="history-section">
             <div class="history-header"><h2 class="section-title-new">Pick a Date to Play</h2><a href="javascript:void(0)" class="view-calendar-link" onclick="navigateTo('calendar')">View All ›</a></div>
             <div class="date-scroller">
-                ${allQuizzes.map(q => `
-                    <div class="date-card" onclick="navigateTo('quiz/' + '${q.date}' + '/1')">
-                        <span class="day-label">${new Date(q.date).toLocaleDateString('en-US', { weekday: 'short' })}</span>
-                        <span class="date-label">${new Date(q.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                    </div>
-                `).join('')}
+                ${allQuizzes.map(q => `<div class="date-card ${q.date === selectedDay.date ? 'active' : ''}" onclick="activeDate='${q.date}'; renderHomeUI();"><span class="day-label">${q.date === todayStr ? 'Today' : new Date(q.date).toLocaleDateString('en-US', { weekday: 'short' })}</span><span class="date-label">${new Date(q.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></div>`).join('')}
             </div>
         </div>
     `;
@@ -186,38 +165,29 @@ function renderCalendarUI() {
     const container = document.getElementById('main-content');
     container.innerHTML = `
         <div class="calendar-view-container">
-            <div class="calendar-header"><button class="back-mini-btn" onclick="navigateTo('home')">← Back</button><h2 class="section-title-new">Quiz History</h2></div>
+            <div class="calendar-header"><button class="back-mini-btn" onclick="history.back()">← Back</button><h2 class="section-title-new">Quiz History</h2></div>
             <div class="calendar-grid">
-                ${allQuizzes.map(q => `
-                    <div class="calendar-item" onclick="navigateTo('quiz/' + '${q.date}' + '/1')">
-                        <span class="cal-month">${new Date(q.date).toLocaleDateString('en-US', { month: 'short' })}</span>
-                        <span class="cal-day">${new Date(q.date).getDate()}</span>
-                    </div>
-                `).join('')}
+                ${allQuizzes.map(q => `<div class="calendar-item" onclick="activeDate='${q.date}'; navigateTo('home')"><span class="cal-month">${new Date(q.date).toLocaleDateString('en-US', { month: 'short' })}</span><span class="cal-day">${new Date(q.date).getDate()}</span></div>`).join('')}
             </div>
         </div>
     `;
 }
 
 function renderQuestionUI() {
-    const question = currentQuiz.questions[currentQuestionIndex];
+    const q = currentQuiz.questions[currentQuestionIndex];
     const container = document.getElementById('main-content');
+    const optA = q.optiona || q.optionA || ""; const optB = q.optionb || q.optionB || ""; const optC = q.optionc || q.optionC || ""; const optD = q.optiond || q.optionD || "";
+
     container.innerHTML = `
         <div class="quiz-container">
             <div class="progress-bar"><div class="progress" style="width: ${((currentQuestionIndex + 1) / currentQuiz.questions.length) * 100}%"></div></div>
-            <div class="quiz-header">
-                <button class="back-mini-btn" onclick="navigateTo('home')">← Exit</button>
-                <span class="score-display">Question: ${currentQuestionIndex + 1}/${currentQuiz.questions.length} | Score: ${score}</span>
-            </div>
-            <div class="question-card">
-                <p class="question-text">${question.question}</p>
-                <div class="options-grid">
-                    <button class="option-btn" onclick="checkAnswer(0)">${question.optionA}</button>
-                    <button class="option-btn" onclick="checkAnswer(1)">${question.optionB}</button>
-                    <button class="option-btn" onclick="checkAnswer(2)">${question.optionC}</button>
-                    <button class="option-btn" onclick="checkAnswer(3)">${question.optionD}</button>
-                </div>
-            </div>
+            <div class="quiz-header"><button class="back-mini-btn" onclick="history.back()">← Exit</button><span class="score-display">Q: ${currentQuestionIndex + 1}/${currentQuiz.questions.length} | Score: ${score}</span></div>
+            <div class="question-card"><p class="question-text">${q.question}</p><div class="options-grid">
+                <button class="option-btn" onclick="checkAnswer(0)">${optA}</button>
+                <button class="option-btn" onclick="checkAnswer(1)">${optB}</button>
+                <button class="option-btn" onclick="checkAnswer(2)">${optC}</button>
+                <button class="option-btn" onclick="checkAnswer(3)">${optD}</button>
+            </div></div>
             <div class="ad-slot inline-ad">${getAdHtml(CONFIG.adsense.inlineSlot)}</div>
         </div>
     `;
@@ -234,12 +204,8 @@ function checkAnswer(selectedIndex) {
     });
     if (selectedIndex === correctIndex) score++;
     setTimeout(() => {
-        const nextIndex = currentQuestionIndex + 2; // +1 for next, +1 for 1-based display
-        if (currentQuestionIndex + 1 < currentQuiz.questions.length) {
-            navigateTo(`quiz/${currentQuiz.date}/${currentQuestionIndex + 2}`);
-        } else {
-            navigateTo('results');
-        }
+        if (currentQuestionIndex + 1 < currentQuiz.questions.length) { currentQuestionIndex++; renderQuestionUI(); }
+        else navigateTo('results');
     }, 1200);
 }
 
@@ -257,9 +223,12 @@ function renderResultsUI() {
     `;
 }
 
-function getAdHtml(slotId) {
-    if (!CONFIG.adsense.publisherId || CONFIG.adsense.publisherId.includes('XXXXX')) return '';
-    return `<ins class="adsbygoogle" style="display:block" data-ad-client="${CONFIG.adsense.publisherId}" data-ad-slot="${slotId}" data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({});</script>`;
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
 }
 
 function shareResult() {

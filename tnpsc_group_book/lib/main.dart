@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
+import 'package:tnpsc_group_book/services/ai_service.dart';
 
 import 'firebase_options.dart';
 
@@ -586,6 +587,14 @@ class _MainWrapperState
         e,
         stack,
       );
+    }
+
+    // AI_DEBUG: Auto-generate Current Affairs content in background
+    try {
+      AiService.checkAndAutoGenerateNews();
+      AiService.checkAndAutoGenerateCurrentAffairsQuiz();
+    } catch (e) {
+      AppLog.e('MAIN WRAPPER: AI Auto-gen error: $e');
     }
 
     _lastBackgroundCheck =

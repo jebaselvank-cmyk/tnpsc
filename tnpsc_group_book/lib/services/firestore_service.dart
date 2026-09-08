@@ -244,8 +244,12 @@ class FirestoreService {
       final DateTime now = AppDate.getISTNow();
       
       // Standard cutoff (14 days ago)
-      final DateTime cutoff = now.subtract(const Duration(days: 14));
-      final cutoffDate = DateTime(cutoff.year, cutoff.month, cutoff.day);
+      final DateTime cutoff14 = now.subtract(const Duration(days: 14));
+      final cutoffDate14 = DateTime(cutoff14.year, cutoff14.month, cutoff14.day);
+
+      // Current Affairs retention (30 days ago)
+      final DateTime cutoff15 = now.subtract(const Duration(days: 15));
+      final cutoffDate15 = DateTime(cutoff15.year, cutoff15.month, cutoff15.day);
 
       // News cutoff (10 days ago)
       final DateTime cutoff10 = now.subtract(const Duration(days: 10));
@@ -253,31 +257,40 @@ class FirestoreService {
 
       // 4. Execute all purges in parallel for maximum efficiency
       await Future.wait([
-        // Leaderboards
+        // Leaderboards (14 days)
         () async {
           try {
-            results['leaderboards'] = await _purgeLeaderboards(cutoffDate);
+            results['leaderboards'] = await _purgeLeaderboards(cutoffDate14);
           } catch (e) { AppLog.e("MAINTENANCE ERROR (Leaderboards): $e"); }
         }(),
         
-        // Quizzes
+        // Quizzes: Daily Quiz (14 days)
         () async {
           try {
-            results['quizzes'] = await _purgeCollectionByDate('quizzes', cutoffDate);
-          } catch (e) { AppLog.e("MAINTENANCE ERROR (Quizzes): $e"); }
+            int count = await _purgeCollectionByDate('quizzes', cutoffDate14, type: 'daily_quiz');
+            results['quizzes'] = (results['quizzes'] ?? 0) + count;
+          } catch (e) { AppLog.e("MAINTENANCE ERROR (Daily Quizzes): $e"); }
         }(),
 
-        // Mock Tests
+        // Quizzes: Current Affairs (30 days)
         () async {
           try {
-            results['mockTests'] = await _purgeCollectionByDate('mock_tests', cutoffDate);
+            int count = await _purgeCollectionByDate('quizzes', cutoffDate15, type: 'current_affairs');
+            results['quizzes'] = (results['quizzes'] ?? 0) + count;
+          } catch (e) { AppLog.e("MAINTENANCE ERROR (CA Quizzes): $e"); }
+        }(),
+
+        // Mock Tests (14 days)
+        () async {
+          try {
+            results['mockTests'] = await _purgeCollectionByDate('mock_tests', cutoffDate14);
           } catch (e) { AppLog.e("MAINTENANCE ERROR (MockTests): $e"); }
         }(),
 
         // Results
         () async {
           try {
-            results['results'] = await _purgeCollectionByTimestamp('results', cutoff);
+            results['results'] = await _purgeCollectionByTimestamp('results', cutoff14);
           } catch (e) { AppLog.e("MAINTENANCE ERROR (Results): $e"); }
         }(),
 
@@ -412,11 +425,15 @@ class FirestoreService {
   }
 
   /// Helper to delete documents in a collection where the 'date' field is before the cutoff.
-  Future<int> _purgeCollectionByDate(String collectionName, DateTime cutoffDate) async {
+  Future<int> _purgeCollectionByDate(String collectionName, DateTime cutoffDate, {String? type}) async {
     final String cutoffStr = AppDate.format(cutoffDate);
-    final snap = await _db.collection(collectionName)
-        .where('date', isLessThan: cutoffStr)
-        .get();
+    
+    Query query = _db.collection(collectionName).where('date', isLessThan: cutoffStr);
+    if (type != null) {
+      query = query.where('type', isEqualTo: type);
+    }
+
+    final snap = await query.get();
 
     if (snap.docs.isEmpty) return 0;
 

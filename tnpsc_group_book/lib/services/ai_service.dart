@@ -1465,6 +1465,103 @@ Only return the raw JSON array. No preamble, no markdown, no explanation.
     return false;
   }
 
+  static Future<bool> generateAndSaveCurrentAffairsQuiz(DateTime date) async {
+    final dateStr = AppDate.format(date);
+
+    // Get recent CA context to avoid repeats
+    String recentContext = await _getRecentQuizContext('quizzes', 20);
+
+    final prompt = '''
+Generate 20 UNIQUE TNPSC Current Affairs MCQs for $dateStr.
+Focus on Tamil Nadu events, National news, Awards, and Sports from the last 3 months.
+
+STRICT QUALITY RULES:
+1. Return ONLY valid JSON array.
+2. NO Markdown or extra text.
+3. Every field MUST BE BILINGUAL (English and Tamil).
+4. NO MIXED LANGUAGE in any sentence.
+5. NO OTHER LANGUAGES (Hindi, etc.).
+6. SSLC Standard.
+7. Correct index MUST match the answer.
+
+JSON Format:
+[
+  {
+    "question_en":"...",
+    "question_ta":"...",
+    "options":[
+      {"en": "...", "ta": "..."},
+      {"en": "...", "ta": "..."},
+      {"en": "...", "ta": "..."},
+      {"en": "...", "ta": "..."}
+    ],
+    "correctOptionIndex":0,
+    "explanation_en":"...",
+    "explanation_ta":"..."
+  }
+]
+''';
+
+    final res = await _generateWithFallback(prompt);
+    if (res != null) {
+      try {
+        int start = res.indexOf('[');
+        int end = res.lastIndexOf(']');
+        if (start != -1 && end != -1) {
+          List q = jsonDecode(res.substring(start, end + 1));
+          if (q.length < 15) return false; // Fail if too few questions
+
+          final allQuestions = q.map((item) => {...item, 'quiz_type': 'current_affairs'}).toList();
+
+          final quizData = {
+            'date': dateStr,
+            'title': "Current Affairs Quiz / நடப்பு நிகழ்வுகள்",
+            'quizType': 'current_affairs',
+            'questions': allQuestions,
+            'type': 'current_affairs',
+            'createdAt': FieldValue.serverTimestamp(),
+          };
+
+          final db = FirebaseFirestore.instance;
+          final query = await db.collection('quizzes')
+              .where('date', isEqualTo: dateStr)
+              .where('type', isEqualTo: 'current_affairs')
+              .get();
+
+          if (query.docs.isNotEmpty) {
+            await query.docs.first.reference.set(quizData, SetOptions(merge: true));
+          } else {
+            await db.collection('quizzes').add(quizData);
+          }
+          return true;
+        }
+      } catch (e) {
+        AppLog.e("AI_DEBUG: CA Quiz Parse Error: $e");
+      }
+    }
+    return false;
+  }
+
+  static Future<void> checkAndAutoGenerateCurrentAffairsQuiz() async {
+    try {
+      final todayStr = AppDate.getTodayString();
+      final db = FirebaseFirestore.instance;
+      
+      final query = await db.collection('quizzes')
+          .where('date', isEqualTo: todayStr)
+          .where('type', isEqualTo: 'current_affairs')
+          .limit(1)
+          .get();
+          
+      if (query.docs.isEmpty) {
+        AppLog.d("AI_DEBUG: No CA quiz found for today ($todayStr). Generating...");
+        await generateAndSaveCurrentAffairsQuiz(AppDate.getISTNow());
+      }
+    } catch (e) {
+      AppLog.e("AI_DEBUG: Error in auto CA quiz generation", e);
+    }
+  }
+
   static Future<void> checkAndAutoGenerateNews() async {
     try {
       final todayStr = AppDate.getTodayString();

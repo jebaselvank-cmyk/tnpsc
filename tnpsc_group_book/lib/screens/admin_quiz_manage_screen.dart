@@ -19,7 +19,7 @@ class AdminQuizManageScreen extends StatefulWidget {
 
 class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
   DateTime _selectedDate = AppDate.getISTNow().add(const Duration(days: 1));
-  String _quizType = 'daily_quiz'; // 'daily_quiz', 'mock_quiz', 'room_quiz'
+  String _quizType = 'daily_quiz'; // 'daily_quiz', 'mock_quiz', 'room_quiz', 'current_affairs'
   String _selectedSubject = 'general_tamil';
   bool _isLoading = false;
   List<Question> _questions = [];
@@ -58,8 +58,8 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
         }
       } else {
         String dateStr = DateFormat('yyyy-MM-dd', 'en_US').format(_selectedDate);
-        String collection = _quizType == 'daily_quiz' ? 'quizzes' : 'mock_tests';
-        String typeFilter = 'daily_quiz';
+        String collection = (_quizType == 'daily_quiz' || _quizType == 'current_affairs') ? 'quizzes' : 'mock_tests';
+        String typeFilter = _quizType;
 
         final query = await FirebaseFirestore.instance
             .collection(collection)
@@ -89,7 +89,7 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
     if (_docId == null) return;
 
     setState(() => _isLoading = true);
-    String collection = _quizType == 'daily_quiz'
+    String collection = (_quizType == 'daily_quiz' || _quizType == 'current_affairs')
         ? 'quizzes'
         : (_quizType == 'mock_quiz' ? 'mock_tests' : 'room_predefined_quizzes');
 
@@ -115,6 +115,8 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
     bool success = false;
     if (_quizType == 'daily_quiz') {
       success = await AiService.generateAndSaveDailyQuiz(_selectedDate);
+    } else if (_quizType == 'current_affairs') {
+      success = await AiService.generateAndSaveCurrentAffairsQuiz(_selectedDate);
     } else if (_quizType == 'mock_quiz') {
       success = await AiService.generateAndSaveMockQuiz(_selectedDate);
     } else {
@@ -380,6 +382,7 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
                         decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12)),
                         items: const [
                           DropdownMenuItem(value: 'daily_quiz', child: Text("Daily Quiz")),
+                          DropdownMenuItem(value: 'current_affairs', child: Text("Current Affairs")),
                           DropdownMenuItem(value: 'mock_quiz', child: Text("Mock Quiz")),
                           DropdownMenuItem(value: 'room_quiz', child: Text("Room Quiz")),
                         ],
