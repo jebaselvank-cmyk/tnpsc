@@ -27,16 +27,29 @@ class ShareService {
     }
 
     return """
-📊 *TNPSC Daily Challenge* 📊
+🎯 *TNPSC Quiz Challenge | உங்களால் சரியாக பதில் சொல்ல முடியுமா?* 🔥
 
 *கேள்வி / Question:*
 $questionTa
 ($questionEn)
 
 $optionsText
-✅ *சரியான விடையைக் காண ஆப்பை பதிவிறக்கவும்:*
-👇 *Download App to check answer:*
+
+TNPSC Group 1, Group 2, Group 4 தேர்வுக்கு தயாராகிறீர்களா? 📚
+இந்த Quiz-ல் உங்களுடைய அறிவை Test பண்ணிப் பாருங்கள்! 💯
+
+✅ Daily TNPSC Quiz
+✅ Previous Year Questions
+✅ Mock Tests
+✅ Daily Study & Practice
+✅ Leaderboard & Streak 🔥
+
+📲 *TNPSC Master App Download:*
 $_appLink
+
+👉 *App-ஐ Download செய்து தினமும் Quiz Practice செய்யுங்கள்!*
+
+#TNPSC #TNPSCQuiz #TNPSCGroup4 #TNPSCGroup2 #TNPSCPreparation #TNPSC2026 #TNPSCMaster #DailyQuiz #Tamilவினாடிவினா #GovernmentJobs
 """;
   }
 
