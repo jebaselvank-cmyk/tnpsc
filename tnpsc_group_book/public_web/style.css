@@ -111,11 +111,33 @@ body {
 .option-btn.correct { background: #e6f4ea !important; border-color: var(--success) !important; color: var(--success) !important; font-weight: 700; }
 .option-btn.wrong { background: #fce8e6 !important; border-color: var(--danger) !important; color: var(--danger) !important; }
 
-/* --- Result & Footer --- */
-.result-card { text-align: center; padding: 40px 20px; }
-.score-circle { width: 140px; height: 140px; border-radius: 50%; background: #f1f3f4; display: flex; align-items: center; justify-content: center; margin: 0 auto 30px; border: 8px solid var(--primary-bg); }
-.score-num { font-size: 2.2rem; font-weight: 900; color: var(--primary); }
-.share-btn { background: #25d366; color: white; border: none; padding: 15px; border-radius: 30px; font-weight: 800; width: 100%; margin-bottom: 12px; cursor: pointer; }
+/* --- Result UI --- */
+.result-card { background: white; padding: 35px 25px; border-radius: 20px; border: 1px solid var(--border); text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+.performance-msg { font-size: 1.4rem; font-weight: 800; color: var(--primary); margin-bottom: 25px; }
+.score-circle { width: 150px; height: 150px; border-radius: 50%; background: #f0f7ff; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto 30px; border: 10px solid var(--primary-bg); position: relative; }
+.score-num { font-size: 2.5rem; font-weight: 900; color: var(--primary); line-height: 1; }
+.score-percent-label { font-size: 0.9rem; color: var(--text-sub); font-weight: 700; margin-top: 5px; }
+
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; }
+.stat-box { padding: 15px; border-radius: 12px; background: #f8f9fa; border: 1px solid #eee; }
+.stat-val { display: block; font-size: 1.2rem; font-weight: 800; }
+.stat-label { font-size: 0.75rem; font-weight: 700; color: var(--text-sub); text-transform: uppercase; }
+.stat-box.success-stat .stat-val { color: var(--success); }
+.stat-box.danger-stat .stat-val { color: var(--danger); }
+
+.action-buttons { display: flex; flex-direction: column; gap: 12px; }
+.share-btn { background: #25d366; color: white; border: none; padding: 16px; border-radius: 30px; font-weight: 800; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: 0.2s; }
+.share-btn:hover { background: #1ebe57; transform: translateY(-2px); }
+.secondary-btn { background: #f1f3f4; color: var(--text-main); border: none; padding: 14px; border-radius: 30px; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: 0.2s; }
+.secondary-btn:hover { background: #e8eaed; }
+
+@media (max-width: 600px) {
+    .result-card { padding: 25px 15px !important; }
+    .performance-msg { font-size: 1.2rem !important; }
+    .score-circle { width: 120px !important; height: 120px !important; border-width: 8px !important; }
+    .score-num { font-size: 2rem !important; }
+    .stat-val { font-size: 1.1rem !important; }
+}
 .app-footer { text-align: center; padding: 40px 16px; color: var(--text-sub); font-size: 0.85rem; border-top: 1px solid var(--border); margin-top: 50px; }
 
 /* --- Mobile Fixes --- */

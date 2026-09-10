@@ -157,7 +157,7 @@ function renderHomeUI() {
         ca: currentLang === 'ta' ? 'நடப்பு நிகழ்வுகள்' : 'Current Affairs',
         history: currentLang === 'ta' ? 'தேதியைத் தேர்ந்தெடுக்கவும்' : 'Pick a Date to Play',
         viewAll: currentLang === 'ta' ? 'அனைத்தையும் பார்க்க' : 'View All ›',
-        start: currentLang === 'ta' ? 'தொடங்கு' : 'Start ›'
+        start: currentLang === 'ta' ? 'தொடங்கு' : 'Start'
     };
 
     container.innerHTML = `
@@ -275,14 +275,55 @@ function nextQuestionAfterRead() {
 
 function renderResultsUI() {
     const container = document.getElementById('main-content');
-    const percentage = Math.round((score / currentQuiz.questions.length) * 100);
+    const total = currentQuiz.questions.length;
+    const percentage = Math.round((score / total) * 100);
+
+    let msg = "";
+    let emoji = "";
+    if (percentage >= 80) {
+        msg = currentLang === 'ta' ? "மிக நன்று!" : "Excellent!";
+        emoji = "🏆";
+    } else if (percentage >= 50) {
+        msg = currentLang === 'ta' ? "நல்ல முயற்சி!" : "Good Try!";
+        emoji = "👍";
+    } else {
+        msg = currentLang === 'ta' ? "மீண்டும் முயற்சி செய்!" : "Keep Practicing!";
+        emoji = "📚";
+    }
+
     container.innerHTML = `
         <div class="result-card">
-            <h2 class="result-title">Well Done!</h2>
-            <div class="score-circle" style="--percentage: ${percentage}%"><div class="score-content"><span class="score-num">${score}/${currentQuiz.questions.length}</span><span class="score-percent">${percentage}% Score</span></div></div>
-            <div class="ad-slot large-ad">${getAdHtml(CONFIG.adsense.resultSlot)}</div>
-            <button class="share-btn" onclick="shareResult()">Share Score on WhatsApp</button>
-            <button class="home-btn" onclick="navigateTo('home')">Back to Home</button>
+            <div class="performance-msg">${emoji} ${msg}</div>
+
+            <div class="score-circle">
+                <span class="score-num">${score}/${total}</span>
+                <span class="score-percent-label">${percentage}% Score</span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box success-stat">
+                    <span class="stat-val">${score}</span>
+                    <span class="stat-label">${currentLang === 'ta' ? 'சரி' : 'Correct'}</span>
+                </div>
+                <div class="stat-box danger-stat">
+                    <span class="stat-val">${total - score}</span>
+                    <span class="stat-label">${currentLang === 'ta' ? 'தவறு' : 'Wrong'}</span>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="share-btn" onclick="shareResult()">
+                    <span>📲</span> ${currentLang === 'ta' ? 'வாட்ஸ்அப்பில் பகிர்க' : 'Share on WhatsApp'}
+                </button>
+                <button class="secondary-btn" onclick="location.reload()">
+                    ${currentLang === 'ta' ? 'மீண்டும் விளையாடு' : 'Try Again'}
+                </button>
+                <button class="secondary-btn" onclick="navigateTo('home')">
+                    ${currentLang === 'ta' ? 'முகப்புப் பக்கம்' : 'Back to Home'}
+                </button>
+            </div>
+
+            <div class="ad-slot large-ad" style="margin-top:30px;">${getAdHtml(CONFIG.adsense.resultSlot)}</div>
         </div>
     `;
 }
