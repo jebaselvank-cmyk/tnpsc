@@ -19,7 +19,7 @@ let currentQuiz = null;
 let currentQuestionIndex = 0;
 let score = 0;
 let activeDate = null;
-let currentLang = 'ta';
+let currentLang = 'en'; // Changed default to English
 
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
@@ -101,7 +101,8 @@ async function fetchQuizData() {
 function parseCSVRobust(str) {
     const arr = [];
     let quote = false;
-    for (let row = col = c = 0; c < str.length; c++) {
+    let row = 0, col = 0;
+    for (let c = 0; c < str.length; c++) {
         let cc = str[c], nc = str[c+1];
         arr[row] = arr[row] || [];
         arr[row][col] = arr[row][col] || '';
@@ -187,8 +188,25 @@ function renderHomeUI() {
         </div>
         <div class="featured-section">
             <div class="quiz-row-flex" style="display: flex; gap: 15px; flex-wrap: wrap;">
-                ${selectedDay.daily.length > 0 ? `<div class="premium-quiz-card" style="flex: 1; min-width: 280px;" onclick="navigateTo('quiz/daily/' + '${selectedDay.date}')"><div class="quiz-details"><div class="quiz-type-tag">📅 ${t.daily}</div><h2 class="quiz-date-text">${formatDate(selectedDay.date)}</h2><div class="quiz-meta">${selectedDay.daily.length} Questions</div></div><button class="premium-start-btn">${t.start}</button></div>` : ''}
-                ${selectedDay.ca.length > 0 ? `<div class="premium-quiz-card" style="flex: 1; min-width: 280px; border-left: 6px solid #34a853;" onclick="navigateTo('quiz/ca/' + '${selectedDay.date}')"><div class="quiz-details"><div class="quiz-type-tag" style="color: #34a853;">🔥 ${t.ca}</div><h2 class="quiz-date-text">${formatDate(selectedDay.date)}</h2><div class="quiz-meta">${selectedDay.ca.length} Questions</div></div><button class="premium-start-btn" style="background: #34a853;">${t.start}</button></div>` : ''}
+                ${selectedDay.daily.length > 0 ? `
+                <div class="premium-quiz-card" style="flex: 1; min-width: 280px; border-left: 6px solid #1a73e8;" onclick="navigateTo('quiz/daily/' + '${selectedDay.date}')">
+                    <div class="quiz-details">
+                        <div class="quiz-type-tag"><span>📅</span> ${t.daily}</div>
+                        <h2 class="quiz-date-text">${formatDate(selectedDay.date)}</h2>
+                        <div class="quiz-meta">${selectedDay.daily.length} Questions</div>
+                    </div>
+                    <button class="premium-start-btn">${t.start}</button>
+                </div>` : ''}
+
+                ${selectedDay.ca.length > 0 ? `
+                <div class="premium-quiz-card" style="flex: 1; min-width: 280px; border-left: 6px solid #34a853;" onclick="navigateTo('quiz/ca/' + '${selectedDay.date}')">
+                    <div class="quiz-details">
+                        <div class="quiz-type-tag" style="color: #34a853;"><span>🔥</span> ${t.ca}</div>
+                        <h2 class="quiz-date-text">${formatDate(selectedDay.date)}</h2>
+                        <div class="quiz-meta">${selectedDay.ca.length} Questions</div>
+                    </div>
+                    <button class="premium-start-btn" style="background: #34a853;">${t.start}</button>
+                </div>` : ''}
             </div>
         </div>
         <div class="ad-slot banner-ad">${getAdHtml(CONFIG.adsense.bannerSlot)}</div>
@@ -201,6 +219,35 @@ function renderHomeUI() {
                 }).join('')}
             </div>
         </div>
+
+        <!-- 📚 NEW KNOWLEDGE HUB SECTION -->
+        <section class="knowledge-hub" style="margin-top: 40px; border-top: 1px solid #eee; padding-top: 30px;">
+            <h2 class="section-title-new" style="margin-bottom: 20px; color: #174ea6;">
+                ${currentLang === 'ta' ? 'பாடவாரியான வழிகாட்டிகள்' : 'Study Guides & Preparation'}
+            </h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <a href="tnpsc-exams-guide.html" style="text-decoration: none; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 5px;">
+                    <span style="font-size: 1.2rem;">🏆</span>
+                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">Exams Guide</span>
+                    <span style="font-size: 0.75rem; color: #666;">Group 1, 2, 4 Strategy</span>
+                </a>
+                <a href="tnpsc-group-4-mock-test.html" style="text-decoration: none; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 5px;">
+                    <span style="font-size: 1.2rem;">📝</span>
+                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">Group 4 Test</span>
+                    <span style="font-size: 0.75rem; color: #666;">Free Mock Exams</span>
+                </a>
+                <a href="tnpsc-aptitude-questions.html" style="text-decoration: none; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 5px;">
+                    <span style="font-size: 1.2rem;">📊</span>
+                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">Aptitude Hub</span>
+                    <span style="font-size: 0.75rem; color: #666;">Maths with Solutions</span>
+                </a>
+                <a href="tnpsc-current-affairs.html" style="text-decoration: none; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 5px;">
+                    <span style="font-size: 1.2rem;">🔥</span>
+                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">Daily CA</span>
+                    <span style="font-size: 0.75rem; color: #666;">Latest TN Updates</span>
+                </a>
+            </div>
+        </section>
     `;
 }
 
