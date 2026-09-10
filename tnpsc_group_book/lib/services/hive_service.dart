@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/question.dart';
 import 'dart:convert';
-import 'package:package_info_plus/package_info_plus.dart';
 import '../utils/app_log.dart';
 import '../utils/app_date.dart';
 
@@ -192,6 +191,20 @@ class HiveService {
     final box = Hive.box(userBoxName);
     final today = _todayDate();
     await box.put('dailyquiz_last_completed_date', today);
+  }
+
+  // Current Affairs Quiz Limit
+  static bool isCaQuizDone() {
+    final box = Hive.box(userBoxName);
+    final today = _todayDate();
+    String? lastDone = box.get('caquiz_last_completed_date') as String?;
+    return lastDone == today;
+  }
+
+  static Future<void> setCaQuizDone() async {
+    final box = Hive.box(userBoxName);
+    final today = _todayDate();
+    await box.put('caquiz_last_completed_date', today);
   }
 
   // Mock Quiz Limit
@@ -384,16 +397,16 @@ class HiveService {
   }
 
   // ------------------- Last Fetch Tracking -------------------
-  static Future<void> setLastLeaderboardFetch(bool isDaily) async {
+  static Future<void> setLastLeaderboardFetch(bool isDaily, {bool isCa = false}) async {
     final box = Hive.box(userBoxName);
-    final key = isDaily ? 'last_leaderboard_fetch_daily' : 'last_leaderboard_fetch_mock';
+    final key = isCa ? 'last_leaderboard_fetch_ca' : (isDaily ? 'last_leaderboard_fetch_daily' : 'last_leaderboard_fetch_mock');
     await box.put(key, _todayDate());
   }
 
-  static bool shouldFetchLeaderboard(bool isDaily) {
+  static bool shouldFetchLeaderboard(bool isDaily, {bool isCa = false}) {
     final box = Hive.box(userBoxName);
-    final key = isDaily ? 'last_leaderboard_fetch_time' : 'last_leaderboard_fetch_time_mock';
-    final dataKey = isDaily ? 'leaderboard_data_daily' : 'leaderboard_data_mock';
+    final key = isCa ? 'last_leaderboard_fetch_time_ca' : (isDaily ? 'last_leaderboard_fetch_time' : 'last_leaderboard_fetch_time_mock');
+    final dataKey = isCa ? 'leaderboard_data_ca' : (isDaily ? 'leaderboard_data_daily' : 'leaderboard_data_mock');
     
     String? lastFetchStr = box.get(key) as String?;
     String? cachedData = box.get(dataKey) as String?;
@@ -406,12 +419,12 @@ class HiveService {
     return DateTime.now().difference(lastFetch).inHours >= 6;
   }
 
-  static Future<void> markSessionLeaderboardFetched() async {
+  static Future<void> markSessionLeaderboardFetched({bool isCa = false, bool isDaily = true}) async {
     final box = Hive.box(userBoxName);
     await box.put('session_leaderboard_fetched', true);
     
     // Also update the exact fetch time for the 6-hour window
-    final key = 'last_leaderboard_fetch_time'; // Default to daily or handle both
+    final key = isCa ? 'last_leaderboard_fetch_time_ca' : (isDaily ? 'last_leaderboard_fetch_time' : 'last_leaderboard_fetch_time_mock');
     await box.put(key, DateTime.now().toIso8601String());
   }
 
@@ -420,15 +433,15 @@ class HiveService {
     await box.put('session_leaderboard_fetched', false);
   }
 
-  static Future<void> saveLeaderboardData(bool isDaily, List<Map<String, dynamic>> data) async {
+  static Future<void> saveLeaderboardData(bool isDaily, List<Map<String, dynamic>> data, {bool isCa = false}) async {
     final box = Hive.box(userBoxName);
-    final key = isDaily ? 'leaderboard_data_daily' : 'leaderboard_data_mock';
+    final key = isCa ? 'leaderboard_data_ca' : (isDaily ? 'leaderboard_data_daily' : 'leaderboard_data_mock');
     await box.put(key, jsonEncode(data));
   }
 
-  static List<Map<String, dynamic>>? getLeaderboardData(bool isDaily) {
+  static List<Map<String, dynamic>>? getLeaderboardData(bool isDaily, {bool isCa = false}) {
     final box = Hive.box(userBoxName);
-    final key = isDaily ? 'leaderboard_data_daily' : 'leaderboard_data_mock';
+    final key = isCa ? 'leaderboard_data_ca' : (isDaily ? 'leaderboard_data_daily' : 'leaderboard_data_mock');
     String? data = box.get(key);
     if (data != null) {
       List<dynamic> decoded = jsonDecode(data);

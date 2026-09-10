@@ -92,6 +92,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               onTap: _showBulkQuizGenDialog,
             ),
             const SizedBox(height: 12),
+            // Bulk 7‑day CA Quizzes
+            _buildAdminCard(
+              context,
+              title: "Bulk Generate 7 Days CA Quizzes",
+              icon: Icons.newspaper_rounded,
+              color: Colors.blue,
+              onTap: _showBulkCaQuizGenDialog,
+            ),
+            const SizedBox(height: 12),
             // Bulk 3‑day Quizzes (50‑question each)
             _buildAdminCard(
               context,
@@ -360,6 +369,67 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("${AppLanguage.getString('error_prefix')}: $e"), backgroundColor: Colors.red),
+          );
+        }
+      }
+  }
+
+  void _showBulkCaQuizGenDialog() async {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(AppLanguage.languageNotifier.value == 'ta' ? '7 நாட்களுக்கான நடப்பு நிகழ்வுகள் வினாக்கள் உருவாகின்றன...' : 'Generating 7 days of CA quizzes...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      try {
+        int successCount = 0;
+        for (int i = 0; i < 7; i++) {
+          DateTime targetDate = AppDate.getISTNow().add(Duration(days: i));
+          String dateStr = DateFormat('yyyy-MM-dd', 'en_US').format(targetDate);
+
+          final db = FirebaseFirestore.instance;
+          final existing = await db.collection('quizzes')
+              .where('date', isEqualTo: dateStr)
+              .where('type', isEqualTo: 'current_affairs')
+              .get();
+
+          if (existing.docs.isEmpty) {
+            bool success = await AiService.generateAndSaveCurrentAffairsQuiz(targetDate);
+            if (success) successCount++;
+            await Future.delayed(const Duration(seconds: 5));
+          } else {
+            successCount++;
+          }
+        }
+
+        if (context.mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Successfully generated/verified $successCount days of CA quizzes."),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
           );
         }
       }

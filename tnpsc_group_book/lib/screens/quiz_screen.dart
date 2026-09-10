@@ -151,6 +151,17 @@ class _QuizScreenState extends State<QuizScreen> {
         }
         return;
       }
+    } else if (widget.subjectTitle == "Current Affairs Quiz" ||
+               widget.subjectTitle == AppLanguage.getString('ca_daily_quiz')) {
+      if (HiveService.isCaQuizDone()) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(AppLanguage.getString('completed'))),
+          );
+        }
+        return;
+      }
     }
 
     List<Question> questions = [];
@@ -165,6 +176,9 @@ class _QuizScreenState extends State<QuizScreen> {
     } else if (widget.subjectTitle == "Mock Quiz" ||
                widget.subjectTitle == AppLanguage.getString('mock_quiz')) {
       questions = await _firestoreService.getMockQuiz();
+    } else if (widget.subjectTitle == "Current Affairs Quiz" ||
+               widget.subjectTitle == AppLanguage.getString('ca_daily_quiz')) {
+      questions = await _firestoreService.getCurrentAffairsQuiz();
     } else if (widget.subjectTitle == AppLanguage.getString('mistake_bank')) {
       questions = await _firestoreService.getMistakes();
     } else if (widget.subjectTitle == AppLanguage.getString('bookmarks')) {
@@ -178,7 +192,9 @@ class _QuizScreenState extends State<QuizScreen> {
       setState(() {
         _loadedQuestions = shuffledQuestions;
         int limitCount = (widget.subjectTitle == "Daily Quiz" || 
-                          widget.subjectTitle == AppLanguage.getString('daily_quiz')) ? 20
+                          widget.subjectTitle == AppLanguage.getString('daily_quiz') ||
+                          widget.subjectTitle == "Current Affairs Quiz" ||
+                          widget.subjectTitle == AppLanguage.getString('ca_daily_quiz')) ? 20
                        : (widget.subjectTitle == "Mock Quiz" || 
                           widget.subjectTitle == AppLanguage.getString('mock_quiz') || 
                           widget.isMockTest) ? 50 : 20;
@@ -209,7 +225,9 @@ class _QuizScreenState extends State<QuizScreen> {
     setState(() {
       _loadedQuestions = localQuestions;
       int limitCount = (widget.subjectTitle == "Daily Quiz" || 
-                        widget.subjectTitle == AppLanguage.getString('daily_quiz')) ? 20
+                        widget.subjectTitle == AppLanguage.getString('daily_quiz') ||
+                        widget.subjectTitle == "Current Affairs Quiz" ||
+                        widget.subjectTitle == AppLanguage.getString('ca_daily_quiz')) ? 20
                      : (widget.subjectTitle == "Mock Quiz" || 
                         widget.subjectTitle == AppLanguage.getString('mock_quiz') || 
                         widget.isMockTest) ? 50 : 20;
@@ -502,11 +520,15 @@ class _QuizScreenState extends State<QuizScreen> {
                     widget.subjectTitle == AppLanguage.getString('mock_quiz_title') ||
                     widget.subjectTitle == "Mock Quiz" || 
                     widget.isMockTest;
+      bool isCa = widget.subjectTitle == "Current Affairs Quiz" || 
+                  widget.subjectTitle == AppLanguage.getString('ca_daily_quiz');
 
       if (isDaily) {
         saveTitle = "Daily Quiz";
       } else if (isMock) {
         saveTitle = "Mock Quiz";
+      } else if (isCa) {
+        saveTitle = "Current Affairs Quiz";
       }
 
       await _firestoreService.saveQuizResult(
@@ -516,6 +538,7 @@ class _QuizScreenState extends State<QuizScreen> {
         timeTaken: timeTakenSeconds,
         isDaily: isDaily,
         isMock: isMock,
+        isCa: isCa,
       );
 
       if (isDaily) {
@@ -524,6 +547,8 @@ class _QuizScreenState extends State<QuizScreen> {
         await NotificationService.reschedulePersonalizedReminders();
       } else if (isMock) {
         HiveService.setMockQuizDone();
+      } else if (isCa) {
+        HiveService.setCaQuizDone();
       }
     }
 

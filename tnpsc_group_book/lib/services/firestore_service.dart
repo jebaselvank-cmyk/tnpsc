@@ -78,6 +78,77 @@ class FirestoreService {
     }
   }
 
+  /// Automatically checks and generates Daily, Mock, and CA quizzes for the next 5 days if missing.
+  Future<void> autoGenerateFutureQuizzes() async {
+    try {
+      // Check if we already ran this check today to avoid redundant Firestore reads
+      final box = Hive.box(HiveService.userBoxName);
+      String todayStr = AppDate.getTodayString();
+      String? lastCheck = box.get('last_future_gen_check') as String?;
+      
+      if (lastCheck == todayStr) {
+        AppLog.d("AI_DEBUG: Future quiz check already performed today. Skipping.");
+        return;
+      }
+
+      AppLog.d("AI_DEBUG: Running auto-generation check for next 5 days...");
+      DateTime now = AppDate.getISTNow();
+
+      for (int i = 0; i < 5; i++) {
+        DateTime targetDate = now.add(Duration(days: i));
+        String dateStr = AppDate.format(targetDate);
+
+        // 1. Check Daily Quiz
+        final dailySnap = await _db.collection('quizzes')
+            .where('date', isEqualTo: dateStr)
+            .where('type', isEqualTo: 'daily_quiz')
+            .limit(1)
+            .get();
+        if (dailySnap.docs.isEmpty) {
+          AppLog.d("AI_DEBUG: Daily quiz missing for $dateStr. Generating...");
+          await AiService.generateAndSaveDailyQuiz(targetDate);
+          await Future.delayed(const Duration(seconds: 3));
+        }
+
+        // 2. Check Current Affairs Quiz
+        final caSnap = await _db.collection('quizzes')
+            .where('date', isEqualTo: dateStr)
+            .where('type', isEqualTo: 'current_affairs')
+            .limit(1)
+            .get();
+        if (caSnap.docs.isEmpty) {
+          AppLog.d("AI_DEBUG: CA quiz missing for $dateStr. Generating...");
+          await AiService.generateAndSaveCurrentAffairsQuiz(targetDate);
+          await Future.delayed(const Duration(seconds: 3));
+        }
+
+        // 3. Check Mock Quiz (Scheduled days: Sun, Tue, Thu, Sat)
+        bool isMockDay = targetDate.weekday == DateTime.sunday ||
+            targetDate.weekday == DateTime.tuesday ||
+            targetDate.weekday == DateTime.thursday ||
+            targetDate.weekday == DateTime.saturday;
+            
+        if (isMockDay) {
+          final mockSnap = await _db.collection('mock_tests')
+              .where('date', isEqualTo: dateStr)
+              .where('quizType', isEqualTo: 'daily_50_quiz')
+              .limit(1)
+              .get();
+          if (mockSnap.docs.isEmpty) {
+            AppLog.d("AI_DEBUG: Mock quiz missing for $dateStr. Generating...");
+            await AiService.generateAndSaveMockQuiz(targetDate);
+            await Future.delayed(const Duration(seconds: 3));
+          }
+        }
+      }
+      
+      await box.put('last_future_gen_check', todayStr);
+      AppLog.d("AI_DEBUG: Future quiz generation check complete.");
+    } catch (e) {
+      AppLog.e("AI_DEBUG: Error in autoGenerateFutureQuizzes", e);
+    }
+  }
+
   /// Updates user gender in Firestore
   Future<void> updateGender(String gender) async {
     String? uid = _auth.currentUser?.uid;
@@ -247,10 +318,6 @@ class FirestoreService {
       final DateTime cutoff14 = now.subtract(const Duration(days: 14));
       final cutoffDate14 = DateTime(cutoff14.year, cutoff14.month, cutoff14.day);
 
-      // Current Affairs retention (30 days ago)
-      final DateTime cutoff15 = now.subtract(const Duration(days: 15));
-      final cutoffDate15 = DateTime(cutoff15.year, cutoff15.month, cutoff15.day);
-
       // News cutoff (10 days ago)
       final DateTime cutoff10 = now.subtract(const Duration(days: 10));
       final cutoffDate10 = DateTime(cutoff10.year, cutoff10.month, cutoff10.day);
@@ -272,10 +339,10 @@ class FirestoreService {
           } catch (e) { AppLog.e("MAINTENANCE ERROR (Daily Quizzes): $e"); }
         }(),
 
-        // Quizzes: Current Affairs (30 days)
+        // Quizzes: Current Affairs (14 days)
         () async {
           try {
-            int count = await _purgeCollectionByDate('quizzes', cutoffDate15, type: 'current_affairs');
+            int count = await _purgeCollectionByDate('quizzes', cutoffDate14, type: 'current_affairs');
             results['quizzes'] = (results['quizzes'] ?? 0) + count;
           } catch (e) { AppLog.e("MAINTENANCE ERROR (CA Quizzes): $e"); }
         }(),
@@ -294,10 +361,10 @@ class FirestoreService {
           } catch (e) { AppLog.e("MAINTENANCE ERROR (Results): $e"); }
         }(),
 
-        // News
+        // News (14 days)
         () async {
           try {
-            results['news'] = await _purgeCollectionByDate('current_affairs_points', cutoffDate10);
+            results['news'] = await _purgeCollectionByDate('current_affairs_points', cutoffDate14);
           } catch (e) { AppLog.e("MAINTENANCE ERROR (News): $e"); }
         }(),
 
@@ -353,6 +420,7 @@ class FirestoreService {
       List<String> potentialIds = [
         'daily_$dateStr',
         'mock_$dateStr',
+        'ca_$dateStr',
         'weekly_$dateStr'
       ];
 
@@ -383,6 +451,7 @@ class FirestoreService {
       String datePart = "";
       if (id.startsWith('daily_')) datePart = id.replaceFirst('daily_', '');
       else if (id.startsWith('mock_')) datePart = id.replaceFirst('mock_', '');
+      else if (id.startsWith('ca_')) datePart = id.replaceFirst('ca_', '');
       else if (id.startsWith('weekly_')) datePart = id.replaceFirst('weekly_', '');
       
       if (datePart.isNotEmpty) {
@@ -891,6 +960,90 @@ class FirestoreService {
     return HiveService.getQuestions("Daily Quiz");
   }
 
+  // Fetch Current Affairs Quiz Questions with Caching
+  Future<List<Question>> getCurrentAffairsQuiz() async {
+    try {
+      String today = AppDate.getTodayString();
+
+      // Check Hive first
+      List<Question> cachedToday = HiveService.getQuestions("Current Affairs Quiz");
+      String? lastActiveDate = Hive.box(HiveService.userBoxName).get('last_active_ca_quiz_date') as String?;
+      if (cachedToday.isNotEmpty && lastActiveDate == today) {
+        AppLog.d("AI_DEBUG: Today's CA quiz fetched from HIVE");
+        return cachedToday;
+      }
+
+      // 1. Check if today's CA quiz exists
+      QuerySnapshot todaySnap = await _db
+          .collection('quizzes')
+          .where('type', isEqualTo: 'current_affairs')
+          .where('date', isEqualTo: today)
+          .limit(1)
+          .get();
+
+      DocumentSnapshot? resolvedDoc;
+      if (todaySnap.docs.isNotEmpty) {
+        resolvedDoc = todaySnap.docs.first;
+        AppLog.d("AI_DEBUG: Today's CA quiz found in Firestore");
+      } else {
+        // 2. Not found, try generating via AI
+        AppLog.d("AI_DEBUG: Today's CA quiz not found. Generating via AI...");
+        try {
+          bool generated = await AiService.generateAndSaveCurrentAffairsQuiz(AppDate.getISTNow())
+              .timeout(const Duration(seconds: 40));
+          if (generated) {
+            QuerySnapshot newTodaySnap = await _db
+                .collection('quizzes')
+                .where('type', isEqualTo: 'current_affairs')
+                .where('date', isEqualTo: today)
+                .limit(1)
+                .get();
+            if (newTodaySnap.docs.isNotEmpty) {
+              resolvedDoc = newTodaySnap.docs.first;
+              AppLog.d("AI_DEBUG: AI Generated CA quiz for today fetched successfully");
+            }
+          }
+        } catch (e) {
+          AppLog.d("AI_DEBUG: CA quiz generation failed/timed out: $e. Falling back...");
+        }
+      }
+
+      // 3. Fallback: Fetch older CA quiz
+      if (resolvedDoc == null) {
+        AppLog.d("AI_DEBUG: CA quiz missing today. Fetching older CA quiz as fallback...");
+        QuerySnapshot fallbackSnap = await _db
+            .collection('quizzes')
+            .where('type', isEqualTo: 'current_affairs')
+            .where('date', isLessThan: today)
+            .orderBy('date', descending: true)
+            .limit(10)
+            .get();
+
+        if (fallbackSnap.docs.isNotEmpty) {
+          final docsList = List<DocumentSnapshot>.from(fallbackSnap.docs);
+          docsList.shuffle();
+          resolvedDoc = docsList.first;
+          AppLog.d("AI_DEBUG: Fallback to CA quiz from date: ${resolvedDoc.get('date')}");
+        }
+      }
+
+      if (resolvedDoc != null) {
+        String activeDate = resolvedDoc.get('date');
+        await Hive.box(HiveService.userBoxName).put('last_active_ca_quiz_date', activeDate);
+
+        List<dynamic> questionsData = resolvedDoc.get('questions');
+        List<Question> questions = questionsData.map((q) => Question.fromMap(q as Map<String, dynamic>)).toList();
+
+        await HiveService.saveQuestions("Current Affairs Quiz", questions);
+        return questions;
+      }
+    } catch (e) {
+      AppLog.e("Error fetching CA quiz", e);
+    }
+
+    return HiveService.getQuestions("Current Affairs Quiz");
+  }
+
   // Fetch a deterministic rotating quiz based on the current time slot (Every 6 Hours)
   // Rotation: General Tamil -> General Studies -> Aptitude
   // The question returned is deterministic based on the slot seed to stay consistent for all users
@@ -1135,14 +1288,14 @@ class FirestoreService {
   }
 
   // Get Top Scorers for Leaderboard (Static Fetch - No Stream)
-  Future<List<Map<String, dynamic>>> getLeaderboard({bool isDaily = true, bool forceRefresh = false}) async {
+  Future<List<Map<String, dynamic>>> getLeaderboard({bool isDaily = true, bool isCa = false, bool forceRefresh = false}) async {
     try {
-      AppLog.d("AI_DEBUG: getLeaderboard(isDaily: $isDaily, forceRefresh: $forceRefresh) started");
+      AppLog.d("AI_DEBUG: getLeaderboard(isDaily: $isDaily, isCa: $isCa, forceRefresh: $forceRefresh) started");
       
       if (!forceRefresh) {
-        if (!HiveService.shouldFetchLeaderboard(isDaily)) {
+        if (!HiveService.shouldFetchLeaderboard(isDaily, isCa: isCa)) {
            AppLog.d("AI_DEBUG: Returning Leaderboard from HIVE cache");
-           return HiveService.getLeaderboardData(isDaily) ?? [];
+           return HiveService.getLeaderboardData(isDaily, isCa: isCa) ?? [];
         }
       }
 
@@ -1152,6 +1305,10 @@ class FirestoreService {
         String today = AppDate.getTodayString();
         fullPath = 'leaderboards/daily_$today/scores';
         query = _db.collection('leaderboards').doc('daily_$today').collection('scores');
+      } else if (isCa) {
+        String today = AppDate.getTodayString();
+        fullPath = 'leaderboards/ca_$today/scores';
+        query = _db.collection('leaderboards').doc('ca_$today').collection('scores');
       } else {
         String docId = _getMockLeaderboardDocId();
         fullPath = 'leaderboards/$docId/scores';
@@ -1206,20 +1363,20 @@ class FirestoreService {
       });
       
       // Update Hive cache
-      await HiveService.saveLeaderboardData(isDaily, data);
-      await HiveService.setLastLeaderboardFetch(isDaily);
-      await HiveService.markSessionLeaderboardFetched();
+      await HiveService.saveLeaderboardData(isDaily, data, isCa: isCa);
+      await HiveService.setLastLeaderboardFetch(isDaily, isCa: isCa);
+      await HiveService.markSessionLeaderboardFetched(isCa: isCa, isDaily: isDaily);
 
       return data;
     } catch (e, stack) {
       AppLog.e("AI_DEBUG: LEADERBOARD ERROR", e, stack);
       // Fallback to Hive if server fails
-      return HiveService.getLeaderboardData(isDaily) ?? [];
+      return HiveService.getLeaderboardData(isDaily, isCa: isCa) ?? [];
     }
   }
 
   // Get current user's accumulated score for today (Daily or Mock)
-  Future<Map<String, dynamic>?> getUserBestResultToday({bool isDaily = true, bool forceRefresh = false, String? dateStr}) async {
+  Future<Map<String, dynamic>?> getUserBestResultToday({bool isDaily = true, bool isCa = false, bool forceRefresh = false, String? dateStr}) async {
     String? uid = _auth.currentUser?.uid;
     if (uid == null) return null;
 
@@ -1232,6 +1389,9 @@ class FirestoreService {
       if (isDaily) {
         String today = dateStr ?? AppDate.getTodayString();
         docId = 'daily_$today';
+      } else if (isCa) {
+        String today = dateStr ?? AppDate.getTodayString();
+        docId = 'ca_$today';
       } else {
         docId = dateStr != null ? 'mock_$dateStr' : _getMockLeaderboardDocId();
       }
@@ -1296,6 +1456,7 @@ class FirestoreService {
     required int timeTaken,
     bool isDaily = false,
     bool isMock = false,
+    bool isCa = false,
   }) async {
     if (score <= 0) return; // DON'T SAVE 0 SCORES TO REDUCE WRITES
 
@@ -1310,8 +1471,8 @@ class FirestoreService {
 
       // AI_OPTIMIZATION: Check if this is the best score for today using Hive
       String today = AppDate.getTodayString();
-      String bestScoreKey = isDaily ? 'best_score_daily_$today' : 'best_score_mock_$today';
-      String bestStreakKey = isDaily ? 'best_streak_daily_$today' : 'best_streak_mock_$today';
+      String bestScoreKey = isDaily ? 'best_score_daily_$today' : (isCa ? 'best_score_ca_$today' : 'best_score_mock_$today');
+      String bestStreakKey = isDaily ? 'best_streak_daily_$today' : (isCa ? 'best_streak_ca_$today' : 'best_streak_mock_$today');
       
       int previousBestScore = userBox.get(bestScoreKey, defaultValue: -1) as int;
       int previousBestStreak = userBox.get(bestStreakKey, defaultValue: -1) as int;
@@ -1340,7 +1501,7 @@ class FirestoreService {
       });
       
       // 3. Update Leaderboard ONLY if it's a new best score (Saves huge amount of Writes)
-      if (score > 0 && (isDaily || isMock) && isNewBest) {
+      if (score > 0 && (isDaily || isMock || isCa) && isNewBest) {
         String userName = AppLanguage.getString('user_fallback');
         String? photoURL;
         String? gender = HiveService.getGender();
@@ -1354,7 +1515,7 @@ class FirestoreService {
           photoURL = avatar ?? _auth.currentUser?.photoURL;
         }
 
-        String docId = isDaily ? 'daily_$today' : _getMockLeaderboardDocId();
+        String docId = isDaily ? 'daily_$today' : (isCa ? 'ca_$today' : _getMockLeaderboardDocId());
         
         // --- REAL TREND LOGIC ---
         // Fetch yesterday's final rank to store it in today's entry for comparison
@@ -1363,6 +1524,7 @@ class FirestoreService {
           String yesterdayStr = AppDate.format(AppDate.getISTNow().subtract(const Duration(days: 1)));
           final yesterdayData = await getUserBestResultToday(
             isDaily: isDaily, 
+            isCa: isCa,
             dateStr: yesterdayStr,
             forceRefresh: false, // Cache is fine here
           );
@@ -2066,8 +2228,6 @@ class FirestoreService {
       AppLog.d("AI_DEBUG: Admin Refresh: Fetching large share quiz pool (limit: $limit)...");
       List<Question> pool = [];
       List<String> types = ['general_tamil', 'general_studies', 'aptitude'];
-      
-      int perType = (limit * 0.7 ~/ types.length); // 70% from specific types
 
       for (String type in types) {
         QuerySnapshot snap = await _db.collection('quizzes')

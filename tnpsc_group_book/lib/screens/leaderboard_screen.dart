@@ -27,16 +27,18 @@ class LeaderboardScreen extends StatefulWidget {
 class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isDaily = true;
+  bool _isCa = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) return;
       if (mounted) {
         setState(() {
           _isDaily = _tabController.index == 0;
+          _isCa = _tabController.index == 1;
         });
       }
     });
@@ -103,6 +105,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
                     dividerColor: Colors.transparent,
                     tabs: [
                       Tab(text: AppLanguage.getString('daily')),
+                      Tab(text: AppLanguage.getString('ca')),
                       Tab(text: AppLanguage.getString('mock')),
                     ],
                   ),
@@ -116,15 +119,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
                       child: TabBarView(
                         controller: _tabController,
                         children: [
-                          _LeaderboardContent(isDaily: true),
-                          _LeaderboardContent(isDaily: false),
+                          _LeaderboardContent(isDaily: true, isCa: false),
+                          _LeaderboardContent(isDaily: false, isCa: true),
+                          _LeaderboardContent(isDaily: false, isCa: false),
                         ],
                       ),
                     ),
                     // User's own rank sticky card at bottom
                     Align(
                       alignment: Alignment.bottomCenter,
-                      child: _MyRankStickyCard(isDaily: _isDaily),
+                      child: _MyRankStickyCard(isDaily: _isDaily, isCa: _isCa),
                     ),
                   ],
                 ),
@@ -139,7 +143,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
 
 class _LeaderboardContent extends StatefulWidget {
   final bool isDaily;
-  const _LeaderboardContent({required this.isDaily});
+  final bool isCa;
+  const _LeaderboardContent({required this.isDaily, this.isCa = false});
 
   @override
   State<_LeaderboardContent> createState() => _LeaderboardContentState();
@@ -151,21 +156,21 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
   @override
   void initState() {
     super.initState();
-    _future = FirestoreService().getLeaderboard(isDaily: widget.isDaily, forceRefresh: false);
+    _future = FirestoreService().getLeaderboard(isDaily: widget.isDaily, isCa: widget.isCa, forceRefresh: false);
   }
 
   @override
   void didUpdateWidget(_LeaderboardContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isDaily != widget.isDaily) {
-      _future = FirestoreService().getLeaderboard(isDaily: widget.isDaily, forceRefresh: false);
+    if (oldWidget.isDaily != widget.isDaily || oldWidget.isCa != widget.isCa) {
+      _future = FirestoreService().getLeaderboard(isDaily: widget.isDaily, isCa: widget.isCa, forceRefresh: false);
     }
   }
 
   Future<void> _onRefresh() async {
     if (mounted) {
       setState(() {
-        _future = FirestoreService().getLeaderboard(isDaily: widget.isDaily, forceRefresh: true);
+        _future = FirestoreService().getLeaderboard(isDaily: widget.isDaily, isCa: widget.isCa, forceRefresh: true);
       });
       await _future;
     }
@@ -193,7 +198,7 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
             slivers: [
               SliverToBoxAdapter(
-                child: _TopThreeSection(topThree: topThree, isDaily: widget.isDaily),
+                child: _TopThreeSection(topThree: topThree, isDaily: widget.isDaily, isCa: widget.isCa),
               ),
               SliverPadding(
                 padding: const EdgeInsets.only(top: 10, bottom: 120), // Bottom padding for sticky card
@@ -204,7 +209,8 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
                       return _LeaderboardItem(
                         user: user,
                         rank: index + 4,
-                        isDaily: widget.isDaily
+                        isDaily: widget.isDaily,
+                        isCa: widget.isCa,
                       );
                     },
                     childCount: others.length,
@@ -222,7 +228,8 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
 class _TopThreeSection extends StatelessWidget {
   final List<Map<String, dynamic>> topThree;
   final bool isDaily;
-  const _TopThreeSection({required this.topThree, required this.isDaily});
+  final bool isCa;
+  const _TopThreeSection({required this.topThree, required this.isDaily, this.isCa = false});
 
   @override
   Widget build(BuildContext context) {
@@ -240,11 +247,11 @@ class _TopThreeSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (displayOrder[0] != null)
-            _TopThreeUser(user: displayOrder[0]!, rank: 2, isDaily: isDaily),
+            _TopThreeUser(user: displayOrder[0]!, rank: 2, isDaily: isDaily, isCa: isCa),
           if (displayOrder[1] != null)
-            _TopThreeUser(user: displayOrder[1]!, rank: 1, isDaily: isDaily),
+            _TopThreeUser(user: displayOrder[1]!, rank: 1, isDaily: isDaily, isCa: isCa),
           if (displayOrder[2] != null)
-            _TopThreeUser(user: displayOrder[2]!, rank: 3, isDaily: isDaily),
+            _TopThreeUser(user: displayOrder[2]!, rank: 3, isDaily: isDaily, isCa: isCa),
         ],
       ),
     );
@@ -255,7 +262,8 @@ class _TopThreeUser extends StatelessWidget {
   final Map<String, dynamic> user;
   final int rank;
   final bool isDaily;
-  const _TopThreeUser({required this.user, required this.rank, required this.isDaily});
+  final bool isCa;
+  const _TopThreeUser({required this.user, required this.rank, required this.isDaily, this.isCa = false});
 
   @override
   Widget build(BuildContext context) {
@@ -368,7 +376,7 @@ class _TopThreeUser extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              "$score / ${user['totalQuestions'] ?? (isDaily ? 20 : 50)}",
+              "$score / ${user['totalQuestions'] ?? ((isDaily || isCa) ? 20 : 50)}",
               style: AppTheme.getStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w900,
@@ -403,7 +411,8 @@ class _LeaderboardItem extends StatelessWidget {
   final Map<String, dynamic> user;
   final int rank;
   final bool isDaily;
-  const _LeaderboardItem({required this.user, required this.rank, required this.isDaily});
+  final bool isCa;
+  const _LeaderboardItem({required this.user, required this.rank, required this.isDaily, this.isCa = false});
 
   @override
   Widget build(BuildContext context) {
@@ -526,7 +535,7 @@ class _LeaderboardItem extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  "$score / ${user['totalQuestions'] ?? (isDaily ? 20 : 50)}",
+                  "$score / ${user['totalQuestions'] ?? ((isDaily || isCa) ? 20 : 50)}",
                   style: AppTheme.getStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -588,7 +597,8 @@ class _EmptyLeaderboard extends StatelessWidget {
 
 class _MyRankStickyCard extends StatefulWidget {
   final bool isDaily;
-  const _MyRankStickyCard({required this.isDaily});
+  final bool isCa;
+  const _MyRankStickyCard({required this.isDaily, this.isCa = false});
 
   @override
   State<_MyRankStickyCard> createState() => _MyRankStickyCardState();
@@ -600,21 +610,21 @@ class _MyRankStickyCardState extends State<_MyRankStickyCard> {
   @override
   void initState() {
     super.initState();
-    _future = FirestoreService().getUserBestResultToday(isDaily: widget.isDaily, forceRefresh: false);
+    _future = FirestoreService().getUserBestResultToday(isDaily: widget.isDaily, isCa: widget.isCa, forceRefresh: false);
   }
 
   @override
   void didUpdateWidget(_MyRankStickyCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isDaily != widget.isDaily) {
-      _future = FirestoreService().getUserBestResultToday(isDaily: widget.isDaily, forceRefresh: false);
+    if (oldWidget.isDaily != widget.isDaily || oldWidget.isCa != widget.isCa) {
+      _future = FirestoreService().getUserBestResultToday(isDaily: widget.isDaily, isCa: widget.isCa, forceRefresh: false);
     }
   }
 
   void _loadFuture({bool forceRefresh = false}) {
     if (mounted) {
       setState(() {
-        _future = FirestoreService().getUserBestResultToday(isDaily: widget.isDaily, forceRefresh: forceRefresh);
+        _future = FirestoreService().getUserBestResultToday(isDaily: widget.isDaily, isCa: widget.isCa, forceRefresh: forceRefresh);
       });
     }
   }
@@ -740,7 +750,7 @@ class _MyRankStickyCardState extends State<_MyRankStickyCard> {
                           Row(
                             children: [
                               Text(
-                                "${AppLanguage.getString('score')}: ${data['score']} / ${data['totalQuestions'] ?? (widget.isDaily ? 20 : 50)}",
+                                "${AppLanguage.getString('score')}: ${data['score']} / ${data['totalQuestions'] ?? ((widget.isDaily || widget.isCa) ? 20 : 50)}",
                                 style: AppTheme.getStyle(
                                   color: Colors.grey,
                                   fontSize: 12,

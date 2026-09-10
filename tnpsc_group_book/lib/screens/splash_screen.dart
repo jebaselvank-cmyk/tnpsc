@@ -168,6 +168,11 @@ AppLog.d(
     // =========================================================
 
     _navigateToHome();
+
+    // AI_DEBUG: Auto-generate missing quizzes for next 5 days in background
+    Future.delayed(const Duration(seconds: 5), () {
+      FirestoreService().autoGenerateFutureQuizzes();
+    });
 } catch (e, stack) {
 AppLog.e(
 '========================================',

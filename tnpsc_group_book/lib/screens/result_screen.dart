@@ -57,6 +57,8 @@ class _ResultScreenState extends State<ResultScreen> {
     final lowerTitle = title.toLowerCase();
     return title == "Daily Quiz" ||
         title == AppLanguage.getString('daily_quiz') ||
+        title == "Current Affairs Quiz" ||
+        title == AppLanguage.getString('ca_daily_quiz') ||
         lowerTitle.contains("daily");
   }
 
@@ -67,13 +69,14 @@ class _ResultScreenState extends State<ResultScreen> {
     _saveResultsLocally();
 
     // Show rewarded ad on Daily Quiz completion
-    if (HiveService.isDailyQuizDone()) {
+    if (HiveService.isDailyQuizDone() || HiveService.isCaQuizDone()) {
       RewardService.loadRewardedAd();
     }
   }
 
   void _saveResultsLocally() {
-    // Only record performance statistics for Daily Quizzes
+    // Only record performance statistics for Daily and Mock Quizzes
+    // Exclude Current Affairs because its categorization is different
     final bool isDailyQuiz = widget.subjectTitle == "Daily Quiz" || 
                            widget.subjectTitle == AppLanguage.getString('daily_quiz');
     
@@ -248,8 +251,23 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 
+  String _getFeedbackMessage(double accuracy) {
+    if (accuracy >= 80) return AppLanguage.getString('outstanding');
+    if (accuracy >= 50) return AppLanguage.getString('well_done');
+    return AppLanguage.getString('good_effort');
+  }
+
+  Color _getScoreColor(double accuracy) {
+    if (accuracy >= 80) return Colors.green;
+    if (accuracy >= 50) return AppTheme.primaryColor;
+    return Colors.redAccent;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isCa = widget.subjectTitle == "Current Affairs Quiz" || 
+                     widget.subjectTitle == AppLanguage.getString('ca_daily_quiz');
+
     return ValueListenableBuilder<String>(
       valueListenable: AppLanguage.languageNotifier,
       builder: (context, lang, child) {
@@ -258,106 +276,63 @@ class _ResultScreenState extends State<ResultScreen> {
         int attempted = widget.selectedAnswers.where((a) => a != null).length;
         int missed = widget.totalQuestions - attempted;
 
-        // Determine performance message
-        String message = AppLanguage.getString('good_effort');
-        Color scoreColor = Colors.orange;
-        if (accuracy >= 80) {
-          message = AppLanguage.getString('outstanding');
-          scoreColor = Colors.green;
-        } else if (accuracy >= 50) {
-          message = AppLanguage.getString('well_done');
-          scoreColor = AppTheme.primaryColor;
-        } else {
-          scoreColor = Colors.redAccent;
-        }
+        String message = _getFeedbackMessage(accuracy);
+        Color scoreColor = _getScoreColor(accuracy);
 
         return PopScope(
           canPop: false,
           onPopInvokedWithResult: (didPop, result) {
-            AppLog.d("AI_DEBUG: [ResultScreen] PopScope triggered. didPop: $didPop");
             if (didPop) return;
-            Navigator.pushAndRemoveUntil(
-              context,
+            Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => const MainWrapper()),
               (route) => false,
             );
           },
           child: Scaffold(
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            backgroundColor: isDark ? AppTheme.darkBgColor : const Color(0xFFF8FAFC),
             body: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 10.0),
               child: SingleChildScrollView(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // const SizedBox(height: 15),
-                    // Trophy / Icon with Lottie
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        if (accuracy >= 50)
-                          RepaintBoundary(
-                            child: Lottie.network(
-                              'https://assets2.lottiefiles.com/packages/lf20_touohxv0.json', // Confetti animation
-                              width: 200,
-                              height: 200,
-                              repeat: false,
-                            ),
-                          ),
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(color: scoreColor.withOpacity(0.1), shape: BoxShape.circle),
-                          child: Icon(accuracy >= 50 ? Icons.emoji_events_rounded : Icons.military_tech_rounded, color: scoreColor, size: 80),
-                        ),
-                      ],
-                    ),
-                    // const SizedBox(height: 16),
-          Text(
-            message,
-            style: AppTheme.getStyle(
-              fontSize: 25,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : AppTheme.textMainColor,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            AppLanguage.getString('quiz_completed'),
-            textAlign: TextAlign.center,
-            style: AppTheme.getStyle(fontSize: 16, color: isDark ? Colors.white70 : AppTheme.textSecondaryColor),
-          ),
-                    const SizedBox(height: 25),
-
-                    // Stats Cards
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15),
-                      child: Row(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24.0),
+                  child: Column(
+                    children: [
+                      // Result Header
+                      Stack(
+                        alignment: Alignment.center,
                         children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              context,
-                              icon: Icons.check_circle_outline_rounded,
-                              title: AppLanguage.getString('score'),
-                              value: "${widget.score} / ${widget.totalQuestions}",
-                              color: isDark ? AppTheme.cardColor : AppTheme.textSecondaryColor,
+                          if (accuracy >= 50)
+                            RepaintBoundary(
+                              child: Lottie.network(
+                                'https://assets2.lottiefiles.com/packages/lf20_touohxv0.json', // Confetti animation
+                                width: 200,
+                                height: 200,
+                                repeat: false,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildStatCard(
-                              context,
-                              icon: Icons.timer_outlined,
-                              title: AppLanguage.getString('time'),
-                              value: _formatTime(widget.timeTakenSeconds),
-                              color: Colors.purple,
-                            ),
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(color: scoreColor.withOpacity(0.1), shape: BoxShape.circle),
+                            child: Icon(accuracy >= 50 ? Icons.emoji_events_rounded : Icons.military_tech_rounded, color: scoreColor, size: 80),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_isDailyOrMock) ...[
+                      Text(
+                        message,
+                        style: AppTheme.getStyle(
+                          fontSize: 25,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : AppTheme.textMainColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        AppLanguage.getString('quiz_completed'),
+                        textAlign: TextAlign.center,
+                        style: AppTheme.getStyle(fontSize: 16, color: isDark ? Colors.white70 : AppTheme.textSecondaryColor),
+                      ),
+                      const SizedBox(height: 25),
+
+                      // Stats Cards
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 15),
                         child: Row(
@@ -365,200 +340,229 @@ class _ResultScreenState extends State<ResultScreen> {
                             Expanded(
                               child: _buildStatCard(
                                 context,
-                                icon: Icons.track_changes_rounded,
-                                title: AppLanguage.getString('accuracy'),
-                                value: "${accuracy.toStringAsFixed(1)}%",
-                                color: Colors.green,
+                                icon: Icons.check_circle_outline_rounded,
+                                title: AppLanguage.getString('score'),
+                                value: "${widget.score} / ${widget.totalQuestions}",
+                                color: isDark ? AppTheme.darkSurfaceColor : AppTheme.textSecondaryColor,
                               ),
                             ),
-
                             const SizedBox(width: 16),
                             Expanded(
                               child: _buildStatCard(
                                 context,
-                                icon: Icons.cancel_outlined,
-                                title: AppLanguage.getString('missed_quiz'),
-                                value: "${missed} / ${widget.totalQuestions}",
-                                color: Colors.redAccent,
+                                icon: Icons.timer_outlined,
+                                title: AppLanguage.getString('time'),
+                                value: _formatTime(widget.timeTakenSeconds),
+                                color: Colors.purple,
                               ),
                             ),
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 16),
-
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _buildStatCard(
-                                context,
-                                icon: Icons.speed_rounded,
-                                title: AppLanguage.getString('speed'),
-                                value: widget.timeTakenSeconds > 0
-                                    ? AppLanguage.getString(
-                                        'sec_per_q',
-                                      ).replaceAll('{val}', (widget.timeTakenSeconds / widget.totalQuestions).toStringAsFixed(1))
-                                    : AppLanguage.getString('na'),
-                                color: Colors.orange,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildStatCard(
-                                context,
-                                icon: Icons.insights_outlined,
-                                title: AppLanguage.getString('smart_weak_analysis'),
-                                value: _determineWeakArea(),
-                                color: Colors.limeAccent,
-                                onTap: () {
-                                  _showWeakAreaAnalysisBottomSheet(context);
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _buildStatCard(
-                                context,
-                                icon: Icons.track_changes_rounded,
-                                title: AppLanguage.getString('accuracy'),
-                                value: "${accuracy.toStringAsFixed(1)}%",
-                                color: Colors.green,
-                              ),
-                            ),
-
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildStatCard(
-                                context,
-                                icon: Icons.speed_rounded,
-                                title: AppLanguage.getString('speed'),
-                                value: widget.timeTakenSeconds > 0
-                                    ? AppLanguage.getString(
-                                        'sec_per_q',
-                                      ).replaceAll('{val}', (widget.timeTakenSeconds / widget.totalQuestions).toStringAsFixed(1))
-                                    : AppLanguage.getString('na'),
-                                color: Colors.orange,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    // Action Buttons
-                    const SizedBox(height: 20),
-                    if (_isDailyOrMock && !_pointsClaimed)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15),
-                        child: _buildClaimPointsSection(isDark),
-                      ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      // height: 55,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15),
-                        child: ElevatedButton.icon(
-                          onPressed: _shareScorecard,
-                          icon: const AppIcon(AppIcons.share, color: Colors.white),
-                          label: Padding(
-                            padding: const EdgeInsets.only(top: 8.0, bottom: 8),
-                            child: Text(
-                              AppLanguage.getString('share_scorecard'),
-                              style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo[400],
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 2,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () {
-                                Navigator.push(
+                      if (_isDailyOrMock) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildStatCard(
                                   context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ReviewScreen(questions: widget.questions, selectedAnswers: widget.selectedAnswers),
-                                  ),
-                                );
-                              },
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                side: BorderSide(color: isDark ? Colors.white70 : AppTheme.textMainColor.withOpacity(0.5)),
+                                  icon: Icons.track_changes_rounded,
+                                  title: AppLanguage.getString('accuracy'),
+                                  value: "${accuracy.toStringAsFixed(1)}%",
+                                  color: Colors.green,
+                                ),
                               ),
+
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _buildStatCard(
+                                  context,
+                                  icon: Icons.cancel_outlined,
+                                  title: AppLanguage.getString('missed_quiz'),
+                                  value: "${missed} / ${widget.totalQuestions}",
+                                  color: Colors.redAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildStatCard(
+                                  context,
+                                  icon: Icons.speed_rounded,
+                                  title: AppLanguage.getString('speed'),
+                                  value: widget.timeTakenSeconds > 0
+                                      ? AppLanguage.getString(
+                                          'sec_per_q',
+                                        ).replaceAll('{val}', (widget.timeTakenSeconds / widget.totalQuestions).toStringAsFixed(1))
+                                      : AppLanguage.getString('na'),
+                                  color: Colors.orange,
+                                ),
+                              ),
+                              if (!isCa) ...[
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildStatCard(
+                                    context,
+                                    icon: Icons.insights_outlined,
+                                    title: AppLanguage.getString('smart_weak_analysis'),
+                                    value: _determineWeakArea(),
+                                    color: Colors.limeAccent,
+                                    onTap: () {
+                                      _showWeakAreaAnalysisBottomSheet(context);
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildStatCard(
+                                  context,
+                                  icon: Icons.track_changes_rounded,
+                                  title: AppLanguage.getString('accuracy'),
+                                  value: "${accuracy.toStringAsFixed(1)}%",
+                                  color: Colors.green,
+                                ),
+                              ),
+
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _buildStatCard(
+                                  context,
+                                  icon: Icons.speed_rounded,
+                                  title: AppLanguage.getString('speed'),
+                                  value: widget.timeTakenSeconds > 0
+                                      ? AppLanguage.getString(
+                                          'sec_per_q',
+                                        ).replaceAll('{val}', (widget.timeTakenSeconds / widget.totalQuestions).toStringAsFixed(1))
+                                      : AppLanguage.getString('na'),
+                                  color: Colors.orange,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      // Action Buttons
+                      const SizedBox(height: 20),
+                      if (_isDailyOrMock && !_pointsClaimed)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15),
+                          child: _buildClaimPointsSection(isDark),
+                        ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15),
+                          child: ElevatedButton.icon(
+                            onPressed: _shareScorecard,
+                            icon: const AppIcon(AppIcons.share, color: Colors.white),
+                            label: Padding(
+                              padding: const EdgeInsets.only(top: 8.0, bottom: 8),
                               child: Text(
-                                AppLanguage.getString('review_answers'),
+                                AppLanguage.getString('share_scorecard'),
+                                style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.indigo[400],
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              elevation: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 15),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ReviewScreen(questions: widget.questions, selectedAnswers: widget.selectedAnswers),
+                                    ),
+                                  );
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  side: BorderSide(color: isDark ? Colors.white70 : AppTheme.textMainColor.withOpacity(0.5)),
+                                ),
+                                child: Text(
+                                  AppLanguage.getString('review_answers'),
+                                  style: AppTheme.getStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white70 : AppTheme.textMainColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      SizedBox(
+                        width: double.infinity,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15),
+                          child: OutlinedButton(
+                            onPressed: () {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(builder: (context) => const MainWrapper()),
+                                (route) => false,
+                              );
+                            },
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: isDark ? Colors.white30 : Colors.grey.shade300, width: 2),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 8.0, bottom: 8),
+                              child: Text(
+                                AppLanguage.getString('go_home'),
                                 style: AppTheme.getStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w600,
-                                  color: isDark ? Colors.white70 : AppTheme.textMainColor,
+                                  color: isDark ? Colors.white : AppTheme.textMainColor,
                                 ),
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    SizedBox(
-                      width: double.infinity,
-                      // height: 55,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15),
-                        child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.pushAndRemoveUntil(
-                              context,
-                              MaterialPageRoute(builder: (context) => const MainWrapper()),
-                              (route) => false,
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: isDark ? Colors.white30 : Colors.grey.shade300, width: 2),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 8.0, bottom: 8),
-                            child: Text(
-                              AppLanguage.getString('go_home'),
-                              style: AppTheme.getStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : AppTheme.textMainColor,
-                              ),
-                            ),
-                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Center(child: NativeAdWidget(isSmall: true,  refreshIntervalSeconds: 90)),
-                    const SizedBox(height: 20),
-                  ],
+                      const SizedBox(height: 20),
+                      const Center(child: NativeAdWidget(isSmall: true,  refreshIntervalSeconds: 90)),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ));
+        );
       },
     );
   }

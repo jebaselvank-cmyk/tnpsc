@@ -1469,13 +1469,30 @@ Only return the raw JSON array. No preamble, no markdown, no explanation.
     final dateStr = AppDate.format(date);
 
     // Get recent CA context to avoid repeats
-    String recentContext = await _getRecentQuizContext('quizzes', 20);
+    String recentContext = await _getRecentQuizContext('quizzes', 30);
+
+    final avoidPrompt = recentContext.isNotEmpty
+        ? """
+STRICTLY DO NOT create questions that are identical, very similar, or based on these recent questions/topics from the last 30 days:
+$recentContext
+
+Rules:
+- Do NOT repeat the same question.
+- Do NOT repeat the same news item.
+- Ensure all news items are from the last 3-6 months only.
+"""
+        : "";
 
     final prompt = '''
 Generate 20 UNIQUE TNPSC Current Affairs MCQs for $dateStr.
-Focus on Tamil Nadu events, National news, Awards, and Sports from the last 3 months.
+Focus on:
+1. Tamil Nadu Government Schemes, Awards, and News (60%)
+2. National Important Events, Appointments, and Awards (30%)
+3. International Sports and Summits (10%)
 
-STRICT QUALITY RULES:
+$avoidPrompt
+
+STRICT QUALITY RULES (MUST FOLLOW):
 1. Return ONLY valid JSON array.
 2. NO Markdown or extra text.
 3. Every field MUST BE BILINGUAL (English and Tamil).
@@ -1483,6 +1500,7 @@ STRICT QUALITY RULES:
 5. NO OTHER LANGUAGES (Hindi, etc.).
 6. SSLC Standard.
 7. Correct index MUST match the answer.
+8. Explanation must be detailed in both languages.
 
 JSON Format:
 [

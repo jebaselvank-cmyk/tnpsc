@@ -9,29 +9,50 @@ import '../utils/app_log.dart';
 class VersionService {
   static const String _playStoreUrl = "https://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book";
   static int? _requiredVersion;
+  static Map<String, dynamic> _appUrls = {
+    'web_app': 'https://tnpsc-masterapp-dailyquiz.web.app/',
+    'about': 'https://tnpscmasterapp.blogspot.com/2026/06/about-app.html',
+    'privacy': 'https://tnpscmasterapp.blogspot.com/2026/06/privacy-policy.html',
+    'whatsapp': 'https://chat.whatsapp.com/EgLPBuTBIccIhHGglPXGN9?s=sw&p=a&mlu=0',
+    'telegram': 'https://t.me/+HDW2ssG3H9s4MzM1',
+  };
   static DateTime? _lastCheckTime;
 
-  static Future<bool> isUpdateRequired() async {
+  static Future<void> _fetchConfig() async {
     try {
-      // AI_OPTIMIZATION: Cache the version check for 1 hour to save Reads
-      if (_requiredVersion != null && _lastCheckTime != null) {
-        if (DateTime.now().difference(_lastCheckTime!).inHours < 1) {
-          AppLog.d("FIRESTORE_OPT: Using cached version info.");
-          return _checkVersionMatch();
-        }
+      // AI_OPTIMIZATION: Cache the config for 1 hour to save Reads
+      if (_lastCheckTime != null && DateTime.now().difference(_lastCheckTime!).inHours < 1) {
+        return;
       }
 
-      final doc = await FirebaseFirestore.instance.collection('settings').doc('app_config').get();
+      // Fetch from admin_config/urls as per your Firebase structure
+      final doc = await FirebaseFirestore.instance.collection('admin_config').doc('urls').get();
       if (doc.exists) {
-        _requiredVersion = doc.data()?['required_version_code'] as int?;
+        final data = doc.data();
+        if (data != null && data.containsKey('urls')) {
+          _appUrls.addAll(Map<String, dynamic>.from(data['urls']));
+        }
         _lastCheckTime = DateTime.now();
       }
       
-      return _checkVersionMatch();
+      // Also fetch version info if it exists in a separate config or same place
+      // (Optional: Adjust if you move version_code to admin_config as well)
+      final configDoc = await FirebaseFirestore.instance.collection('settings').doc('app_config').get();
+      if (configDoc.exists) {
+        _requiredVersion = configDoc.data()?['required_version_code'] as int?;
+      }
     } catch (e) {
-      AppLog.d("AI_DEBUG: Version check error: $e");
-      return false; 
+      AppLog.d("AI_DEBUG: Config fetch error: $e");
     }
+  }
+
+  static Future<bool> isUpdateRequired() async {
+    await _fetchConfig();
+    return _checkVersionMatch();
+  }
+
+  static String getUrl(String key) {
+    return _appUrls[key] ?? "";
   }
 
   static Future<bool> _checkVersionMatch() async {

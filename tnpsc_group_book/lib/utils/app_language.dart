@@ -80,6 +80,8 @@ class AppLanguage {
         return ta ? 'இன்றைய வினாடி வினா தயார்! ✅' : "Today's Quiz Ready! ✅";
       case 'daily_quiz':
         return ta ? 'தினசரி வினாடி வினா' : 'Daily Quiz';
+      case 'ca_daily_quiz':
+        return ta ? 'நடப்பு நிகழ்வுகள் வினாடி வினா' : 'Current Affairs Quiz';
       case 'daily_quiz_ready':
         return ta ? 'இன்றைய வினாடி வினா தயார்! ✅' : "Today's Quiz Ready! ✅";
       case 'mock_quiz':
@@ -96,6 +98,12 @@ class AppLanguage {
         return ta ? 'வினாடி வினாவைத் தொடங்கு' : 'Start Quiz';
       case 'view_top_10':
         return ta ? 'டாப் 10 பேரைப் பார்க்க' : 'View Top 10';
+      case 'daily':
+        return ta ? 'தினசரி' : 'Daily';
+      case 'mock':
+        return ta ? 'மாதிரி' : 'Mock';
+      case 'ca':
+        return ta ? 'நடப்பு' : 'CA';
       case 'mock_tests':
         return ta ? 'மாதிரித் தேர்வுகள்' : 'Mock Tests';
       case 'mock_test_desc':
@@ -892,6 +900,8 @@ class AppLanguage {
         return ta ? 'சேர்ந்து கொள்ளவும்' : 'Join Room';
       case 'room_history':
         return ta ? 'குழு தேர்வு வரலாறு' : 'Room History';
+      case 'web_version':
+        return ta ? 'இணையதள பதிப்பு' : 'Web Version';
       case 'last_room_history':
         return ta ? 'கடைசி குழு' : 'Final Group';
       case 'correct_feedback':

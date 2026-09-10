@@ -308,6 +308,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                     },
                                   ),
                                 ),
+                                const SizedBox(height: 16),
+                                // Current Affairs Daily Quiz
+                                RepaintBoundary(
+                                  child: ValueListenableBuilder(
+                                    valueListenable: Hive.box(HiveService.userBoxName).listenable(keys: ['caquiz_last_completed_date']),
+                                    builder: (context, box, child) {
+                                      return _buildCaQuizCard(context, isDark);
+                                    },
+                                  ),
+                                ),
                                 const SizedBox(height: 32),
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8.0),
@@ -489,9 +499,80 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildCaQuizCard(BuildContext context, bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        border: Border.all(color: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight, width: 0.6),
+        gradient: LinearGradient(
+          colors: [isDark ? AppTheme.primaryColorGlass : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColorGlass : AppTheme.secondaryColorLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withValues(alpha: 0.2),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text("📰", style: AppTheme.getStyle(fontSize: 22)),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  AppLanguage.getString('ca_daily_quiz'),
+                  style: AppTheme.getStyle(
+                      color: isDark ? Colors.white : AppTheme.primaryColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold),textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            AppLanguage.getString('today_quiz_ready'),
+            style: AppTheme.getStyle(
+                color: isDark ? Colors.white70 : AppTheme.textMainColor.withOpacity(0.8), fontSize: 15),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: HiveService.isCaQuizDone()
+                  ? null
+                  : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('ca_daily_quiz'), isDark),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white.withOpacity(0.7),
+                foregroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 3,
+              ),
+              child: Text(
+                HiveService.isCaQuizDone() ? AppLanguage.getString('completed') : AppLanguage.getString('start_quiz'),
+                  style: AppTheme.getStyle(fontWeight: FontWeight.bold, fontSize: 13)
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
   void _showQuizInfoBottomSheet(BuildContext context, String quizTitle, bool isDark) {
     bool isDaily = quizTitle == AppLanguage.getString('daily_quiz') || quizTitle == "Daily Quiz";
-    int questionCount = isDaily ? 20 : 50;
+    bool isCa = quizTitle == AppLanguage.getString('ca_daily_quiz') || quizTitle == "Current Affairs Quiz";
+    
+    int questionCount = (isDaily || isCa) ? 20 : 50;
     int bonusPoints = 20;
     int adPoints = 15; // Average/Initial ad bonus
 

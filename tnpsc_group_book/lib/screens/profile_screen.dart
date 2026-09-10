@@ -14,6 +14,7 @@ import 'package:tnpsc_group_book/utils/app_icons.dart';
 import '../models/subject.dart';
 import '../models/question.dart';
 import '../services/hive_service.dart';
+import '../services/version_service.dart';
 import '../utils/app_log.dart';
 import '../utils/app_theme.dart';
 import '../utils/app_date.dart';
@@ -434,28 +435,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   leading: const AppIcon(Icons.info_outline_rounded, color: Colors.grey),
                                   title: Text(AppLanguage.getString('about_app')),
                                   trailing: const AppIcon(Icons.chevron_right_rounded, color: Colors.grey),
-                                  onTap: () => _launchURL('https://tnpscmasterapp.blogspot.com/2026/06/about-app.html'),
+                                  onTap: () => _launchURL(VersionService.getUrl('about')),
                                 ),
                                 const Divider(height: 1),
                                 ListTile(
                                   leading: const AppIcon(Icons.privacy_tip_outlined, color: Colors.grey),
                                   title: Text(AppLanguage.getString('privacy_policy')),
                                   trailing: const AppIcon(Icons.chevron_right_rounded, color: Colors.grey),
-                                  onTap: () => _launchURL('https://tnpscmasterapp.blogspot.com/2026/06/privacy-policy.html'),
+                                  onTap: () => _launchURL(VersionService.getUrl('privacy')),
+                                ),
+                                const Divider(height: 1),
+                                ListTile(
+                                  leading: const AppIcon(Icons.language_rounded, color: Colors.blue),
+                                  title: Text(AppLanguage.getString('web_version'), style: AppTheme.getStyle(fontSize: 16, color: Colors.lightBlue)),
+                                  trailing: const AppIcon(Icons.chevron_right_rounded, color: Colors.grey),
+                                  onTap: () => _launchURL(VersionService.getUrl('web_app')),
                                 ),
                                 const Divider(height: 1),
                                 ListTile(
                                   leading: const AppIcon(Icons.chat_bubble_rounded, color: Colors.green, size: 28),
                                   title: Text(AppLanguage.getString('join_whatsapp'), style: AppTheme.getStyle(fontSize: 16, color: Colors.green)),
                                   trailing: const AppIcon(Icons.chevron_right_rounded, color: Colors.grey),
-                                  onTap: () => _launchURL('https://chat.whatsapp.com/EgLPBuTBIccIhHGglPXGN9?s=sw&p=a&mlu=0'),
+                                  onTap: () => _launchURL(VersionService.getUrl('whatsapp')),
                                 ),
                                 const Divider(height: 1),
                                 ListTile(
                                   leading: const AppIcon(Icons.send_rounded, color: Colors.lightBlue),
                                   title: Text(AppLanguage.getString('join_telegram'), style: AppTheme.getStyle(fontSize: 16, color: Colors.lightBlue)),
                                   trailing: const AppIcon(Icons.chevron_right_rounded, color: Colors.grey),
-                                  onTap: () => _launchURL('https://t.me/+HDW2ssG3H9s4MzM1'),
+                                  onTap: () => _launchURL(VersionService.getUrl('telegram')),
                                 ),
                                 const Divider(height: 1),
                                 ListTile(
