@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import '../services/hive_service.dart';
 import '../utils/app_log.dart';
 
@@ -29,8 +30,11 @@ class NativeAdWidget extends StatefulWidget {
 class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObserver {
   NativeAd? _nativeAd;
   bool _isAdLoaded = false;
+  bool _isLoading = false;
   bool _isPaused = false;
+  bool _hasBeenVisible = false;
   Timer? _nextRequestTimer;
+  int _retryDelaySeconds = 60;
 
   final String adUnitId = 'ca-app-pub-9952621231526514/5355753081';
 
@@ -38,14 +42,6 @@ class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObse
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (!HiveService.isAdFree()) {
-      // Load the first ad with a small initial delay
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted && !_isPaused) {
-          _loadAd();
-        }
-      });
-    }
   }
 
   @override
@@ -55,60 +51,97 @@ class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObse
       _nextRequestTimer?.cancel();
     } else if (state == AppLifecycleState.resumed) {
       _isPaused = false;
+      if (_hasBeenVisible && _nativeAd == null && !_isLoading && mounted) {
+        _loadAd();
+      }
+    }
+  }
+
+  void _onVisibilityChanged(VisibilityInfo info) {
+    if (HiveService.isAdFree()) return;
+    if (_isPaused || !mounted) return;
+
+    // Load only when the ad is actually near the visible area (e.g., 5% visible)
+    if (info.visibleFraction > 0.05 && !_hasBeenVisible) {
+      _hasBeenVisible = true;
+      _loadAd();
     }
   }
 
   void _loadAd() {
-    if (_isPaused || !mounted) return;
-
-    NativeAd createAdInstance() {
-      return NativeAd(
-        adUnitId: adUnitId,
-        factoryId: widget.isSmall ? 'listTileSmall' : 'listTileMedium',
-        request: const AdRequest(),
-        listener: NativeAdListener(
-          onAdLoaded: (ad) {
-            if (mounted) {
-              setState(() {
-                if (_nativeAd != null && _nativeAd != ad) {
-                  _nativeAd!.dispose();
-                }
-                _nativeAd = ad as NativeAd;
-                _isAdLoaded = true;
-              });
-            }
-          },
-          onAdFailedToLoad: (ad, error) {
-            ad.dispose();
-            if (_nativeAd == null && mounted) {
-              setState(() {
-                _isAdLoaded = false;
-              });
-            }
-            // Optional: Retry after failure
-            _scheduleNextLoad(30); 
-          },
-          onAdImpression: (ad) {
-            AppLog.d('AI_DEBUG: Ad Impression recorded. Scheduling next refresh...');
-            // Only when the user SEES the ad, we schedule the next one
-            if (widget.refreshIntervalSeconds != null) {
-              _scheduleNextLoad(widget.refreshIntervalSeconds!);
-            }
-          },
-        ),
-      );
+    if (!mounted || _isPaused || _isLoading || _nativeAd != null || HiveService.isAdFree()) {
+      return;
     }
 
-    final nextAd = createAdInstance();
-    nextAd.load();
+    _isLoading = true;
+
+    final ad = NativeAd(
+      adUnitId: adUnitId,
+      factoryId: widget.isSmall ? 'listTileSmall' : 'listTileMedium',
+      request: const AdRequest(),
+      listener: NativeAdListener(
+        onAdLoaded: (ad) {
+          if (!mounted) {
+            ad.dispose();
+            return;
+          }
+          _retryDelaySeconds = 60; // Reset retry delay on success
+          setState(() {
+            _nativeAd = ad as NativeAd;
+            _isAdLoaded = true;
+            _isLoading = false;
+          });
+          AppLog.d('NativeAd loaded successfully');
+        },
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+          _isLoading = false;
+          if (mounted) {
+            setState(() {
+              _isAdLoaded = false;
+            });
+          }
+          AppLog.d('NativeAd failed: ${error.code} - ${error.message}');
+          // Exponential backoff retry
+          _scheduleRetry();
+        },
+        onAdImpression: (ad) {
+          AppLog.d('NativeAd impression recorded');
+          if (widget.refreshIntervalSeconds != null) {
+            _scheduleNextLoad(widget.refreshIntervalSeconds!);
+          }
+        },
+        onAdClicked: (ad) {
+          AppLog.d('NativeAd clicked');
+        },
+      ),
+    );
+
+    ad.load();
+  }
+
+  void _scheduleRetry() {
+    _nextRequestTimer?.cancel();
+    _nextRequestTimer = Timer(Duration(seconds: _retryDelaySeconds), () {
+      if (!mounted || _isPaused || !_hasBeenVisible || _nativeAd != null) return;
+      _loadAd();
+    });
+    // Double the delay up to a max of 5 minutes
+    _retryDelaySeconds = (_retryDelaySeconds * 2).clamp(60, 300);
   }
 
   void _scheduleNextLoad(int seconds) {
     _nextRequestTimer?.cancel();
     _nextRequestTimer = Timer(Duration(seconds: seconds), () {
-      if (!_isPaused && mounted) {
-        _loadAd();
-      }
+      if (!mounted || _isPaused) return;
+      
+      _nativeAd?.dispose();
+      setState(() {
+        _nativeAd = null;
+        _isAdLoaded = false;
+        _isLoading = false;
+      });
+      _loadAd();
     });
   }
 
@@ -124,17 +157,19 @@ class _NativeAdWidgetState extends State<NativeAdWidget> with WidgetsBindingObse
   Widget build(BuildContext context) {
     if (HiveService.isAdFree()) return const SizedBox.shrink();
 
-    if (_nativeAd != null && _isAdLoaded) {
-      return Container(
-        margin: widget.margin ?? const EdgeInsets.symmetric(vertical: 10),
-        width: widget.width,
-        height: widget.height ?? (widget.isSmall ? 80 : 300),
-        decoration: widget.decoration,
-        alignment: Alignment.center,
-        child: AdWidget(ad: _nativeAd!),
-      );
-    }
-
-    return const SizedBox.shrink();
+    return VisibilityDetector(
+      key: Key('native_ad_${widget.key ?? hashCode}'),
+      onVisibilityChanged: _onVisibilityChanged,
+      child: _isAdLoaded && _nativeAd != null
+          ? Container(
+              margin: widget.margin ?? const EdgeInsets.symmetric(vertical: 10),
+              width: widget.width,
+              height: widget.height ?? (widget.isSmall ? 80 : 300),
+              decoration: widget.decoration,
+              alignment: Alignment.center,
+              child: AdWidget(ad: _nativeAd!),
+            )
+          : const SizedBox.shrink(),
+    );
   }
 }

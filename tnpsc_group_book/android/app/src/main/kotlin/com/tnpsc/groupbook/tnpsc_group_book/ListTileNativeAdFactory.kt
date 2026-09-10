@@ -25,6 +25,10 @@ class ListTileNativeAdFactory(private val context: Context, private val layoutRe
         adView.callToActionView = adView.findViewById(R.id.ad_call_to_action)
         adView.iconView = adView.findViewById(R.id.ad_app_icon)
         adView.mediaView = adView.findViewById(R.id.ad_media)
+        
+        // Ensure "Ad" attribution is handled if needed
+        val attributionView = adView.findViewById<TextView>(R.id.ad_attribution)
+        attributionView?.text = "Ad"
 
         (adView.headlineView as TextView).text = nativeAd.headline
         (adView.bodyView as TextView).text = nativeAd.body
