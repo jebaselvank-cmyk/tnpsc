@@ -47,7 +47,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   Future<DocumentSnapshot?>? _userDataFuture;
-  bool _isCheckingNews = false;
 
   @override
   void initState() {
@@ -55,7 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _userDataFuture = _firestoreService.getUserData();
     _checkInitialSync();
     _ensurePointsRestored();
-    _checkAutoNews();
     // AI_DEBUG: Check clipboard on home screen entry for room codes
     DeepLinkService().checkClipboard();
     // Silently purge old leaderboard data after a delay to not affect startup performance
@@ -90,17 +88,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       AppLog.e("Error checking rating dialog logic", e);
-    }
-  }
-
-  Future<void> _checkAutoNews() async {
-    if (!mounted) return;
-    setState(() => _isCheckingNews = true);
-    // Wait a bit to not interfere with initial UI load
-    await Future.delayed(const Duration(seconds: 2));
-    await AiService.checkAndAutoGenerateNews();
-    if (mounted) {
-      setState(() => _isCheckingNews = false);
     }
   }
 
@@ -281,6 +268,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
 
+                          // Smart Weak Area Analysis Card
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: RepaintBoundary(child: _buildSmartWeakAreaAnalysis(context, isDark)),
+                          ),
+
+                          const SizedBox(height: 16),
+
                           // Listening Now Mini Player
                           ValueListenableBuilder<String?>(
                             valueListenable: TtsService.currentTextNotifier,
@@ -318,29 +313,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(height: 32),
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: RepaintBoundary(
-                                    child: Row(
-                                          children: [
-                                            _buildQuickActionCard(context, title: AppLanguage.getString('mistake_bank'), icon: "📝", color: Colors.orange, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MistakeBankScreen()))),
-                                            const SizedBox(width: 12),
-                                            _buildQuickActionCard(context, title: AppLanguage.getString('saved_quizzes'), icon: "🔖", color: Colors.blue, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BookmarkScreen()))),
-                                            const SizedBox(width: 12),
-                                            _buildQuickActionCard(context, title: AppLanguage.getString('group_test_lobby'), icon: "👥", color: Colors.green, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RoomSetupScreen()))),
-                                          ],
-                                        ),
+                                const SizedBox(height: 16),
+                                // Mock Quiz Card
+                                RepaintBoundary(
+                                  child: ValueListenableBuilder(
+                                    valueListenable: Hive.box(HiveService.userBoxName).listenable(keys: ['mockquiz_last_completed_date']),
+                                    builder: (context, box, child) {
+                                      return _buildMockCard(context, isDark);
+                                    },
                                   ),
                                 ),
-                                const SizedBox(height: 32),
 
-                                // Current Affairs Section
-                                RepaintBoundary(child: _buildCurrentAffairsSection(context, isDark)),
-                                const SizedBox(height: 32),
-
-                                // Smart Weak Area Analysis Card
-                                RepaintBoundary(child: _buildSmartWeakAreaAnalysis(context, isDark)),
                                 const SizedBox(height: 50),
                               ],
                             ),
@@ -568,6 +551,111 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildMockCard(BuildContext context, bool isDark) {
+    DateTime istNow = AppDate.getISTNow();
+    bool isQuizDay = const [2, 4, 6, 7].contains(istNow.weekday);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        border: Border.all(color: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight, width: 0.6),
+        gradient: LinearGradient(
+          colors: [
+            isDark ? AppTheme.primaryColorGlass : AppTheme.primaryColorLight,
+            isDark ? AppTheme.secondaryColorGlass : AppTheme.secondaryColorLight
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.purple.withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text("🧠", style: AppTheme.getStyle(fontSize: 22)),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  AppLanguage.getString('mock_quiz'),
+                  style: AppTheme.getStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                margin: const EdgeInsets.only(left: 25, right: 25, top: 8),
+                triggerMode: TooltipTriggerMode.tap,
+                showDuration: const Duration(seconds: 10),
+                textStyle: AppTheme.getStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w700),
+                message: AppLanguage.languageNotifier.value == 'ta'
+                    ? "வினாடி வினா அட்டவணை: ஞாயிறு, செவ்வாய், வியாழன், சனி"
+                    : "Quiz Schedule: Sunday, Tuesday, Thursday, Saturday",
+                child: const Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.white70,
+                  size: 20,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "${AppLanguage.getString('general_tamil')}  --->  25",
+            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "${AppLanguage.getString('general_studies')}  --->  15",
+            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "${AppLanguage.getString('aptitude')}  --->  10",
+            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            AppLanguage.getString('mock_quiz_ready'),
+            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 15),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: !isQuizDay || HiveService.isMockQuizDone()
+                  ? null
+                  : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('mock_quiz'), isDark),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white.withOpacity(0.7),
+                foregroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 5,
+              ),
+              child: Text(
+                !isQuizDay
+                    ? (AppLanguage.languageNotifier.value == 'ta' ? "இன்று வினாடி வினா இல்லை" : "No Quiz Today")
+                    : HiveService.isMockQuizDone()
+                        ? AppLanguage.getString('completed')
+                        : AppLanguage.getString('start_quiz'),
+                style: AppTheme.getStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
   void _showQuizInfoBottomSheet(BuildContext context, String quizTitle, bool isDark) {
     bool isDaily = quizTitle == AppLanguage.getString('daily_quiz') || quizTitle == "Daily Quiz";
     bool isCa = quizTitle == AppLanguage.getString('ca_daily_quiz') || quizTitle == "Current Affairs Quiz";
@@ -712,41 +800,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildQuickActionCard(BuildContext context, {required String title, required String icon, required Color color, required VoidCallback onTap}) {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-          decoration: BoxDecoration(
-            color: isDark ? color.withValues(alpha: 0.15) : color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(icon, style: AppTheme.getStyle(fontSize: 28)),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: AppTheme.getStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : color.darken(),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildSmartWeakAreaAnalysis(BuildContext context, bool isDark) {
     bool isTamil = AppLanguage.languageNotifier.value == 'ta';
     
@@ -814,62 +867,87 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 16),
         // Group the progress items one-by-one with clear separation
-        _buildHomeCategoryProgress(
-          context,
-          categoryKey: "general_tamil",
-          correct: tamilPerf['correct']!,
-          total: tamilPerf['total']!,
-          icon: Icons.translate_rounded,
-          color: Colors.blue,
-        ),
-        _buildHomeCategoryProgress(
-          context,
-          categoryKey: "general_studies",
-          correct: gsPerf['correct']!,
-          total: gsPerf['total']!,
-          icon: Icons.school_rounded,
-          color: Colors.purple,
-        ),
-        _buildHomeCategoryProgress(
-          context,
-          categoryKey: "aptitude",
-          correct: aptitudePerf['correct']!,
-          total: aptitudePerf['total']!,
-          icon: Icons.calculate_rounded,
-          color: Colors.orange,
-        ),
-        
-        if (recommendation.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: boxColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: boxColor.withValues(alpha: 0.2)),
+
+        Row(
+          children: [
+            Expanded(
+              child: _buildHomeCategoryProgress(
+                context,
+                categoryKey: "general_tamil",
+                correct: tamilPerf['correct']!,
+                total: tamilPerf['total']!,
+                icon: Icons.translate_rounded,
+                color: Colors.blue,
+              ),
             ),
-            child: Row(
-              children: [
-                Icon(
-                  boxIcon, 
-                  color: boxColor, 
-                  size: 24
+
+            SizedBox(width: 10),
+
+            Expanded(
+              child: _buildHomeCategoryProgress(
+                context,
+                categoryKey: "general_studies",
+                correct: gsPerf['correct']!,
+                total: gsPerf['total']!,
+                icon: Icons.school_rounded,
+                color: Colors.purple,
+              ),
+            ),
+          ],
+        ),
+
+        Padding(
+          padding: const EdgeInsets.only(top: 12.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildHomeCategoryProgress(
+                  context,
+                  categoryKey: "aptitude",
+                  correct: aptitudePerf['correct']!,
+                  total: aptitudePerf['total']!,
+                  icon: Icons.calculate_rounded,
+                  color: Colors.orange,
                 ),
-                const SizedBox(width: 16),
+              ),
+
+              SizedBox(width: 10),
+
+              if (recommendation.isNotEmpty) ...[
                 Expanded(
-                  child: Text(
-                    recommendation,
-                    style: AppTheme.getStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? boxColor.withValues(alpha: 0.9) : boxColor.darken(0.2),
+                  child: Container(
+                    padding: const EdgeInsets.only(left: 10,right: 10,top: 10,bottom: 10),
+                    decoration: BoxDecoration(
+                      color: boxColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: boxColor.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                            boxIcon,
+                            color: boxColor.withValues(alpha: 0.8),
+                            size: 20
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            recommendation,
+                            style: AppTheme.getStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? boxColor.withValues(alpha: 0.8) : boxColor.darken(0.2),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ],
-            ),
+            ],
           ),
-        ],
+        ),
       ],
     );
   }
@@ -906,11 +984,10 @@ class _HomeScreenState extends State<HomeScreen> {
     else if (categoryKey == 'general_studies')
       categoryName = isTamil ? 'பொது அறிவு' : 'General Studies';
     else if (categoryKey == 'aptitude')
-      categoryName = isTamil ? 'கணிதத் திறன் & மனத்திறன்' : 'Aptitude & Mental Ability';
+      categoryName = isTamil ? 'கணிதத் திறன்' : 'Aptitude';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.only(left: 20,right: 20,top: 15,bottom: 15),
+      padding: const EdgeInsets.only(left: 14,right: 14,top: 12,bottom: 12),
       decoration: BoxDecoration(
         color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -935,7 +1012,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Icon(icon, color: color, size: 18),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       categoryName,
@@ -987,199 +1064,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildCurrentAffairsSection(BuildContext context, bool isDark) {
-    bool isTamil = AppLanguage.languageNotifier.value == 'ta';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            Text(
-              isTamil ? "இன்றைய நடப்பு நிகழ்வுகள்" : "Daily Current Affairs",
-              style: AppTheme.getStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: isDark ? AppTheme.secondaryColor : AppTheme.textMainColor,
-              ),
-            ),
-            if (_isCheckingNews) ...[
-              const SizedBox(width: 8),
-              const SizedBox(
-                height: 14,
-                width: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-                ),
-              ),
-            ]
-          ],
-        ),
-        const SizedBox(height: 12),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('current_affairs_points')
-              .orderBy('timestamp', descending: true)
-              .limit(10)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: Text(
-                    isTamil ? "செய்திகள் எதுவும் இல்லை" : "No news available",
-                    style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ),
-              );
-            }
-
-            return SizedBox(
-              height: 180,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                shrinkWrap: true,
-                itemCount: snapshot.data!.docs.length + 1, // +1 for the Ad card
-                itemBuilder: (context, index) {
-                  if (index == snapshot.data!.docs.length) {
-                    return NativeAdWidget(
-                      isSmall: false, 
-                      refreshIntervalSeconds: 90,
-                      width: 280,
-                      height: 180,
-                      margin: const EdgeInsets.only(right: 16),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: isDark ? Colors.white10 : Colors.blue.shade50),
-                      ),
-                    );
-                  }
-                  try {
-                    NewsItem news = NewsItem.fromFirestore(snapshot.data!.docs[index]);
-                    return _buildNewsCard(context, news, isDark, isTamil);
-                  } catch (e) {
-                    return const SizedBox.shrink();
-                  }
-                },
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNewsCard(BuildContext context, NewsItem news, bool isDark, bool isTamil) {
-    String title = isTamil ? news.titleTa : news.titleEn;
-    return GestureDetector(
-      onTap: () {
-        RewardService.showInterstitialAd(
-          onDismissed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => NewsDetailScreen(newsItem: news),
-              ),
-            );
-          },
-        );
-      },
-      child: Container(
-        width: 280,
-        margin: const EdgeInsets.only(right: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isDark 
-              ? [Colors.indigo.shade500.withOpacity(0.2), Colors.cyan.shade100.withOpacity(0.2)]
-              : [Colors.white, Colors.blue.shade50],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isDark ? Colors.white24 : Colors.blue.shade100),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            )
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.secondaryColor.withOpacity(0.1) : AppTheme.primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    news.category,
-                    style: AppTheme.getStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  AppDate.getDisplayDate(news.timestamp),
-                  style: AppTheme.getStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87,fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Text(
-                title,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: AppTheme.getStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : AppTheme.textMainColor,
-                ),
-              ),
-            ),
-            // const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.play_circle_fill_rounded, color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor, size: 16),
-                const SizedBox(width: 4),
-                Text(
-                  isTamil ? "விளம்பரம் மற்றும் செய்தி" : "Ad & News",
-                  style: AppTheme.getStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor,
-                  ),
-                ),
-                const Spacer(),
-                const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.grey),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }

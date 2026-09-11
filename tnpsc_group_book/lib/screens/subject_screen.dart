@@ -23,11 +23,24 @@ import 'ai_smart_prep_screen.dart';
 import 'ai_tutor_screen.dart';
 import 'quiz_screen.dart';
 import 'leaderboard_screen.dart';
+import 'room_setup_screen.dart';
+import '../models/news_item.dart';
+import 'news_detail_screen.dart';
+import '../services/reward_service.dart';
 import '../widgets/streak_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../widgets/native_ad_widget.dart';
 import '../services/version_service.dart';
+
+extension ColorExtension on Color {
+  Color darken([double amount = .1]) {
+    assert(amount >= 0 && amount <= 1);
+    final hsv = HSVColor.fromColor(this);
+    final hsvDark = hsv.withValue((hsv.value - amount).clamp(0.0, 1.0));
+    return hsvDark.toColor();
+  }
+}
 
 class SubjectScreen extends StatefulWidget {
   const SubjectScreen({super.key});
@@ -39,11 +52,21 @@ class SubjectScreen extends StatefulWidget {
 class _SubjectScreenState extends State<SubjectScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   Future<DocumentSnapshot?>? _userDataFuture;
+  bool _isCheckingNews = false;
 
   @override
   void initState() {
     super.initState();
     _userDataFuture = _firestoreService.getUserData();
+    _checkNews();
+  }
+
+  Future<void> _checkNews() async {
+    setState(() => _isCheckingNews = true);
+    try {
+      await AiService.checkAndAutoGenerateNews();
+    } catch (_) {}
+    if (mounted) setState(() => _isCheckingNews = false);
   }
 
   void _showQuizInfoBottomSheet(BuildContext context, String quizTitle, bool isDark) {
@@ -268,14 +291,30 @@ class _SubjectScreenState extends State<SubjectScreen> {
                           const SizedBox(height: 2),
                           Divider(endIndent: 20, indent: 20, color: isDark ? Colors.white : AppTheme.textMainColor, thickness: 0.25),
 
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 16),
                           Padding(
-                            padding: const EdgeInsets.only(left: 20.0, right: 20),
-                            child: ValueListenableBuilder(
-                              valueListenable: Hive.box(HiveService.userBoxName).listenable(),
-                              builder: (context, box, child) {
-                                return RepaintBoundary(child: _buildMockCard(context));
-                              },
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: RepaintBoundary(
+                                    child: Row(
+                                      children: [
+                                        _buildQuickActionCard(context, title: AppLanguage.getString('mistake_bank'), icon: "📝", color: Colors.orange, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MistakeBankScreen()))),
+                                        const SizedBox(width: 12),
+                                        _buildQuickActionCard(context, title: AppLanguage.getString('saved_quizzes'), icon: "🔖", color: Colors.blue, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BookmarkScreen()))),
+                                        const SizedBox(width: 12),
+                                        _buildQuickActionCard(context, title: AppLanguage.getString('group_test_lobby'), icon: "👥", color: Colors.green, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RoomSetupScreen()))),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 32),
+
+                                // Current Affairs Section
+                                RepaintBoundary(child: _buildCurrentAffairsSection(context, isDark)),
+                              ],
                             ),
                           ),
 
@@ -375,106 +414,230 @@ class _SubjectScreenState extends State<SubjectScreen> {
     );
   }
 
-  Widget _buildMockCard(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    DateTime istNow = AppDate.getISTNow();
-    bool _isQuizDay = const [2, 4, 6, 7].contains(istNow.weekday);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        border: Border.all(color: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight,width: 0.6),
-        gradient: LinearGradient(
-          colors: [isDark ? AppTheme.primaryColorGlass : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColorGlass : AppTheme.secondaryColorLight],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.purple.withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          )
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _buildQuickActionCard(BuildContext context, {required String title, required String icon, required Color color, required VoidCallback onTap}) {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+          decoration: BoxDecoration(
+            color: isDark ? color.withValues(alpha: 0.15) : color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text("🧠", style: AppTheme.getStyle(fontSize: 22)),
-              const SizedBox(width: 12),
-              Flexible(
-                child: Text(
-                  AppLanguage.getString('mock_quiz'),
-                  style: AppTheme.getStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              Text(icon, style: AppTheme.getStyle(fontSize: 28)),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: AppTheme.getStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : color.darken(),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Tooltip(
-                margin: const EdgeInsets.only(left: 25, right: 25, top: 8),
-                triggerMode: TooltipTriggerMode.tap,
-                showDuration: Duration(seconds: 10),
-                textStyle: AppTheme.getStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w700),
-                message: AppLanguage.languageNotifier.value == 'ta'
-                    ? "வினாடி வினா அட்டவணை: ஞாயிறு, செவ்வாய், வியாழன், சனி"
-                    : "Quiz Schedule: Sunday, Tuesday, Thursday, Saturday",
-                child: const Icon(
-                  Icons.info_outline_rounded,
-                  color: Colors.white70,
-                  size: 20,
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            "${AppLanguage.getString('general_tamil')}  --->  25",
-            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "${AppLanguage.getString('general_studies')}  --->  15",
-            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "${AppLanguage.getString('aptitude')}  --->  10",
-            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            AppLanguage.getString('mock_quiz_ready'),
-            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 15),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: !_isQuizDay || HiveService.isMockQuizDone()
-                  ? null
-                  : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('mock_quiz'), isDark),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.7),
-                foregroundColor: AppTheme.primaryColor,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 5,
-              ),
-              child: Text(
-                !_isQuizDay
-                    ? (AppLanguage.languageNotifier.value == 'ta' ? "இன்று வினாடி வினா இல்லை" : "No Quiz Today")
-                    : HiveService.isMockQuizDone()
-                    ? AppLanguage.getString('completed')
-                    : AppLanguage.getString('start_quiz'),
-                style: AppTheme.getStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentAffairsSection(BuildContext context, bool isDark) {
+    bool isTamil = AppLanguage.languageNotifier.value == 'ta';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Text(
+              isTamil ? "இன்றைய நடப்பு நிகழ்வுகள்" : "Daily Current Affairs",
+              style: AppTheme.getStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isDark ? AppTheme.secondaryColor : AppTheme.textMainColor,
               ),
             ),
-          )
-        ],
+            if (_isCheckingNews) ...[
+              const SizedBox(width: 8),
+              const SizedBox(
+                height: 14,
+                width: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+                ),
+              ),
+            ]
+          ],
+        ),
+        const SizedBox(height: 12),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('current_affairs_points')
+              .orderBy('timestamp', descending: true)
+              .limit(10)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Center(
+                  child: Text(
+                    isTamil ? "செய்திகள் எதுவும் இல்லை" : "No news available",
+                    style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+              );
+            }
+
+            return SizedBox(
+              height: 180,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                shrinkWrap: true,
+                itemCount: snapshot.data!.docs.length + 1, // +1 for the Ad card
+                itemBuilder: (context, index) {
+                  if (index == snapshot.data!.docs.length) {
+                    return NativeAdWidget(
+                      isSmall: false, 
+                      refreshIntervalSeconds: 90,
+                      width: 280,
+                      height: 180,
+                      margin: const EdgeInsets.only(right: 16),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: isDark ? Colors.white10 : Colors.blue.shade50),
+                      ),
+                    );
+                  }
+                  try {
+                    NewsItem news = NewsItem.fromFirestore(snapshot.data!.docs[index]);
+                    return _buildNewsCard(context, news, isDark, isTamil);
+                  } catch (e) {
+                    return const SizedBox.shrink();
+                  }
+                },
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNewsCard(BuildContext context, NewsItem news, bool isDark, bool isTamil) {
+    String title = isTamil ? news.titleTa : news.titleEn;
+    return GestureDetector(
+      onTap: () {
+        RewardService.showInterstitialAd(
+          onDismissed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NewsDetailScreen(newsItem: news),
+              ),
+            );
+          },
+        );
+      },
+      child: Container(
+        width: 280,
+        margin: const EdgeInsets.only(right: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDark 
+              ? [Colors.indigo.shade500.withOpacity(0.2), Colors.cyan.shade100.withOpacity(0.2)]
+              : [Colors.white, Colors.blue.shade50],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isDark ? Colors.white24 : Colors.blue.shade100),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.secondaryColor.withOpacity(0.1) : AppTheme.primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    news.category,
+                    style: AppTheme.getStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  AppDate.getDisplayDate(news.timestamp),
+                  style: AppTheme.getStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87,fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.getStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : AppTheme.textMainColor,
+                ),
+              ),
+            ),
+            // const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.play_circle_fill_rounded, color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor, size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  isTamil ? "விளம்பரம் மற்றும் செய்தி" : "Ad & News",
+                  style: AppTheme.getStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor,
+                  ),
+                ),
+                const Spacer(),
+                const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.grey),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

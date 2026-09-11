@@ -446,13 +446,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 const Divider(height: 1),
                                 ListTile(
-                                  leading: const AppIcon(Icons.language_rounded, color: Colors.blue),
-                                  title: Text(AppLanguage.getString('web_version'), style: AppTheme.getStyle(fontSize: 16, color: Colors.lightBlue)),
-                                  trailing: const AppIcon(Icons.chevron_right_rounded, color: Colors.grey),
-                                  onTap: () => _launchURL(VersionService.getUrl('web_app')),
-                                ),
-                                const Divider(height: 1),
-                                ListTile(
                                   leading: const AppIcon(Icons.chat_bubble_rounded, color: Colors.green, size: 28),
                                   title: Text(AppLanguage.getString('join_whatsapp'), style: AppTheme.getStyle(fontSize: 16, color: Colors.green)),
                                   trailing: const AppIcon(Icons.chevron_right_rounded, color: Colors.grey),
@@ -464,6 +457,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   title: Text(AppLanguage.getString('join_telegram'), style: AppTheme.getStyle(fontSize: 16, color: Colors.lightBlue)),
                                   trailing: const AppIcon(Icons.chevron_right_rounded, color: Colors.grey),
                                   onTap: () => _launchURL(VersionService.getUrl('telegram')),
+                                ),
+                                const Divider(height: 1),
+                                ListTile(
+                                  leading: const AppIcon(Icons.language_rounded, color: Colors.lightBlue),
+                                  title: Text(AppLanguage.getString('web_version'), style: AppTheme.getStyle(fontSize: 16, color: Colors.lightBlue)),
+                                  trailing: const AppIcon(Icons.chevron_right_rounded, color: Colors.grey),
+                                  onTap: () => _launchURL(VersionService.getUrl('web_app')),
                                 ),
                                 const Divider(height: 1),
                                 ListTile(
@@ -581,9 +581,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _showSharePreviewDialog(Uint8List imageBytes) async {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
+    String webUrl = VersionService.getUrl('web_app');
     String shareText = AppLanguage.languageNotifier.value == 'ta'
-        ? "இந்தக் கேள்வியை உங்களால் தீர்க்க முடியுமா? TNPSC தேர்வுகளுக்குத் தயாராக இந்த ஆப்பை உடனே பதிவிறக்கம் செய்யுங்கள்! 📚\n\nபதிவிறக்கம்: https://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book"
-        : "Can you solve this? Download the app now to prepare for TNPSC exams! 📚\n\nDownload: https://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book";
+        ? "இந்தக் கேள்வியை உங்களால் தீர்க்க முடியுமா? TNPSC தேர்வுகளுக்குத் தயாராக இந்த ஆப்பை உடனே பதிவிறக்கம் செய்யுங்கள்! 📚\n\nAndroid App: https://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book\n\nWeb App: $webUrl"
+        : "Can you solve this? Download the app now to prepare for TNPSC exams! 📚\n\nAndroid App: https://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book\n\nWeb App: $webUrl";
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -609,7 +610,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   Flexible(child: Container(margin: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: isDark ? Colors.white10 : Colors.black12)), child: ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.memory(imageBytes, fit: BoxFit.contain)))),
                   Padding(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
                     child: SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -634,6 +635,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: const Icon(Icons.share_rounded, size: 20),
                         label: Text(AppLanguage.languageNotifier.value == 'ta' ? "இப்போதே பகிர்க" : "Share Now"),
                       ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: OutlinedButton.icon(
+                      onPressed: () => _launchURL(webUrl),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        side: BorderSide(color: isDark ? Colors.white24 : Colors.black12),
+                      ),
+                      icon: const Icon(Icons.language_rounded, size: 20),
+                      label: Text(AppLanguage.languageNotifier.value == 'ta' ? "இணையதளத்தைப் பார்க்க" : "Visit Website"),
                     ),
                   ),
                 ],

@@ -135,7 +135,7 @@ class AppLanguage {
       case 'no_bookmarks_desc':
         return ta ? 'உங்களுக்குப் பிடித்த அல்லது கடினமான வினாக்களைப் பிற்காலத்தில் படிக்கச் சேமித்து வைக்கலாம்.' : 'Save your favorite or difficult questions to study later.';
       case 'your_strength':
-        return ta ? 'உங்கள் பலம்' : 'Your Strength';
+        return ta ? 'உங்கள் பலம் (தினசரி வினா)' : 'Your Strength (Daily Quiz)';
       case 'next_quiz':
         return ta ? 'அடுத்த தேர்வு' : 'Next Quiz';
       case 'prev_quiz':
