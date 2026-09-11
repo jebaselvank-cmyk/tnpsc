@@ -984,7 +984,7 @@ class _HomeScreenState extends State<HomeScreen> {
     else if (categoryKey == 'general_studies')
       categoryName = isTamil ? 'பொது அறிவு' : 'General Studies';
     else if (categoryKey == 'aptitude')
-      categoryName = isTamil ? 'கணிதத் திறன்' : 'Aptitude';
+      categoryName = isTamil ? 'கணித திறன்' : 'Aptitude';
 
     return Container(
       padding: const EdgeInsets.only(left: 14,right: 14,top: 12,bottom: 12),
