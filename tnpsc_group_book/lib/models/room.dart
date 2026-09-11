@@ -12,6 +12,7 @@ class Room {
   final int expectedPlayerCount;
   final DateTime createdAt;
   final DateTime? startTime;
+  final DateTime? testStartTime;
   final DateTime? endTime;
   final List<dynamic> questions;
 
@@ -25,6 +26,7 @@ class Room {
     this.expectedPlayerCount = 0,
     required this.createdAt,
     this.startTime,
+    this.testStartTime,
     this.endTime,
     required this.questions,
   });
@@ -44,6 +46,9 @@ class Room {
       startTime: (map['startTime'] as Timestamp?) != null 
           ? AppDate.toIST((map['startTime'] as Timestamp).toDate()) 
           : null,
+      testStartTime: (map['testStartTime'] as Timestamp?) != null 
+          ? AppDate.toIST((map['testStartTime'] as Timestamp).toDate()) 
+          : null,
       endTime: (map['endTime'] as Timestamp?) != null 
           ? AppDate.toIST((map['endTime'] as Timestamp).toDate()) 
           : null,
@@ -61,6 +66,7 @@ class Room {
       'expectedPlayerCount': expectedPlayerCount,
       'createdAt': FieldValue.serverTimestamp(),
       'startTime': startTime != null ? Timestamp.fromDate(AppDate.toRealUTC(startTime!)) : null,
+      'testStartTime': testStartTime != null ? Timestamp.fromDate(AppDate.toRealUTC(testStartTime!)) : null,
       'endTime': endTime != null ? Timestamp.fromDate(AppDate.toRealUTC(endTime!)) : null,
       'questions': questions,
       'rewardDistributed': false,

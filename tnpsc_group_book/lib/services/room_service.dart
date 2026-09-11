@@ -128,7 +128,7 @@ class RoomService {
   }
 
   // Create a new room
-  Future<String?> createRoom(String subject, int maxPlayers, {DateTime? startTime, DateTime? endTime}) async {
+  Future<String?> createRoom(String subject, int maxPlayers, {DateTime? startTime, DateTime? testStartTime, DateTime? endTime}) async {
     String? uid = _auth.currentUser?.uid;
     if (uid == null) return null;
 
@@ -153,13 +153,13 @@ class RoomService {
       
       // Strict validation: Prevent creating rooms with past start time
       DateTime now = AppDate.getISTNow();
-      if (startTime != null && startTime.isBefore(now.subtract(const Duration(minutes: 1)))) {
+      if (testStartTime != null && testStartTime.isBefore(now.subtract(const Duration(minutes: 1)))) {
         return 'past_time_error';
       }
 
       // Ensure creation is for TODAY IST
       String today = AppDate.getTodayString();
-      if (startTime != null && AppDate.format(startTime) != today) {
+      if (testStartTime != null && AppDate.format(testStartTime) != today) {
         return 'invalid_date_error';
       }
 
@@ -294,6 +294,7 @@ class RoomService {
         mode: 'group_test',
         createdAt: AppDate.getISTNow(),
         startTime: startTime,
+        testStartTime: testStartTime,
         endTime: endTime,
         questions: questionsMap,
       );
@@ -444,6 +445,9 @@ class RoomService {
           'maxPlayers': data['maxPlayers'],
           'status': data['status'],
           'startTime': data['startTime'] != null ? AppDate.toIST((data['startTime'] as Timestamp).toDate()) : null,
+          'testStartTime': (data['testStartTime'] ?? data['startTime']) != null 
+              ? AppDate.toIST(((data['testStartTime'] ?? data['startTime']) as Timestamp).toDate()) 
+              : null,
           'endTime': data['endTime'] != null ? AppDate.toIST((data['endTime'] as Timestamp).toDate()) : null,
         };
       } else {
@@ -895,11 +899,10 @@ class RoomService {
     }
   }
 
-  Future<void> updateRoomTimeRange(String roomCode, DateTime start, DateTime end) async {
+  Future<void> updateRoomTimeRange(String roomCode, DateTime start) async {
     try {
       await _getRoomRef(roomCode).update({
-        'startTime': Timestamp.fromDate(AppDate.toRealUTC(start)),
-        'endTime': Timestamp.fromDate(AppDate.toRealUTC(end)),
+        'testStartTime': Timestamp.fromDate(AppDate.toRealUTC(start)),
       });
     } catch (e) {
       AppLog.e("Error updating room time range", e);

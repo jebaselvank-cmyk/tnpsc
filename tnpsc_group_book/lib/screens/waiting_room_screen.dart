@@ -42,6 +42,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   bool _isExiting = false;
   TimeOfDay? _customTime;
   DateTime? _roomStartTime;
+  DateTime? _testStartTime;
   DateTime? _roomEndTime;
   Timer? _timeCheckTimer;
   bool _canSelfStart = false;
@@ -58,14 +59,14 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   void _startTimeCheckTimer() {
     _timeCheckTimer?.cancel();
     _timeCheckTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_roomStartTime != null && _roomEndTime != null) {
+      if (_testStartTime != null && _roomEndTime != null) {
         final now = AppDate.getISTNow();
         
         // Expiry Logic: Now is after end time
         final bool expired = now.isAfter(_roomEndTime!);
         
         // Start Logic: Now is between start and end
-        final bool shouldEnable = now.isAfter(_roomStartTime!) && !expired;
+        final bool shouldEnable = now.isAfter(_testStartTime!) && !expired;
         
         if (expired != _isExpired || shouldEnable != _canSelfStart) {
           setState(() {
@@ -202,147 +203,21 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
               onTap: () async {
                 Navigator.pop(modalContext);
 
-                // Show time picker restricted to room range
-                final initialTime = _customTime ?? AppDate.getISTTimeOfDay();
-
-                final TimeOfDay? picked = await showTimePicker(
-                  context: context,
-                  initialTime: initialTime,
-                  helpText: isTamil
-                      ? "அழைப்பிதழ் நேரத்தைத் தேர்ந்தெடுக்கவும்"
-                      : "Select Invitation Time",
-                  builder: (context, child) {
-                    bool isDark =
-                        Theme.of(context).brightness == Brightness.dark;
-                    Color accentColor = isDark
-                        ? AppTheme.secondaryColor
-                        : AppTheme.primaryColor;
-                    Color goldColor = AppTheme.secondaryColor;
-
-                    return Theme(
-                      data: Theme.of(context).copyWith(
-                        timePickerTheme: TimePickerThemeData(
-                          backgroundColor: isDark
-                              ? const Color(0xFF101F42).withOpacity(0.9)
-                              : Colors.white.withOpacity(0.9),
-                          hourMinuteTextColor: WidgetStateColor.resolveWith(
-                            (states) => states.contains(WidgetState.selected)
-                                ? Colors.white
-                                : goldColor,
-                          ),
-                          hourMinuteColor: WidgetStateColor.resolveWith(
-                            (states) => states.contains(WidgetState.selected)
-                                ? accentColor
-                                : (isDark
-                                      ? Colors.white10
-                                      : Colors.grey.shade200),
-                          ),
-                          dayPeriodTextColor: WidgetStateColor.resolveWith(
-                            (states) => states.contains(WidgetState.selected)
-                                ? Colors.white
-                                : goldColor,
-                          ),
-                          dayPeriodColor: WidgetStateColor.resolveWith(
-                            (states) => states.contains(WidgetState.selected)
-                                ? accentColor
-                                : Colors.transparent,
-                          ),
-                          dialHandColor: accentColor,
-                          dialBackgroundColor: isDark
-                              ? Colors.white10
-                              : Colors.grey.shade100,
-                          dialTextColor: WidgetStateColor.resolveWith(
-                            (states) => states.contains(WidgetState.selected)
-                                ? Colors.white
-                                : goldColor,
-                          ),
-                          entryModeIconColor: goldColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
-                          ),
-                          helpTextStyle: AppTheme.getStyle(
-                            fontSize: 14,
-                            color: goldColor,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        colorScheme: ColorScheme.fromSeed(
-                          seedColor: accentColor,
-                          primary: accentColor,
-                          onPrimary: Colors.white,
-                          surface: isDark
-                              ? const Color(0xFF101F42)
-                              : Colors.white,
-                          onSurface: goldColor,
-                          brightness: isDark
-                              ? Brightness.dark
-                              : Brightness.light,
-                        ),
-                      ),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: MediaQuery(
-                          data: MediaQuery.of(
-                            context,
-                          ).copyWith(textScaler: const TextScaler.linear(0.9)),
-                          child: child!,
-                        ),
-                      ),
-                    );
-                  },
-                );
-
-                if (picked != null) {
-                  // Validate against room range if available
-                  if (_roomStartTime != null && _roomEndTime != null) {
-                    final pickedDateTime = AppDate.getISTTodayWithTime(
-                      picked.hour,
-                      picked.minute,
-                    );
-
-                    // Check if it's within range (using a small margin for comparison)
-                    bool isValid =
-                        pickedDateTime.isAfter(
-                          _roomStartTime!.subtract(const Duration(minutes: 1)),
-                        ) &&
-                        pickedDateTime.isBefore(
-                          _roomEndTime!.add(const Duration(minutes: 1)),
-                        );
-
-                    if (!isValid) {
-                      if (mounted) {
-                        final startStr = DateFormat(
-                          'hh:mm a',
-                        ).format(_roomStartTime!);
-                        final endStr = DateFormat(
-                          'hh:mm a',
-                        ).format(_roomEndTime!);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              isTamil
-                                  ? "அழைப்பிதழ் நேரம் $startStr முதல் $endStr வரை மட்டுமே இருக்க வேண்டும்"
-                                  : "Invitation time must be between $startStr and $endStr",
-                            ),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                      return;
-                    }
+                final roomSnapshot = await _roomService
+                    .roomStream(widget.roomCode)
+                    .first;
+                    
+                if (roomSnapshot.exists && mounted) {
+                  final roomData =
+                      roomSnapshot.data() as Map<String, dynamic>;
+                  
+                  TimeOfDay? inviteTime;
+                  final startTs = (roomData['testStartTime'] ?? roomData['startTime']) as Timestamp?;
+                  if (startTs != null) {
+                    inviteTime = AppDate.getISTTimeOfDay(AppDate.toIST(startTs.toDate()));
                   }
 
-                  setState(() {
-                    _customTime = picked;
-                  });
-                  final roomSnapshot = await _roomService
-                      .roomStream(widget.roomCode)
-                      .first;
-                  if (roomSnapshot.exists) {
-                    final roomData =
-                        roomSnapshot.data() as Map<String, dynamic>;
-                    _shareAsImage(roomData, _customTime);
-                  }
+                  _shareAsImage(roomData, inviteTime);
                 }
               },
             ),
@@ -1316,8 +1191,8 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
 
   void _editRoomTime() async {
     final isTamil = AppLanguage.languageNotifier.value == 'ta';
-    TimeOfDay start = _roomStartTime != null
-        ? AppDate.getISTTimeOfDay(_roomStartTime!)
+    TimeOfDay start = _testStartTime != null
+        ? AppDate.getISTTimeOfDay(_testStartTime!)
         : AppDate.getISTTimeOfDay();
     TimeOfDay end = _roomEndTime != null
         ? AppDate.getISTTimeOfDay(_roomEndTime!)
@@ -1342,376 +1217,183 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isTamil ? "தேர்வு நேரத்தை மாற்றவும்" : "Edit Room Time Range",
+                isTamil ? "தேர்வு தொடங்கும் நேரத்தை மாற்றவும்" : "Edit Test Start Time",
                 style: AppTheme.getStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: start,
-                          builder: (context, child) {
-                            bool isDark =
-                                Theme.of(context).brightness == Brightness.dark;
-                            Color accentColor = isDark
-                                ? AppTheme.secondaryColor
-                                : AppTheme.primaryColor;
-                            Color goldColor = AppTheme.secondaryColor;
+              InkWell(
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: start,
+                    builder: (context, child) {
+                      bool isDark =
+                          Theme.of(context).brightness == Brightness.dark;
+                      Color accentColor = isDark
+                          ? AppTheme.secondaryColor
+                          : AppTheme.primaryColor;
+                      Color goldColor = AppTheme.secondaryColor;
 
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                timePickerTheme: TimePickerThemeData(
-                                  backgroundColor: isDark
-                                      ? const Color(0xFF101F42).withOpacity(0.9)
-                                      : Colors.white.withOpacity(0.9),
-                                  hourMinuteTextColor:
-                                      WidgetStateColor.resolveWith(
-                                        (states) =>
-                                            states.contains(
-                                              WidgetState.selected,
-                                            )
-                                            ? Colors.white
-                                            : goldColor,
-                                      ),
-                                  hourMinuteColor: WidgetStateColor.resolveWith(
-                                    (states) =>
-                                        states.contains(WidgetState.selected)
-                                        ? accentColor
-                                        : (isDark
-                                              ? Colors.white10
-                                              : Colors.grey.shade200),
-                                  ),
-                                  dayPeriodTextColor:
-                                      WidgetStateColor.resolveWith(
-                                        (states) =>
-                                            states.contains(
-                                              WidgetState.selected,
-                                            )
-                                            ? Colors.white
-                                            : goldColor,
-                                      ),
-                                  dayPeriodColor: WidgetStateColor.resolveWith(
-                                    (states) =>
-                                        states.contains(WidgetState.selected)
-                                        ? accentColor
-                                        : Colors.transparent,
-                                  ),
-                                  dialHandColor: accentColor,
-                                  dialBackgroundColor: isDark
-                                      ? Colors.white10
-                                      : Colors.grey.shade100,
-                                  dialTextColor: WidgetStateColor.resolveWith(
-                                    (states) =>
-                                        states.contains(WidgetState.selected)
-                                        ? Colors.white
-                                        : goldColor,
-                                  ),
-                                  entryModeIconColor: goldColor,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(28),
-                                  ),
-                                  helpTextStyle: AppTheme.getStyle(
-                                    fontSize: 14,
-                                    color: goldColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          timePickerTheme: TimePickerThemeData(
+                            backgroundColor: isDark
+                                ? const Color(0xFF101F42).withOpacity(0.9)
+                                : Colors.white.withOpacity(0.9),
+                            hourMinuteTextColor:
+                                WidgetStateColor.resolveWith(
+                                  (states) =>
+                                      states.contains(
+                                        WidgetState.selected,
+                                      )
+                                      ? Colors.white
+                                      : goldColor,
                                 ),
-                                colorScheme: ColorScheme.fromSeed(
-                                  seedColor: accentColor,
-                                  primary: accentColor,
-                                  onPrimary: Colors.white,
-                                  surface: isDark
-                                      ? const Color(0xFF101F42)
-                                      : Colors.white,
-                                  onSurface: goldColor,
-                                  brightness: isDark
-                                      ? Brightness.dark
-                                      : Brightness.light,
+                            hourMinuteColor: WidgetStateColor.resolveWith(
+                              (states) =>
+                                  states.contains(WidgetState.selected)
+                                  ? accentColor
+                                  : (isDark
+                                        ? Colors.white10
+                                        : Colors.grey.shade200),
+                            ),
+                            dayPeriodTextColor:
+                                WidgetStateColor.resolveWith(
+                                  (states) =>
+                                      states.contains(
+                                        WidgetState.selected,
+                                      )
+                                      ? Colors.white
+                                      : goldColor,
                                 ),
-                              ),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(
-                                  sigmaX: 10,
-                                  sigmaY: 10,
-                                ),
-                                child: MediaQuery(
-                                  data: MediaQuery.of(context).copyWith(
-                                    textScaler: const TextScaler.linear(0.9),
-                                  ),
-                                  child: child!,
-                                ),
-                              ),
-                            );
-                          },
+                            dayPeriodColor: WidgetStateColor.resolveWith(
+                              (states) =>
+                                  states.contains(WidgetState.selected)
+                                  ? accentColor
+                                  : Colors.transparent,
+                            ),
+                            dialHandColor: accentColor,
+                            dialBackgroundColor: isDark
+                                ? Colors.white10
+                                : Colors.grey.shade100,
+                            dialTextColor: WidgetStateColor.resolveWith(
+                              (states) =>
+                                  states.contains(WidgetState.selected)
+                                  ? Colors.white
+                                  : goldColor,
+                            ),
+                            entryModeIconColor: goldColor,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            helpTextStyle: AppTheme.getStyle(
+                              fontSize: 14,
+                              color: goldColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          colorScheme: ColorScheme.fromSeed(
+                            seedColor: accentColor,
+                            primary: accentColor,
+                            onPrimary: Colors.white,
+                            surface: isDark
+                                ? const Color(0xFF101F42)
+                                : Colors.white,
+                            onSurface: goldColor,
+                            brightness: isDark
+                                ? Brightness.dark
+                                : Brightness.light,
+                          ),
+                        ),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(
+                            sigmaX: 10,
+                            sigmaY: 10,
+                          ),
+                          child: MediaQuery(
+                            data: MediaQuery.of(context).copyWith(
+                              textScaler: const TextScaler.linear(0.9),
+                            ),
+                            child: child!,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                  if (picked != null) {
+                    final now = AppDate.getISTNow();
+                    final baseDate =
+                        _testStartTime ?? AppDate.getISTNow();
+                    final pickedDT = AppDate.getISTDateTime(
+                      baseDate.year,
+                      baseDate.month,
+                      baseDate.day,
+                      picked.hour,
+                      picked.minute,
+                    );
+
+                    if (pickedDT.isBefore(
+                      now.subtract(const Duration(minutes: 1)),
+                    )) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isTamil
+                                  ? "கடந்த கால நேரத்தைத் தேர்ந்தெடுக்க முடியாது"
+                                  : "Cannot select past time",
+                            ),
+                          ),
                         );
-                        if (picked != null) {
-                          final now = AppDate.getISTNow();
-                          final baseDate =
-                              _roomStartTime ?? AppDate.getISTNow();
-                          final pickedDT = AppDate.getISTDateTime(
-                            baseDate.year,
-                            baseDate.month,
-                            baseDate.day,
-                            picked.hour,
-                            picked.minute,
-                          );
+                      }
+                      return;
+                    }
 
-                          if (pickedDT.isBefore(
-                            now.subtract(const Duration(minutes: 1)),
-                          )) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    isTamil
-                                        ? "கடந்த கால நேரத்தைத் தேர்ந்தெடுக்க முடியாது"
-                                        : "Cannot select past time",
-                                  ),
-                                ),
-                              );
-                            }
-                            return;
-                          }
-
-                          setModalState(() {
-                            start = picked;
-                            // Auto increment end time by 1 hour when start is changed
-                            end = TimeOfDay(
-                              hour: (picked.hour + 1) % 24,
-                              minute: picked.minute,
-                            );
-                          });
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              isTamil ? "தொடக்க நேரம்" : "Start Time",
-                              style: AppTheme.getStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            Text(
-                              start.format(context),
-                              style: AppTheme.getStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                    setModalState(() {
+                      start = picked;
+                    });
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isTamil ? "தேர்வு தொடங்கும் நேரம்" : "Test Start Time",
+                        style: AppTheme.getStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: end,
-                          builder: (context, child) {
-                            bool isDark =
-                                Theme.of(context).brightness == Brightness.dark;
-                            Color accentColor = isDark
-                                ? AppTheme.secondaryColor
-                                : AppTheme.primaryColor;
-                            Color goldColor = AppTheme.secondaryColor;
-
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                timePickerTheme: TimePickerThemeData(
-                                  backgroundColor: isDark
-                                      ? const Color(0xFF101F42).withOpacity(0.9)
-                                      : Colors.white.withOpacity(0.9),
-                                  hourMinuteTextColor:
-                                      WidgetStateColor.resolveWith(
-                                        (states) =>
-                                            states.contains(
-                                              WidgetState.selected,
-                                            )
-                                            ? Colors.white
-                                            : goldColor,
-                                      ),
-                                  hourMinuteColor: WidgetStateColor.resolveWith(
-                                    (states) =>
-                                        states.contains(WidgetState.selected)
-                                        ? accentColor
-                                        : (isDark
-                                              ? Colors.white10
-                                              : Colors.grey.shade200),
-                                  ),
-                                  dayPeriodTextColor:
-                                      WidgetStateColor.resolveWith(
-                                        (states) =>
-                                            states.contains(
-                                              WidgetState.selected,
-                                            )
-                                            ? Colors.white
-                                            : goldColor,
-                                      ),
-                                  dayPeriodColor: WidgetStateColor.resolveWith(
-                                    (states) =>
-                                        states.contains(WidgetState.selected)
-                                        ? accentColor
-                                        : Colors.transparent,
-                                  ),
-                                  dialHandColor: accentColor,
-                                  dialBackgroundColor: isDark
-                                      ? Colors.white10
-                                      : Colors.grey.shade100,
-                                  dialTextColor: WidgetStateColor.resolveWith(
-                                    (states) =>
-                                        states.contains(WidgetState.selected)
-                                        ? Colors.white
-                                        : goldColor,
-                                  ),
-                                  entryModeIconColor: goldColor,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(28),
-                                  ),
-                                  helpTextStyle: AppTheme.getStyle(
-                                    fontSize: 14,
-                                    color: goldColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                colorScheme: ColorScheme.fromSeed(
-                                  seedColor: accentColor,
-                                  primary: accentColor,
-                                  onPrimary: Colors.white,
-                                  surface: isDark
-                                      ? const Color(0xFF101F42)
-                                      : Colors.white,
-                                  onSurface: goldColor,
-                                  brightness: isDark
-                                      ? Brightness.dark
-                                      : Brightness.light,
-                                ),
-                              ),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(
-                                  sigmaX: 10,
-                                  sigmaY: 10,
-                                ),
-                                child: MediaQuery(
-                                  data: MediaQuery.of(context).copyWith(
-                                    textScaler: const TextScaler.linear(0.9),
-                                  ),
-                                  child: child!,
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                        if (picked != null) {
-                          final baseDate =
-                              _roomStartTime ?? AppDate.getISTNow();
-                          final startDT = AppDate.getISTDateTime(
-                            baseDate.year,
-                            baseDate.month,
-                            baseDate.day,
-                            start.hour,
-                            start.minute,
-                          );
-                          final pickedDT = AppDate.getISTDateTime(
-                            baseDate.year,
-                            baseDate.month,
-                            baseDate.day,
-                            picked.hour,
-                            picked.minute,
-                          );
-
-                          if (pickedDT.isBefore(startDT)) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    isTamil
-                                        ? "முடிவு நேரம் தொடக்க நேரத்திற்குப் பிறகு இருக்க வேண்டும்"
-                                        : "End time must be after start time",
-                                  ),
-                                ),
-                              );
-                            }
-                            return;
-                          }
-
-                          if (pickedDT.difference(startDT).inMinutes < 60) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    isTamil
-                                        ? "முடிவு நேரம் தொடக்க நேரத்திலிருந்து குறைந்தது 1 மணிநேரம் தள்ளி இருக்க வேண்டும்"
-                                        : "End time must be at least 1 hour after start time",
-                                  ),
-                                ),
-                              );
-                            }
-                            return;
-                          }
-
-                          setModalState(() => end = picked);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              isTamil ? "முடிவு நேரம்" : "End Time",
-                              style: AppTheme.getStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            Text(
-                              end.format(context),
-                              style: AppTheme.getStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                      Text(
+                        start.format(context),
+                        style: AppTheme.getStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () async {
-                    final baseDate = _roomStartTime ?? AppDate.getISTNow();
+                    final baseDate = _testStartTime ?? AppDate.getISTNow();
                     final startDT = AppDate.getISTDateTime(
                       baseDate.year,
                       baseDate.month,
@@ -1719,14 +1401,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                       start.hour,
                       start.minute,
                     );
-                    final endDT = AppDate.getISTDateTime(
-                      baseDate.year,
-                      baseDate.month,
-                      baseDate.day,
-                      end.hour,
-                      end.minute,
-                    );
-
+                    
                     // Validation: Start time must be in future (at least 2 mins from now)
                     final nowAtEdit = AppDate.getISTNow();
                     if (startDT.isBefore(
@@ -1744,41 +1419,14 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                       return;
                     }
 
-                    if (endDT.isBefore(startDT)) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                    // Validation: testStartTime must be before endTime
+                    if (_roomEndTime != null && startDT.isAfter(_roomEndTime!)) {
+                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
                             isTamil
-                                ? "முடிவு நேரம் தொடக்க நேரத்திற்குப் பிறகு இருக்க வேண்டும்"
-                                : "End time must be after start time",
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    final diffInMinutes = endDT.difference(startDT).inMinutes;
-
-                    if (diffInMinutes < 60) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            isTamil
-                                ? "குறைந்தது 1 மணிநேர இடைவெளி தேவை"
-                                : "Minimum 1 hour duration required",
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (diffInMinutes > 1440) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            isTamil
-                                ? "அதிகபட்சம் 24 மணிநேரம் மட்டுமே"
-                                : "Maximum duration is 24 hours",
+                                ? "தேர்வு தொடங்கும் நேரம் முடிவு நேரத்திற்கு முன்னதாக இருக்க வேண்டும்"
+                                : "Test start time must be before the room end time",
                           ),
                         ),
                       );
@@ -1788,7 +1436,6 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                     await _roomService.updateRoomTimeRange(
                       widget.roomCode,
                       startDT,
-                      endDT,
                     );
                     if (mounted) {
                       Navigator.pop(context);
@@ -1796,8 +1443,8 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                         SnackBar(
                           content: Text(
                             isTamil
-                                ? "நேரம் மாற்றப்பட்டது"
-                                : "Time range updated successfully",
+                                ? "தேர்வு நேரம் மாற்றப்பட்டது"
+                                : "Test start time updated successfully",
                           ),
                           backgroundColor: Colors.green,
                         ),
@@ -1986,10 +1633,12 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
           _subject = roomData['subject'] ?? 'General';
           
           // Ensure room times are consistently compared in IST
-          final startTs = roomData['startTime'] as Timestamp?;
+          final roomStartTs = roomData['startTime'] as Timestamp?;
+          final testStartTs = (roomData['testStartTime'] ?? roomData['startTime']) as Timestamp?;
           final endTs = roomData['endTime'] as Timestamp?;
           
-          if (startTs != null) _roomStartTime = AppDate.toIST(startTs.toDate());
+          if (roomStartTs != null) _roomStartTime = AppDate.toIST(roomStartTs.toDate());
+          if (testStartTs != null) _testStartTime = AppDate.toIST(testStartTs.toDate());
           if (endTs != null) _roomEndTime = AppDate.toIST(endTs.toDate());
 
           // Handle Countdown State
@@ -2242,46 +1891,79 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                               ],
                             ),
                           ),
-                          // if (_roomStartTime != null && _roomEndTime != null)
-                          //   Padding(
-                          //     padding: const EdgeInsets.symmetric(
-                          //       horizontal: 20,
-                          //       vertical: 5,
-                          //     ),
-                          //     child: Row(
-                          //       mainAxisAlignment: MainAxisAlignment.center,
-                          //       children: [
-                          //         AppIcon(
-                          //           Icons.access_time_rounded,
-                          //           size: 14,
-                          //           color: isDark
-                          //               ? Colors.white60
-                          //               : Colors.black45,
-                          //         ),
-                          //         const SizedBox(width: 4),
-                          //         Text(
-                          //           "${DateFormat('hh:mm a').format(_roomStartTime!)} - ${DateFormat('hh:mm a').format(_roomEndTime!)}",
-                          //           style: AppTheme.getStyle(
-                          //             fontSize: 12,
-                          //             color: isDark
-                          //                 ? Colors.white60
-                          //                 : Colors.black45,
-                          //           ),
-                          //         ),
-                          //         if (isCurrentUserHost)
-                          //           IconButton(
-                          //             icon: const AppIcon(
-                          //               AppIcons.edit,
-                          //               size: 14,
-                          //             ),
-                          //             onPressed: _editRoomTime,
-                          //             padding: EdgeInsets.zero,
-                          //             constraints: const BoxConstraints(),
-                          //           ),
-                          //       ],
-                          //     ),
-                          //   ),
-                           const SizedBox(height: 10),
+                          SizedBox(height: 8),
+                          if (_roomStartTime != null && _roomEndTime != null)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 2,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  AppIcon(
+                                    Icons.timer_outlined,
+                                    size: 14,
+                                    color: isDark
+                                        ? Colors.white54
+                                        : Colors.black45,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    "${DateFormat('hh:mm a').format(_roomStartTime!)} - ${DateFormat('hh:mm a').format(_roomEndTime!)}",
+                                    style: AppTheme.getStyle(
+                                      fontSize: 11,
+                                      color: isDark
+                                          ? Colors.white54
+                                          : Colors.black45,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (_testStartTime != null)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 0,
+                                vertical: 5,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  AppIcon(
+                                    Icons.play_circle_outline_rounded,
+                                    size: 16,
+                                    color: AppTheme.secondaryColor,
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    "${AppLanguage.languageNotifier.value == 'ta' ? 'தேர்வு :' : 'Exam :'} ${DateFormat('hh:mm a').format(_testStartTime!)}",
+                                    style: AppTheme.getStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark
+                                          ? AppTheme.secondaryColor
+                                          : AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                  if (isCurrentUserHost)
+                                    Padding(
+                                      padding: const EdgeInsets.all(6.0),
+                                      child: GestureDetector(
+                                        onTap: _editRoomTime,
+                                        child: AppIcon(
+                                            AppIcons.edit,
+                                            size: 16,
+                                          color: isDark
+                                              ? AppTheme.secondaryColor
+                                              : AppTheme.primaryColor,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                           const SizedBox(height: 5),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 20,
