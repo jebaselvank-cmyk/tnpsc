@@ -458,7 +458,7 @@ class HiveService {
       ) async {
     var box = Hive.box(userBoxName);
 
-    // OVERWRITE instead of increment to show only the latest quiz results
+    // Overwrite per quiz as requested by user to show the exact current quiz breakdown
     int wrong = total - correct;
 
     await box.put(
@@ -476,6 +476,7 @@ class HiveService {
       wrong,
     );
   }
+
   static Map<String, dynamic> getCategoryPerformance(String categoryKey) {
     var box = Hive.box(userBoxName);
 

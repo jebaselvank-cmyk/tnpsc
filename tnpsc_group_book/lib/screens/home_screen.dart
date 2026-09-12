@@ -802,7 +802,12 @@ class _HomeScreenState extends State<HomeScreen> {
     double lowestPercent = 101;
 
     void checkWeakest(String key, Map<String, dynamic> perf) {
-      double correctPercent = perf['correctPercent'];
+      int total = perf['total'] ?? 0;
+      int correct = perf['correct'] ?? 0;
+      
+      // If a category has 0 questions attempted, its percentage is 0%, so it should be captured if others are also low or zero
+      double correctPercent = total > 0 ? (correct / total) * 100 : 0;
+      
       if (correctPercent < lowestPercent) {
         lowestPercent = correctPercent;
         weakestCategories = [key];
@@ -829,7 +834,11 @@ class _HomeScreenState extends State<HomeScreen> {
         else if (cat == 'aptitude') catNames.add(isTamil ? 'கணிதத் திறன்' : 'Aptitude');
       }
 
-      String joinedNames = catNames.join(', ');
+      String separator = isTamil ? ' மற்றும் ' : ' & ';
+      String joinedNames = catNames.length > 1 
+          ? catNames.sublist(0, catNames.length - 1).join(', ') + separator + catNames.last
+          : catNames.first;
+      
       if (catNames.length > 1) {
         recommendation = AppLanguage.getString('focus_recommendation_plural').replaceAll('{categories}', joinedNames);
       } else {
@@ -953,8 +962,12 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     bool isTamil = AppLanguage.languageNotifier.value == 'ta';
 
-    // Calculate stats
-    int attempted = total;
+    // Calculate stats safely
+    int finalTotal = total;
+    if (correct > finalTotal) {
+      finalTotal = correct; // Safety backup so correct never exceeds total visually
+    }
+    int attempted = finalTotal;
     double correctPercentage = attempted > 0 ? (correct / attempted) * 100 : 0;
 
     // Determine progress color based on overall accuracy (same as before)
@@ -1041,7 +1054,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(width: 20),
                   Text(
-                    isTamil ? "$correct / $total சரி" : "$correct / $total Correct",
+                    isTamil ? "$correct / $finalTotal சரி" : "$correct / $finalTotal Correct",
                     style: AppTheme.getStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,

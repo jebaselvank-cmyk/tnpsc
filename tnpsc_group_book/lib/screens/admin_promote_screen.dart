@@ -64,7 +64,7 @@ class _AdminPromoteScreenState extends State<AdminPromoteScreen> with TickerProv
 
   void _preCacheImages() {
     for (int i = 1; i <= 7; i++) {
-      precacheImage(AssetImage('asset/images/sharequiz$i.png'), context);
+      precacheImage(AssetImage('asset/images/sharequiz$i.webp'), context);
     }
   }
 

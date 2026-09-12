@@ -589,71 +589,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              decoration: BoxDecoration(color: isDark ? AppTheme.darkSurfaceColor : Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10))]),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(AppLanguage.languageNotifier.value == 'ta' ? "முன்னோட்டம்" : "Share Preview", style: AppTheme.getStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppTheme.textMainColor)),
-                        IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
-                      ],
-                    ),
-                  ),
-                  Flexible(child: Container(margin: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: isDark ? Colors.white10 : Colors.black12)), child: ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.memory(imageBytes, fit: BoxFit.contain)))),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          try {
-                            final directory = await getTemporaryDirectory();
-                            final imagePath = await File('${directory.path}/share_quiz.png').create();
-                            await imagePath.writeAsBytes(imageBytes);
-                            final result = await Share.shareXFiles([XFile(imagePath.path)], text: shareText);
-                            if (result.status == ShareResultStatus.success && HiveService.canEarnShareRewardToday()) {
-                                await _firestoreService.incrementUserPoints(50);
-                                await HiveService.markShareRewardEarnedToday();
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLanguage.languageNotifier.value == 'ta' ? "வாழ்த்துக்கள்! பகிர்ந்ததற்காக 50 புள்ளிகள் கிடைத்தன!" : "Congratulations! You earned 50 points for sharing!"), backgroundColor: Colors.green));
-                                  setState(() {});
-                                }
-                            }
-                          } catch (e) { AppLog.e("Error sharing from dialog: $e"); }
-                        },
-                        icon: const Icon(Icons.share_rounded, size: 20),
-                        label: Text(AppLanguage.languageNotifier.value == 'ta' ? "இப்போதே பகிர்க" : "Share Now"),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10))
+                    ]),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                                AppLanguage.languageNotifier.value == 'ta'
+                                    ? "முன்னோட்டம்"
+                                    : "Share Preview",
+                                style: AppTheme.getStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.white : AppTheme.textMainColor)),
+                          ),
+                          IconButton(
+                              icon: const Icon(Icons.close_rounded),
+                              onPressed: () => Navigator.pop(context)),
+                        ],
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                    child: OutlinedButton.icon(
-                      onPressed: () => _launchURL(webUrl),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 50),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        side: BorderSide(color: isDark ? Colors.white24 : Colors.black12),
+                    Container(
+                        height: MediaQuery.of(context).size.height * 0.4,
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: isDark ? Colors.white10 : Colors.black12)),
+                        child: ClipRRect(
+                            borderRadius: BorderRadius.circular(11),
+                            child: Image.memory(imageBytes, fit: BoxFit.contain))),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            try {
+                              final directory = await getTemporaryDirectory();
+                              final imagePath = await File('${directory.path}/share_quiz.png').create();
+                              await imagePath.writeAsBytes(imageBytes);
+                              final result = await Share.shareXFiles([XFile(imagePath.path)], text: shareText);
+                              if (result.status == ShareResultStatus.success && HiveService.canEarnShareRewardToday()) {
+                                  await _firestoreService.incrementUserPoints(50);
+                                  await HiveService.markShareRewardEarnedToday();
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLanguage.languageNotifier.value == 'ta' ? "வாழ்த்துக்கள்! பகிர்ந்ததற்காக 50 புள்ளிகள் கிடைத்தன!" : "Congratulations! You earned 50 points for sharing!"), backgroundColor: Colors.green));
+                                    setState(() {});
+                                  }
+                              }
+                            } catch (e) { AppLog.e("Error sharing from dialog: $e"); }
+                          },
+                          icon: const Icon(Icons.share_rounded, size: 20),
+                          label: Text(AppLanguage.languageNotifier.value == 'ta' ? "இப்போதே பகிர்க" : "Share Now"),
+                        ),
                       ),
-                      icon: const Icon(Icons.language_rounded, size: 20),
-                      label: Text(AppLanguage.languageNotifier.value == 'ta' ? "இணையதளத்தைப் பார்க்க" : "Visit Website"),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

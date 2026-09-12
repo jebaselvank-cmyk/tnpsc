@@ -82,11 +82,12 @@ class _ResultScreenState extends State<ResultScreen> {
     
     if (!isDailyQuiz) return;
 
-    // Reset all categories first to ensure we only show the LATEST quiz results
+    // Reset all categories to zero first so that only the CURRENT quiz numbers are displayed on home screen!
     HiveService.updateCategoryPerformance('general_tamil', 0, 0);
     HiveService.updateCategoryPerformance('general_studies', 0, 0);
     HiveService.updateCategoryPerformance('aptitude', 0, 0);
 
+    // Dynamic totals based on quiz data
     int tamilTotal = 0;
     int tamilCorrect = 0;
     int gsTotal = 0;
@@ -99,29 +100,14 @@ class _ResultScreenState extends State<ResultScreen> {
       final selected = widget.selectedAnswers[i];
       final isCorrect = selected != null && selected == q.correctOptionIndex;
 
-      String category = 'general_studies';
       final qType = q.quizType?.toLowerCase() ?? "";
       final qSub = q.subject?.toLowerCase() ?? "";
-      final qText = "${q.questionEn ?? ""} ${q.questionTa ?? ""} ${q.question}".toLowerCase();
 
-      // DEBUG: Log question metadata
-      AppLog.d("AI_DEBUG_RESULT: Q$i -> type: '$qType', sub: '$qSub', text: '${qText.substring(0, qText.length > 20 ? 20 : qText.length)}...'");
-
-      // Improved Hierarchy: Check keywords in type, subject, AND question text
-      if (qType.contains('aptitude') || qSub.contains('aptitude') || qSub.contains('math') || qSub.contains('mental') || qText.contains('கணித') || qText.contains('aptitude') || qText.contains('எண்') || qText.contains('திறன்')) {
-        category = 'aptitude';
-      } else if (qType.contains('general_tamil') || qSub.contains('tamil') || qText.contains('தமிழ்')) {
-        category = 'general_tamil';
-      } else {
-        category = 'general_studies';
-      }
-
-      AppLog.d("AI_DEBUG_RESULT: -> Final Category: $category");
-
-      if (category == 'general_tamil') {
+      // Robust categorization
+      if (qSub.contains('general_tamil') || qType.contains('general_tamil') || qType.contains('tamil') || qSub.contains('tamil')) {
         tamilTotal++;
         if (isCorrect) tamilCorrect++;
-      } else if (category == 'aptitude') {
+      } else if (qType.contains('aptitude') || qSub.contains('aptitude') || qSub.contains('math') || qSub.contains('mental')) {
         aptitudeTotal++;
         if (isCorrect) aptitudeCorrect++;
       } else {
@@ -132,9 +118,10 @@ class _ResultScreenState extends State<ResultScreen> {
 
     AppLog.d("AI_DEBUG_STATS: Tamil: $tamilCorrect/$tamilTotal, GS: $gsCorrect/$gsTotal, Aptitude: $aptitudeCorrect/$aptitudeTotal");
 
-    if (tamilTotal > 0) HiveService.updateCategoryPerformance('general_tamil', tamilCorrect, tamilTotal);
-    if (gsTotal > 0) HiveService.updateCategoryPerformance('general_studies', gsCorrect, gsTotal);
-    if (aptitudeTotal > 0) HiveService.updateCategoryPerformance('aptitude', aptitudeCorrect, aptitudeTotal);
+    // Update performance with dynamic totals from current quiz
+    HiveService.updateCategoryPerformance('general_tamil', tamilCorrect, tamilTotal);
+    HiveService.updateCategoryPerformance('general_studies', gsCorrect, gsTotal);
+    HiveService.updateCategoryPerformance('aptitude', aptitudeCorrect, aptitudeTotal);
   }
 
   String _formatTime(int seconds) {

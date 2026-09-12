@@ -64,7 +64,7 @@ class _SharePosterState extends State<SharePoster> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
-    String backgroundImage = 'asset/images/sharequiz${widget.dayIndex}.png';
+    String backgroundImage = 'asset/images/sharequiz${widget.dayIndex}.webp';
     const Color goldColor = Color(0xFFFFD700);
 
     return Container(
