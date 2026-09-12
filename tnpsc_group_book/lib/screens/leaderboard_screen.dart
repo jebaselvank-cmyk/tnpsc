@@ -692,7 +692,7 @@ class _MyRankStickyCardState extends State<_MyRankStickyCard> {
                           Text(
                             "#${data['rank']}",
                             style: AppTheme.getStyle(
-                              color: Colors.white,
+                              color: isDark ? Colors.white : Colors.black87,
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
                             ),

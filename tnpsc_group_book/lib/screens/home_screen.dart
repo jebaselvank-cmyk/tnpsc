@@ -422,7 +422,7 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        border: Border.all(color: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight,width: 0.6),
+        border: Border.all(color: isDark ? AppTheme.primaryColorLight2.withValues(alpha: 0.2) : AppTheme.secondaryColorLight2, width: isDark ? 1 : 0.6),
         gradient: LinearGradient(
           colors: [isDark ? AppTheme.primaryColorGlass : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColorGlass : AppTheme.secondaryColorLight],
           begin: Alignment.topLeft,
@@ -430,10 +430,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(
-            color: AppTheme.primaryColor.withValues(alpha: 0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+          isDark ? BoxShadow(
+            color: AppTheme.secondaryColorLight.withValues(alpha: 0.4),
+            blurRadius: 1,
+            offset: const Offset(0, 0.5),
+          ) : BoxShadow(
+            color: AppTheme.darkBgColor.withValues(alpha: 0.4),
+            blurRadius: 4,
+            offset: const Offset(0, 3),
           )
         ],
       ),
@@ -447,15 +451,16 @@ class _HomeScreenState extends State<HomeScreen> {
               Flexible(
                 child: Text(
                   AppLanguage.getString('daily_quiz'),
-                  style: AppTheme.getStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: AppTheme.getStyle(color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.7), fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
+              const SizedBox(width: 32),
             ],
           ),
           const SizedBox(height: 10),
           Text(
             AppLanguage.getString('today_quiz_ready'),
-            style: AppTheme.getStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 15),
+            style: AppTheme.getStyle(color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.7), fontSize: 15),
           ),
           const SizedBox(height: 20),
           SizedBox(
@@ -465,11 +470,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? null
                 : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('daily_quiz'), isDark),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.7),
+                backgroundColor: isDark ? Colors.white.withOpacity(0.7) : Colors.white.withOpacity(0.5),
                 foregroundColor: AppTheme.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 5,
+                elevation: isDark ? 5 : 1,
               ),
               child: Text(
                 HiveService.isDailyQuizDone() ? AppLanguage.getString('completed') : AppLanguage.getString('start_quiz'),
@@ -487,18 +492,22 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        border: Border.all(color: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight, width: 0.6),
+        border: Border.all(color: isDark ? AppTheme.primaryColorLight2.withValues(alpha: 0.2) : AppTheme.secondaryColorLight2, width: isDark ? 1 : 0.6),
         gradient: LinearGradient(
-          colors: [isDark ? AppTheme.primaryColorGlass : AppTheme.primaryColorLight, isDark ? AppTheme.secondaryColorGlass : AppTheme.secondaryColorLight],
+          colors: [isDark ? AppTheme.primaryColorGlass2 : AppTheme.primaryColorLight2, isDark ? AppTheme.secondaryColorGlass2 : AppTheme.secondaryColorLight2],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withValues(alpha: 0.2),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+          isDark ? BoxShadow(
+            color: AppTheme.secondaryColorLight.withValues(alpha: 0.4),
+            blurRadius: 1,
+            offset: const Offset(0, 0.5),
+          ) : BoxShadow(
+            color: AppTheme.darkBgColor.withValues(alpha: 0.4),
+            blurRadius: 4,
+            offset: const Offset(0, 3),
           )
         ],
       ),
@@ -508,23 +517,24 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text("📰", style: AppTheme.getStyle(fontSize: 22)),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Flexible(
                 child: Text(
                   AppLanguage.getString('ca_daily_quiz'),
                   style: AppTheme.getStyle(
-                      color: isDark ? Colors.white : AppTheme.primaryColor,
+                      color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.7),
                       fontSize: 18,
                       fontWeight: FontWeight.bold),textAlign: TextAlign.center,
                 ),
               ),
+              const SizedBox(width: 30),
             ],
           ),
           const SizedBox(height: 10),
           Text(
             AppLanguage.getString('today_quiz_ready'),
             style: AppTheme.getStyle(
-                color: isDark ? Colors.white70 : AppTheme.textMainColor.withOpacity(0.8), fontSize: 15),
+                color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.7), fontSize: 15, ),
           ),
           const SizedBox(height: 20),
           SizedBox(
@@ -534,11 +544,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? null
                   : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('ca_daily_quiz'), isDark),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.7),
+                backgroundColor: isDark ? Colors.white.withOpacity(0.7) : Colors.white.withOpacity(0.5),
                 foregroundColor: AppTheme.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 3,
+                elevation: isDark ? 5 : 1,
               ),
               child: Text(
                 HiveService.isCaQuizDone() ? AppLanguage.getString('completed') : AppLanguage.getString('start_quiz'),
@@ -558,21 +568,25 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        border: Border.all(color: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight, width: 0.6),
+        border: Border.all(color: isDark ? AppTheme.primaryColorLight2.withValues(alpha: 0.2) : AppTheme.secondaryColorLight2, width: isDark ? 1 : 0.6),
         gradient: LinearGradient(
           colors: [
-            isDark ? AppTheme.primaryColorGlass : AppTheme.primaryColorLight,
-            isDark ? AppTheme.secondaryColorGlass : AppTheme.secondaryColorLight
+            isDark ? AppTheme.primaryColorGlass3 : AppTheme.primaryColorLight3,
+            isDark ? AppTheme.secondaryColorGlass3 : AppTheme.secondaryColorLight3
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(
-            color: Colors.purple.withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+          isDark ? BoxShadow(
+            color: AppTheme.secondaryColorLight.withValues(alpha: 0.4),
+            blurRadius: 1,
+            offset: const Offset(0, 0.5),
+          ) : BoxShadow(
+            color: AppTheme.darkBgColor.withValues(alpha: 0.4),
+            blurRadius: 4,
+            offset: const Offset(0, 3),
           )
         ],
       ),
@@ -587,45 +601,40 @@ class _HomeScreenState extends State<HomeScreen> {
               Flexible(
                 child: Text(
                   AppLanguage.getString('mock_quiz'),
-                  style: AppTheme.getStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: AppTheme.getStyle(color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.7), fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
                 ),
               ),
-              const SizedBox(width: 8),
-              Tooltip(
-                margin: const EdgeInsets.only(left: 25, right: 25, top: 8),
-                triggerMode: TooltipTriggerMode.tap,
-                showDuration: const Duration(seconds: 10),
-                textStyle: AppTheme.getStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w700),
-                message: AppLanguage.languageNotifier.value == 'ta'
-                    ? "வினாடி வினா அட்டவணை: ஞாயிறு, செவ்வாய், வியாழன், சனி"
-                    : "Quiz Schedule: Sunday, Tuesday, Thursday, Saturday",
-                child: const Icon(
-                  Icons.info_outline_rounded,
-                  color: Colors.white70,
-                  size: 20,
-                ),
-              ),
+              const SizedBox(width: 32),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             "${AppLanguage.getString('general_tamil')}  --->  25",
-            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+            style: AppTheme.getStyle(color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.5), fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
             "${AppLanguage.getString('general_studies')}  --->  15",
-            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+            style: AppTheme.getStyle(color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.5), fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
             "${AppLanguage.getString('aptitude')}  --->  10",
-            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+            style: AppTheme.getStyle(color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.5), fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          Text(
+              AppLanguage.languageNotifier.value == 'ta'
+                  ? "வினாடி வினா அட்டவணை: \nஞாயிறு, செவ்வாய், வியாழன், சனி"
+                  : "Quiz Schedule: \nSunday, Tuesday, Thursday, Saturday",
+            style: AppTheme.getStyle(color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.5), fontSize: 13),
           ),
           const SizedBox(height: 10),
           Text(
             AppLanguage.getString('mock_quiz_ready'),
-            style: AppTheme.getStyle(color: Colors.white.withOpacity(0.9), fontSize: 15),
+            textAlign: TextAlign.center,
+            style: AppTheme.getStyle(color: isDark ? Colors.white : Colors.black87.withValues(alpha: 0.5), fontSize: 15),
           ),
           const SizedBox(height: 20),
           SizedBox(
@@ -635,11 +644,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? null
                   : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('mock_quiz'), isDark),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.7),
+                backgroundColor: isDark ? Colors.white.withOpacity(0.7) : Colors.white.withOpacity(0.5),
                 foregroundColor: AppTheme.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 5,
+                elevation: isDark ? 5 : 1,
               ),
               child: Text(
                 !isQuizDay

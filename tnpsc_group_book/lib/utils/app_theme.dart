@@ -13,11 +13,21 @@ class AppTheme {
   static const Color darkSurfaceColor = Color(0xFF101F42);
 
   static const Color primaryColor = Color(0xFF0F2D59); // Premium Deep Navy Blue
-  static const Color primaryColorGlass = Color(0xFF101926); // Premium Deep Navy Blue Glass
-  static const Color primaryColorLight = Color(0xFF585F69); // Premium Deep Navy Blue
+  static const Color primaryColorGlass = Color(0xFF0D0818); // Premium Deep Navy Blue Glass
+  static const Color primaryColorLight = Color(0xFFF4FDFF); // Premium Deep Navy Blue
+  static const Color primaryColorGlass2 = Color(0xFF101926); // Premium Deep Navy Blue Glass
+  static const Color primaryColorLight2 = Color(0xFFF2F8FF); // Premium Deep Navy Blue
+  static const Color primaryColorGlass3 = Color(0xFF050B13); // Premium Deep Navy Blue Glass
+  static const Color primaryColorLight3 = Color(0xFFEEF5FF); // Premium Deep Navy Blue
+
   static const Color secondaryColor = Color(0xFFD4AF37); // Premium Gold
-  static const Color secondaryColorGlass = Color(0xFF362C0E); // Premium Gold Glass
-  static const Color secondaryColorLight = Color(0xFFC2B797); // Premium Gold
+  static const Color secondaryColorGlass = Color(0xFF131004); // Premium Gold Glass
+  static const Color secondaryColorGlass2 = Color(0xFF19091F); // Premium Gold Glass
+  static const Color secondaryColorGlass3 = Color(0xFF121706); // Premium Gold Glass
+
+  static const Color secondaryColorLight = Color(0xFFF0F3FF); // Premium Gold
+  static const Color secondaryColorLight2 = Color(0xFFFFF8F3); // Premium Gold
+  static const Color secondaryColorLight3 = Color(0xFFFFF3FD); // Premium Gold
   static const Color accentColor = Color(0xFFE5BA73); // Soft Golden Amber Accent
   static const Color backgroundColor = Color(0xFFF4F6F9); // Soft Light Blue/Slate White
   static const Color cardColor = Colors.white;
