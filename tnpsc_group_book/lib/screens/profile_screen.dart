@@ -312,7 +312,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Card(
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             elevation: 0,
-                            color: isDark ? Theme.of(context).cardColor : Colors.white,
+                            color: isDark ? Color(0xFF020C33) : Colors.white,
                             child: Column(
                               children: [
                                 ListTile(
@@ -413,7 +413,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Card(
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             elevation: 0,
-                            color: isDark ? Theme.of(context).cardColor : Colors.white,
+                            color: isDark ? Color(0xFF020C33) : Colors.white,
                             child: Column(
                               children: [
                                 if (_isAdmin) ...[

@@ -16,7 +16,7 @@ class AppTheme {
   static const Color primaryColorGlass = Color(0xFF0D0818); // Premium Deep Navy Blue Glass
   static const Color primaryColorLight = Color(0xFFF4FDFF); // Premium Deep Navy Blue
   static const Color primaryColorGlass2 = Color(0xFF101926); // Premium Deep Navy Blue Glass
-  static const Color primaryColorLight2 = Color(0xFFF2F8FF); // Premium Deep Navy Blue
+  static const Color primaryColorLight2 = Color(0xFFE9F3FF); // Premium Deep Navy Blue
   static const Color primaryColorGlass3 = Color(0xFF050B13); // Premium Deep Navy Blue Glass
   static const Color primaryColorLight3 = Color(0xFFEEF5FF); // Premium Deep Navy Blue
 
@@ -158,7 +158,7 @@ class AppTheme {
         ),
       ),
       cardTheme: CardThemeData(
-        color: isDark ? darkSurfaceColor : cardColor,
+        color: isDark ? Color(0xFF020C33) : cardColor,
         elevation: 4,
         shadowColor: isDark ? Colors.black54 : Colors.black12,
         shape: RoundedRectangleBorder(

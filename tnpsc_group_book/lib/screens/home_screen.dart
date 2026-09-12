@@ -1,8 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
-import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
-import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:tnpsc_group_book/services/deep_link_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,30 +10,17 @@ import '../utils/app_theme.dart';
 import '../utils/app_icons.dart';
 import '../utils/app_date.dart';
 import 'package:tnpsc_group_book/utils/app_language.dart';
-import '../services/notification_service.dart';
 import '../services/firestore_service.dart';
 import '../services/hive_service.dart';
 import '../widgets/app_rating_dialog.dart';
 import 'quiz_screen.dart';
 import 'sub_topic_screen.dart';
-import 'mistake_bank_screen.dart';
-import 'bookmark_screen.dart';
-import 'ai_smart_prep_screen.dart';
-import 'ai_tutor_screen.dart';
 import 'topic_detail_screen.dart';
-import 'leaderboard_screen.dart';
 import '../widgets/streak_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 import '../services/version_service.dart';
 import '../services/tts_service.dart';
-import 'room_setup_screen.dart';
 import '../services/content_sync_service.dart';
-import '../services/ai_service.dart';
-import '../models/news_item.dart';
-import 'news_detail_screen.dart';
-import '../services/reward_service.dart';
-import '../widgets/native_ad_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -435,9 +420,9 @@ class _HomeScreenState extends State<HomeScreen> {
             blurRadius: 1,
             offset: const Offset(0, 0.5),
           ) : BoxShadow(
-            color: AppTheme.darkBgColor.withValues(alpha: 0.4),
-            blurRadius: 4,
-            offset: const Offset(0, 3),
+            color: AppTheme.darkBgColor.withValues(alpha: 0.3),
+            blurRadius: 1,
+            offset: const Offset(0, 0.5),
           )
         ],
       ),
@@ -470,7 +455,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? null
                 : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('daily_quiz'), isDark),
               style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? Colors.white.withOpacity(0.7) : Colors.white.withOpacity(0.5),
+                backgroundColor: isDark ? Colors.white.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.5),
                 foregroundColor: AppTheme.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -505,9 +490,9 @@ class _HomeScreenState extends State<HomeScreen> {
             blurRadius: 1,
             offset: const Offset(0, 0.5),
           ) : BoxShadow(
-            color: AppTheme.darkBgColor.withValues(alpha: 0.4),
-            blurRadius: 4,
-            offset: const Offset(0, 3),
+            color: AppTheme.darkBgColor.withValues(alpha: 0.3),
+            blurRadius: 1,
+            offset: const Offset(0, 0.5),
           )
         ],
       ),
@@ -544,7 +529,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? null
                   : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('ca_daily_quiz'), isDark),
               style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? Colors.white.withOpacity(0.7) : Colors.white.withOpacity(0.5),
+                backgroundColor: isDark ? Colors.white.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.5),
                 foregroundColor: AppTheme.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -584,9 +569,9 @@ class _HomeScreenState extends State<HomeScreen> {
             blurRadius: 1,
             offset: const Offset(0, 0.5),
           ) : BoxShadow(
-            color: AppTheme.darkBgColor.withValues(alpha: 0.4),
-            blurRadius: 4,
-            offset: const Offset(0, 3),
+            color: AppTheme.darkBgColor.withValues(alpha: 0.3),
+            blurRadius: 1,
+            offset: const Offset(0, 0.5),
           )
         ],
       ),
@@ -644,7 +629,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? null
                   : () => _showQuizInfoBottomSheet(context, AppLanguage.getString('mock_quiz'), isDark),
               style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? Colors.white.withOpacity(0.7) : Colors.white.withOpacity(0.5),
+                backgroundColor: isDark ? Colors.white.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.5),
                 foregroundColor: AppTheme.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -666,10 +651,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showQuizInfoBottomSheet(BuildContext context, String quizTitle, bool isDark) {
-    bool isDaily = quizTitle == AppLanguage.getString('daily_quiz') || quizTitle == "Daily Quiz";
-    bool isCa = quizTitle == AppLanguage.getString('ca_daily_quiz') || quizTitle == "Current Affairs Quiz";
-    
-    int questionCount = (isDaily || isCa) ? 20 : 50;
     int bonusPoints = 20;
     int adPoints = 15; // Average/Initial ad bonus
 
@@ -781,7 +762,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: color, size: 24),
@@ -974,7 +955,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Calculate stats
     int attempted = total;
-    int wrong = attempted - correct;
     double correctPercentage = attempted > 0 ? (correct / attempted) * 100 : 0;
 
     // Determine progress color based on overall accuracy (same as before)
@@ -1077,44 +1057,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMasteryRow(String label, double targetProgress, Color color) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0.0, end: targetProgress),
-      duration: const Duration(milliseconds: 1200),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    label, 
-                    style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text("${(value * 100).toInt()}%", style: AppTheme.getStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: value,
-                backgroundColor: color.withValues(alpha: 0.1),
-                valueColor: AlwaysStoppedAnimation<Color>(color),
-                minHeight: 8,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
 
 void openSubject(BuildContext context, Subject subject) {
@@ -1217,9 +1159,9 @@ void showSubjectTopicsBottomSheet(BuildContext context, Subject subject) {
                         width: double.infinity,
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: subject.color.withOpacity(0.1),
+                          color: subject.color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: subject.color.withOpacity(0.2), width: 1),
+                          border: Border.all(color: subject.color.withValues(alpha: 0.2), width: 1),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1248,175 +1190,6 @@ void showSubjectTopicsBottomSheet(BuildContext context, Subject subject) {
       );
     },
   );
-}
-
-class _SubjectCard extends StatelessWidget {
-  final Subject subject;
-  const _SubjectCard({required this.subject});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => openSubject(context, subject),
-      borderRadius: BorderRadius.circular(20),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.glassWhite(context),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppTheme.glassBorder(context), width: 1.5),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: subject.color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(subject.icon, color: subject.color, size: 28),
-                ),
-                const SizedBox(height: 8),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        subject.title,
-                        textAlign: TextAlign.center,
-                        style: AppTheme.getStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).brightness == Brightness.dark ? Colors.white : AppTheme.textMainColor,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subject.subtitle,
-                        textAlign: TextAlign.center,
-                        style: AppTheme.getStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).brightness == Brightness.dark ? Colors.white70 : AppTheme.textSecondaryColor,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BookCard extends StatelessWidget {
-  final String title;
-  final String subject;
-  final String edition;
-
-  const _BookCard({
-    required this.title,
-    required this.subject,
-    required this.edition,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    return Container(
-      width: 160,
-      margin: const EdgeInsets.only(right: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 200,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.02),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
-                width: 1,
-              ),
-            ),
-            child: Stack(
-              children: [
-                Center(
-                  child: Icon(
-                    Icons.auto_stories_rounded,
-                    size: 60,
-                    color: isDark ? Colors.white24 : Colors.black12,
-                  ),
-                ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white : Colors.black,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      "PDF",
-                      style: AppTheme.getStyle(
-                        color: isDark ? Colors.black : Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppTheme.getStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subject,
-            style: AppTheme.getStyle(
-              fontSize: 12,
-              color: isDark ? Colors.white60 : Colors.black54,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            edition,
-            style: AppTheme.getStyle(
-              fontSize: 10,
-              color: isDark ? Colors.white38 : Colors.black38,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 extension ColorExtension on Color {
