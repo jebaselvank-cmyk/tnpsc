@@ -11,10 +11,21 @@ const CONFIG = {
         bannerSlot: '1111111111',
         inlineSlot: '2222222222',
         resultSlot: '3333333333'
+    },
+    firebase: {
+        apiKey: 'AIzaSyAts3EGWRa46AnKXuKMyD2LFTarDYu8PJ4',
+        appId: '1:384136070006:web:1996145989d72321fd7057',
+        messagingSenderId: '384136070006',
+        projectId: 'tnpsc-prepare-app-koilra-c9998',
+        authDomain: 'tnpsc-prepare-app-koilra-c9998.firebaseapp.com',
+        storageBucket: 'tnpsc-prepare-app-koilra-c9998.firebasestorage.app',
     }
 };
 
+let db = null;
 let allQuizzes = [];
+let realLeaderboard = [];
+let latestNotification = null;
 let currentQuiz = null;
 let currentQuestionIndex = 0;
 let score = 0;
@@ -34,6 +45,17 @@ function toggleLanguage() {
 async function initApp() {
     showLoading(true);
     try {
+        // Initialize Firebase
+        if (typeof firebase !== 'undefined') {
+            firebase.initializeApp(CONFIG.firebase);
+            db = firebase.firestore();
+            console.log("Firebase initialized");
+
+            // Fetch real data in background
+            fetchRealLeaderboard();
+            fetchRealNotifications();
+        }
+
         await fetchQuizData();
         if (allQuizzes.length === 0) {
             showError("No data found.");
@@ -42,9 +64,57 @@ async function initApp() {
         if (!window.location.hash) window.location.hash = 'home';
         else handleRouting();
     } catch (error) {
+        console.error("Init Error:", error);
         showError("Data Error. Please refresh.");
     } finally {
         showLoading(false);
+    }
+}
+
+async function fetchRealLeaderboard() {
+    if (!db) return;
+    try {
+        const todayStr = new Date(new Date().getTime() + CONFIG.istOffset).toISOString().split('T')[0];
+        console.log("Fetching Daily Quiz Leaderboard for:", todayStr);
+
+        // Listen ONLY to Daily Quiz leaderboard for today
+        db.collection('leaderboards')
+            .doc('daily_' + todayStr)
+            .collection('scores')
+            .orderBy('score', 'desc')
+            .limit(3)
+            .onSnapshot((snap) => {
+                if (!snap.empty) {
+                    realLeaderboard = snap.docs.map(doc => doc.data());
+                } else {
+                    realLeaderboard = [];
+                }
+                // Refresh UI
+                if (window.location.hash === '#home' || window.location.hash === '' || !window.location.hash) renderHomeUI();
+            }, (error) => {
+                console.error("Leaderboard error:", error);
+            });
+
+    } catch (e) {
+        console.log("Leaderboard setup error:", e);
+    }
+}
+
+async function fetchRealNotifications() {
+    if (!db) return;
+    try {
+        // Fetch most recent notification from current_affairs_points
+        const snap = await db.collection('current_affairs_points')
+            .orderBy('timestamp', 'desc')
+            .limit(1)
+            .get();
+
+        if (!snap.empty) {
+            latestNotification = snap.docs[0].data();
+            if (window.location.hash === '#home') renderHomeUI();
+        }
+    } catch (e) {
+        console.log("Notification fetch error:", e);
     }
 }
 
@@ -176,7 +246,12 @@ function renderHomeUI() {
                     <div class="logo-white-box" onclick="navigateTo('home')" style="background: white; padding: 5px; border-radius: 14px; display: flex; align-items: center; justify-content: center; width: 60px; height: 60px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
                         <img src="logo.png" alt="TNPSC Master Logo" style=" border-radius: 10px; width: 53px; height: 53px; object-fit: contain;">
                     </div>
-                    <div class="banner-title-group"><h1 class="banner-main-title">TNPSC Master</h1><p class="banner-slogan">Learn &nbsp;•&nbsp; Practice &nbsp;•&nbsp; Succeed</p></div>
+                    <div class="banner-title-group">
+                        <h1 class="banner-main-title">TNPSC Master</h1>
+                        <p class="banner-slogan" style="font-weight:600; font-size: 0.85rem; margin-top: 4px;">
+                            ${currentLang === 'ta' ? 'தினசரி நடப்பு நிகழ்வுகள் & வினாடி வினா' : 'Daily Current Affairs & Quiz'}
+                        </p>
+                    </div>
                 </div>
             </div>
             <div class="banner-right-badge">
@@ -186,7 +261,27 @@ function renderHomeUI() {
                 </div>
             </div>
         </div>
+
+        <!-- 🚀 QUICK LINKS SECTION -->
+        <div class="quick-links" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 25px;">
+            <button class="secondary-btn" onclick="navigateTo('quiz/daily/' + '${todayStr}')" style="margin:0; font-size: 0.8rem; padding: 12px 5px;">
+                📝 ${currentLang === 'ta' ? 'இன்று Quiz' : 'Today Quiz'}
+            </button>
+            <button class="secondary-btn" onclick="navigateTo('quiz/ca/' + '${todayStr}')" style="margin:0; font-size: 0.8rem; padding: 12px 5px;">
+                📰 ${currentLang === 'ta' ? 'இன்று CA' : 'Today CA'}
+            </button>
+            <button class="secondary-btn" onclick="window.open('https://www.tnpsc.gov.in', '_blank')" style="margin:0; font-size: 0.8rem; padding: 12px 5px;">
+                📚 ${currentLang === 'ta' ? 'TNPSC Exams' : 'TNPSC Exams'}
+            </button>
+            <button class="secondary-btn" onclick="navigateTo('calendar')" style="margin:0; font-size: 0.8rem; padding: 12px 5px;">
+                🔥 ${currentLang === 'ta' ? 'இன்றைய TNPSC' : "Today's TNPSC"}
+            </button>
+        </div>
+
         <div class="featured-section">
+            <h2 class="section-title-new" style="margin-bottom: 15px; font-size: 1.1rem;">
+                ${currentLang === 'ta' ? 'இன்றைய முக்கிய வினாடி வினா' : "Today's Highlighted Quizzes"}
+            </h2>
             <div class="quiz-row-flex" style="display: flex; gap: 15px; flex-wrap: wrap;">
                 ${selectedDay.daily.length > 0 ? `
                 <div class="premium-quiz-card" style="flex: 1; min-width: 280px; border-left: 6px solid #1a73e8;" onclick="navigateTo('quiz/daily/' + '${selectedDay.date}')">
@@ -228,24 +323,88 @@ function renderHomeUI() {
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <a href="tnpsc-exams-guide.html" style="text-decoration: none; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 5px;">
                     <span style="font-size: 1.2rem;">🏆</span>
-                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">Exams Guide</span>
-                    <span style="font-size: 0.75rem; color: #666;">Group 1, 2, 4 Strategy</span>
+                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">${currentLang === 'ta' ? 'தேர்வு வழிகாட்டி' : 'Exams Guide'}</span>
+                    <span style="font-size: 0.75rem; color: #666;">${currentLang === 'ta' ? 'குரூப் 1, 2, 4 உத்திகள்' : 'Group 1, 2, 4 Strategy'}</span>
                 </a>
                 <a href="tnpsc-group-4-mock-test.html" style="text-decoration: none; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 5px;">
                     <span style="font-size: 1.2rem;">📝</span>
-                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">Group 4 Test</span>
-                    <span style="font-size: 0.75rem; color: #666;">Free Mock Exams</span>
-                </a>
-                <a href="tnpsc-aptitude-questions.html" style="text-decoration: none; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 5px;">
-                    <span style="font-size: 1.2rem;">📊</span>
-                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">Aptitude Hub</span>
-                    <span style="font-size: 0.75rem; color: #666;">Maths with Solutions</span>
+                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">${currentLang === 'ta' ? 'குரூப் 4 தேர்வு' : 'Group 4 Test'}</span>
+                    <span style="font-size: 0.75rem; color: #666;">${currentLang === 'ta' ? 'இலவச மாதிரி தேர்வுகள்' : 'Free Mock Exams'}</span>
                 </a>
                 <a href="tnpsc-current-affairs.html" style="text-decoration: none; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 5px;">
                     <span style="font-size: 1.2rem;">🔥</span>
-                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">Daily CA</span>
-                    <span style="font-size: 0.75rem; color: #666;">Latest TN Updates</span>
+                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">${currentLang === 'ta' ? 'நடப்பு நிகழ்வுகள்' : 'Current Affairs'}</span>
+                    <span style="font-size: 0.75rem; color: #666;">${currentLang === 'ta' ? 'முக்கிய செய்திகள்' : 'Latest TN News'}</span>
                 </a>
+                <a href="https://www.tnpsc.gov.in/english/Syllabus.html" target="_blank" style="text-decoration: none; background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; display: flex; flex-direction: column; gap: 5px;">
+                    <span style="font-size: 1.2rem;">📖</span>
+                    <span style="font-weight: 700; color: #333; font-size: 0.9rem;">${currentLang === 'ta' ? 'பாடத்திட்டம்' : 'Syllabus'}</span>
+                    <span style="font-size: 0.75rem; color: #666;">${currentLang === 'ta' ? 'தேர்வு பாடத்திட்டம்' : 'Latest Syllabus'}</span>
+                </a>
+            </div>
+
+            <!-- ℹ️ TNPSC INFO SECTION -->
+            <div style="margin-top: 30px; background: #f1f3f4; padding: 20px; border-radius: 12px;">
+                <h3 style="color: #202124; font-size: 1rem; margin-bottom: 10px;">
+                    ${currentLang === 'ta' ? 'தேர்வு பற்றிய தகவல்கள்' : 'About TNPSC Exams'}
+                </h3>
+                <p style="font-size: 0.85rem; color: #5f6368; line-height: 1.6;">
+                    ${currentLang === 'ta'
+                        ? 'TNPSC Master என்பது தமிழ்நாடு அரசுப் பணியாளர் தேர்வாணையத் தேர்வுகளுக்கான உங்களின் சிறந்த வழிகாட்டியாகும். குரூப் 1, குரூப் 2, 2A மற்றும் குரூப் 4 தேர்வுகளுக்கான விரிவான பாடப்பொருள், தினசரி நடப்பு நிகழ்வுகள் மற்றும் மாதிரித் தேர்வுகளை நாங்கள் வழங்குகிறோம். சமீபத்திய தேர்வு முறைகளுடன் உங்களைப் புதுப்பித்துக் கொள்ளுங்கள் மற்றும் எங்கள் நிபுணர்களால் தொகுக்கப்பட்ட வினாடி வினாக்கள் மூலம் உங்கள் மதிப்பெண்களை மேம்படுத்துங்கள்.'
+                        : 'TNPSC Master is your ultimate guide for Tamil Nadu Public Service Commission exams. We offer comprehensive study materials, daily current affairs, and mock tests for Group 1, Group 2, 2A, and Group 4 exams. Stay updated with the latest exam patterns and improve your scores with our expert-curated quizzes.'}
+                </p>
+                <ul style="margin-top: 15px; padding-left: 20px; font-size: 0.8rem; color: #3c4043;">
+                    <li>${currentLang === 'ta' ? 'தினசரி நடப்பு நிகழ்வுகள்' : 'Daily Current Affairs Updates'}</li>
+                    <li>${currentLang === 'ta' ? 'முந்தைய ஆண்டு வினாத்தாள்கள்' : 'Previous Year Question Papers'}</li>
+                    <li>${currentLang === 'ta' ? 'பாடவாரியான மாதிரித் தேர்வுகள்' : 'Subject-wise Mock Tests'}</li>
+                    <li>${currentLang === 'ta' ? 'குரூப் 4 பொதுத் தமிழ் குறிப்புகள்' : 'Group 4 General Tamil Notes'}</li>
+                </ul>
+            </div>
+
+            <!-- 🏆 REAL LEADERBOARD SECTION -->
+            <div style="margin-top: 40px; border-top: 1px solid #eee; padding-top: 30px;">
+                <h2 class="section-title-new" style="margin-bottom: 20px; color: #174ea6;">
+                    ${currentLang === 'ta' ? 'சிறந்த வெற்றியாளர்கள்' : 'Top Performers (Leaderboard)'}
+                </h2>
+                <div style="background: #fff; border-radius: 12px; border: 1px solid #eee; padding: 15px;">
+                    ${realLeaderboard.length > 0 ? realLeaderboard.map((user, index) => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: ${index < realLeaderboard.length - 1 ? '1px solid #f8f9fa' : 'none'};">
+                            <span style="font-weight: 600; font-size: 0.9rem;">
+                                ${index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'} ${user.userName || (currentLang === 'ta' ? 'மாணவர்' : 'Student')}
+                            </span>
+                            <span style="color: #1a73e8; font-weight: 700;">${user.score} Points</span>
+                        </div>
+                    `).join('') : `
+                        <div style="text-align: center; color: #999; font-size: 0.8rem; padding: 10px;">
+                            ${currentLang === 'ta' ? 'இன்றைய தரவரிசை இன்னும் புதுப்பிக்கப்படவில்லை' : 'Today\'s ranks not updated yet'}
+                        </div>
+                    `}
+                    <div style="margin-top: 15px; text-align: center;">
+                        <a href="https://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book" target="_blank" style="font-size: 0.8rem; color: #5f6368; text-decoration: none;">
+                            ${currentLang === 'ta' ? 'முழு தரவரிசையை அறிய ஆப்-ஐ டவுன்லோட் செய்யவும்' : 'Download app to view full leaderboard'}
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📅 REAL NOTIFICATIONS SECTION -->
+            <div style="margin-top: 40px; margin-bottom: 20px;">
+                <h2 class="section-title-new" style="margin-bottom: 20px; color: #d93025;">
+                    ${currentLang === 'ta' ? 'சமீபத்திய தேர்வு அறிவிப்புகள்' : 'Latest TNPSC Notifications'}
+                </h2>
+                ${latestNotification ? `
+                    <div class="notification-card" style="background: #fdf7f7; border-left: 5px solid #d93025; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <h4 style="margin: 0 0 5px 0; font-size: 0.9rem; color: #202124;">${currentLang === 'ta' ? latestNotification.titleTa : latestNotification.titleEn}</h4>
+                        <p style="margin: 0; font-size: 0.75rem; color: #5f6368;">📅 ${formatDate(latestNotification.date)} | ${latestNotification.category || ''}</p>
+                        <a href="https://www.tnpsc.gov.in" target="_blank" style="display: inline-block; margin-top: 10px; font-size: 0.8rem; color: #d93025; font-weight: 600; text-decoration: none;">${currentLang === 'ta' ? 'அதிகாரப்பூர்வ தளம் →' : 'View Official Site →'}</a>
+                    </div>
+                ` : `
+                    <div class="notification-card" style="background: #fdf7f7; border-left: 5px solid #d93025; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <h4 style="margin: 0 0 5px 0; font-size: 0.9rem; color: #202124;">Combined Technical Services Examination</h4>
+                        <p style="margin: 0; font-size: 0.75rem; color: #5f6368;">📅 September 2026 | Last Date: 06 Oct 2026</p>
+                        <a href="https://www.tnpsc.gov.in" target="_blank" style="display: inline-block; margin-top: 10px; font-size: 0.8rem; color: #d93025; font-weight: 600; text-decoration: none;">View Official Site →</a>
+                    </div>
+                `}
             </div>
         </section>
     `;

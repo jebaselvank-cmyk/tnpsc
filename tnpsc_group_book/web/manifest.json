@@ -1,11 +1,11 @@
 {
-    "name": "TNPSC Master",
-    "short_name": "TNPSC Hub",
+    "name": "TNPSC Daily Current Affairs",
+    "short_name": "TNPSC Quiz",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0A1128",
     "theme_color": "#0A1128",
-    "description": "A new Flutter project.",
+    "description": "TNPSC Daily Current Affairs, Daily Quiz, Group 4, Group 2, 2A and Mock Tests.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
