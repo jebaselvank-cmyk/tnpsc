@@ -102,18 +102,19 @@ class _ResultScreenState extends State<ResultScreen> {
 
       final qType = q.quizType?.toLowerCase() ?? "";
       final qSub = q.subject?.toLowerCase() ?? "";
+      final qText = "${q.questionEn ?? ""} ${q.questionTa ?? ""} ${q.question}".toLowerCase();
 
-      // Robust categorization
-      if (qSub.contains('general_tamil') || qType.contains('general_tamil') || qType.contains('tamil') || qSub.contains('tamil')) {
-        tamilTotal++;
-        if (isCorrect) tamilCorrect++;
-      } else if (qType.contains('aptitude') || qSub.contains('aptitude') || qSub.contains('math') || qSub.contains('mental')) {
+      // Robust categorization using high-accuracy keyword matching (Same as Smart Analysis)
+      if (qType.contains('aptitude') || qSub.contains('aptitude') || qSub.contains('math') || qSub.contains('mental') || qText.contains('கணித') || qText.contains('aptitude') || qText.contains('எண்') || qText.contains('திறன்')) {
         aptitudeTotal++;
         if (isCorrect) aptitudeCorrect++;
-      } else {
+      } else if (qType.contains('general_tamil') || qSub.contains('tamil') || qText.contains('தமிழ்') || qSub.contains('பொதுத் தமிழ்')) {
+        tamilTotal++;
+        if (isCorrect) tamilCorrect++;
+      } else if (qType.contains('general_studies') || qSub.contains('general_studies') || qText.contains('gs')) {
         gsTotal++;
         if (isCorrect) gsCorrect++;
-      }
+      }else {}
     }
 
     AppLog.d("AI_DEBUG_STATS: Tamil: $tamilCorrect/$tamilTotal, GS: $gsCorrect/$gsTotal, Aptitude: $aptitudeCorrect/$aptitudeTotal");
@@ -330,7 +331,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                 icon: Icons.check_circle_outline_rounded,
                                 title: AppLanguage.getString('score'),
                                 value: "${widget.score} / ${widget.totalQuestions}",
-                                color: isDark ? AppTheme.darkSurfaceColor : AppTheme.textSecondaryColor,
+                                color: isDark ? AppTheme.primaryColorLight : AppTheme.textSecondaryColor,
                               ),
                             ),
                             const SizedBox(width: 16),

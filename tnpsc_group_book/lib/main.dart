@@ -109,13 +109,8 @@ Future<void> main() async {
       ]),
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
       () async {
-        SystemChrome.setSystemUIOverlayStyle(
-          const SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            systemNavigationBarColor: Colors.transparent,
-            systemNavigationBarDividerColor: Colors.transparent,
-          ),
-        );
+        // We no longer set status/nav bar colors here because native enableEdgeToEdge()
+        // in MainActivity handles transparency correctly for Android 15 (SDK 35).
       }(),
       initializeDateFormatting('ta', null),
       initializeDateFormatting('en', null),

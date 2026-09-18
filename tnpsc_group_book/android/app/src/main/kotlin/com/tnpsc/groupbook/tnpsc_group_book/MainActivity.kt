@@ -1,19 +1,17 @@
 package com.tnpsc.groupbook.tnpsc_group_book
 
 import android.os.Bundle
-import android.graphics.Color
-import androidx.core.view.WindowCompat
+import androidx.activity.enableEdgeToEdge
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin
 
 class MainActivity : FlutterActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override function onCreate(savedInstanceState: Bundle?) {
+        // Enable edge-to-edge display using the new Activity 1.8+ API
+        // This handles status bar and navigation bar transparency correctly for Android 15
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        // Enable edge-to-edge display using WindowCompat for best compatibility
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

@@ -51,6 +51,107 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               style: AppTheme.getStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
+
+            // Manage Quizzes
+            _buildAdminCard(
+              context,
+              title: "Manage Quizzes",
+              icon: Icons.edit_calendar_rounded,
+              color: Colors.indigo,
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminQuizManageScreen()));
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Bulk 7‑day Quizzes
+            _buildAdminCard(
+              context,
+              title: "Bulk Generate 7 Days Quizzes",
+              icon: Icons.date_range_rounded,
+              color: Colors.orange,
+              onTap: _showBulkQuizGenDialog,
+            ),
+            const SizedBox(height: 12),
+
+            // Bulk 7‑day CA Quizzes
+            _buildAdminCard(
+              context,
+              title: "Bulk Generate 7 Days CA Quizzes",
+              icon: Icons.newspaper_rounded,
+              color: Colors.blue,
+              onTap: _showBulkCaQuizGenDialog,
+            ),
+            const SizedBox(height: 12),
+
+            // Bulk 3‑day Quizzes (50‑question each)
+            _buildAdminCard(
+              context,
+              title: "Bulk Generate 5 Days 50‑Question Quizzes",
+              icon: Icons.auto_awesome_motion_rounded,
+              color: Colors.deepPurple,
+              onTap: _showBulk5DaysQuizGenDialog,
+            ),
+            const SizedBox(height: 12),
+
+            // User Feedbacks
+            _buildAdminCard(
+              context,
+              title: "User Feedbacks",
+              icon: Icons.feedback_outlined,
+              color: Colors.teal,
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminFeedbackScreen()));
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Bulk Generate Room Quizzes
+            _buildAdminCard(
+              context,
+              title: "Bulk Generate Room Quizzes",
+              icon: Icons.groups_rounded,
+              color: Colors.pink,
+              onTap: _showRoomQuizGenDialog,
+            ),
+            const SizedBox(height: 12),
+
+            // Generate Daily Current Affairs
+            _buildAdminCard(
+              context,
+              title: "Generate Daily Current Affairs",
+              icon: Icons.newspaper_rounded,
+              color: Colors.blueAccent,
+              onTap: _showNewsGenDialog,
+            ),
+            const SizedBox(height: 12),
+
+            // System Maintenance Card
+            _buildAdminCard(
+              context,
+              title: "System & DB Maintenance",
+              icon: Icons.cleaning_services_rounded,
+              color: Colors.blueGrey,
+              onTap: () {},
+              extra: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: _isGenerating ? null : _runManualMaintenance,
+                    icon: const Icon(Icons.auto_delete_rounded),
+                    label: const Text("Run Database Cleanup"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueGrey.withValues(alpha: 0.1),
+                      foregroundColor: Colors.blueGrey,
+                      elevation: 0,
+                      minimumSize: const Size(double.infinity, 45),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
             // AI Tool Card
             _buildAdminCard(
               context,
@@ -83,44 +184,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            // Bulk 7‑day Quizzes
-            _buildAdminCard(
-              context,
-              title: "Bulk Generate 7 Days Quizzes",
-              icon: Icons.date_range_rounded,
-              color: Colors.orange,
-              onTap: _showBulkQuizGenDialog,
-            ),
-            const SizedBox(height: 12),
-            // Bulk 7‑day CA Quizzes
-            _buildAdminCard(
-              context,
-              title: "Bulk Generate 7 Days CA Quizzes",
-              icon: Icons.newspaper_rounded,
-              color: Colors.blue,
-              onTap: _showBulkCaQuizGenDialog,
-            ),
-            const SizedBox(height: 12),
-            // Bulk 3‑day Quizzes (50‑question each)
-            _buildAdminCard(
-              context,
-              title: "Bulk Generate 5 Days 50‑Question Quizzes",
-              icon: Icons.auto_awesome_motion_rounded,
-              color: Colors.deepPurple,
-              onTap: _showBulk5DaysQuizGenDialog,
-            ),
-            const SizedBox(height: 12),
-            // Manage Quizzes
-            _buildAdminCard(
-              context,
-              title: "Manage Quizzes",
-              icon: Icons.edit_calendar_rounded,
-              color: Colors.indigo,
-              onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminQuizManageScreen()));
-              },
-            ),
-            const SizedBox(height: 12),
+
             // Manual Content placeholder
             _buildAdminCard(
               context,
@@ -132,60 +196,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               },
             ),
             const SizedBox(height: 12),
-            // System Maintenance Card
-            _buildAdminCard(
-              context,
-              title: "System & DB Maintenance",
-              icon: Icons.cleaning_services_rounded,
-              color: Colors.blueGrey,
-              onTap: () {},
-              extra: Column(
-                children: [
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    onPressed: _isGenerating ? null : _runManualMaintenance,
-                    icon: const Icon(Icons.auto_delete_rounded),
-                    label: const Text("Run Database Cleanup"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueGrey.withValues(alpha: 0.1),
-                      foregroundColor: Colors.blueGrey,
-                      elevation: 0,
-                      minimumSize: const Size(double.infinity, 45),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            // User Feedbacks
-            _buildAdminCard(
-              context,
-              title: "User Feedbacks",
-              icon: Icons.feedback_outlined,
-              color: Colors.teal,
-              onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminFeedbackScreen()));
-              },
-            ),
-            const SizedBox(height: 12),
-            // Bulk Generate Room Quizzes
-            _buildAdminCard(
-              context,
-              title: "Bulk Generate Room Quizzes",
-              icon: Icons.groups_rounded,
-              color: Colors.pink,
-              onTap: _showRoomQuizGenDialog,
-            ),
-            const SizedBox(height: 12),
-            // Generate Daily Current Affairs
-            _buildAdminCard(
-              context,
-              title: "Generate Daily Current Affairs",
-              icon: Icons.newspaper_rounded,
-              color: Colors.blueAccent,
-              onTap: _showNewsGenDialog,
-            ),
-            const SizedBox(height: 12),
+
             // Promote App (Video Format)
             _buildAdminCard(
               context,

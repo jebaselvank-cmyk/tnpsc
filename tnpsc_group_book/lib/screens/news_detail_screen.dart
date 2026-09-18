@@ -112,6 +112,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         label: Text(_isSpeaking ? (lang == 'ta' ? "நிறுத்து" : "Stop") : (lang == 'ta' ? "கேட்க" : "Listen")),
         icon: Icon(_isSpeaking ? Icons.stop_rounded : Icons.play_arrow_rounded),
         backgroundColor: isDark ? AppTheme.primaryColorLight : AppTheme.secondaryColorLight,
+        foregroundColor: isDark ? AppTheme.secondaryColor : AppTheme.primaryColor,
       ),
     );
   }

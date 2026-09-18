@@ -58,17 +58,27 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
         }
       } else {
         String dateStr = DateFormat('yyyy-MM-dd', 'en_US').format(_selectedDate);
-        String collection = (_quizType == 'daily_quiz' || _quizType == 'current_affairs') ? 'quizzes' : 'mock_tests';
-        String typeFilter = _quizType;
+        
+        Query query;
+        if (_quizType == 'mock_quiz') {
+          query = FirebaseFirestore.instance
+              .collection('mock_tests')
+              .where('date', isEqualTo: dateStr)
+              .where('quizType', isEqualTo: 'daily_50_quiz');
+        } else {
+          String collection = 'quizzes';
+          String typeFilter = _quizType; // 'daily_quiz' or 'current_affairs'
+          
+          query = FirebaseFirestore.instance
+              .collection(collection)
+              .where('date', isEqualTo: dateStr)
+              .where('type', isEqualTo: typeFilter);
+        }
 
-        final query = await FirebaseFirestore.instance
-            .collection(collection)
-            .where('date', isEqualTo: dateStr)
-            .where('type', isEqualTo: typeFilter)
-            .get();
+        final querySnap = await query.get();
 
-        if (query.docs.isNotEmpty) {
-          final doc = query.docs.first;
+        if (querySnap.docs.isNotEmpty) {
+          final doc = querySnap.docs.first;
           _docId = doc.id;
           List<dynamic> qList = doc.get('questions') ?? [];
           setState(() {
