@@ -13,6 +13,7 @@ import '../main.dart'; // To navigate to MainWrapper
 import '../widgets/app_logo.dart';
 import '../services/notification_service.dart';
 import '../services/google_auth_service.dart';
+import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,6 +25,26 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _isExiting = false;
+
+  // Email/OTP Form State
+  bool _showEmailForm = false;
+  bool _showOtpForm = false;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _otpController = TextEditingController();
+  String _generatedOtp = '';
+  DateTime? _otpGeneratedTime;
+  int _timerSeconds = 30;
+  bool _canResend = false;
+  bool _isResending = false;
+  dynamic _timer;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _otpController.dispose();
+    _timer?.cancel();
+    super.dispose();
+  }
 
   void _showError(String msg) {
     if (!mounted) return;
@@ -47,6 +68,126 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       _showError(ta ? 'Google உள்நுழைவு தோல்வியடைந்தது.' : 'Google Sign-In failed.');
+    }
+  }
+
+  void _startOtpTimer() {
+    _timer?.cancel();
+    setState(() {
+      _timerSeconds = 30;
+      _canResend = false;
+    });
+    _timer = Stream.periodic(const Duration(seconds: 1), (i) => 29 - i).take(30).listen((seconds) {
+      if (mounted) {
+        setState(() => _timerSeconds = seconds);
+        if (seconds == 0) setState(() => _canResend = true);
+      }
+    });
+  }
+
+  Future<void> _handleEmailLogin() async {
+    setState(() {
+      _showEmailForm = !_showEmailForm;
+      if (!_showEmailForm) {
+        _showOtpForm = false;
+        _timer?.cancel();
+        _emailController.clear();
+        _otpController.clear();
+      }
+    });
+  }
+
+  Future<void> _sendOtp() async {
+    final ta = AppLanguage.languageNotifier.value == 'ta';
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      _showError(ta ? 'மின்னஞ்சலை உள்ளிடவும்' : 'Please enter your email');
+      return;
+    }
+    if (!email.contains('@')) {
+      _showError(ta ? 'சரியான மின்னஞ்சலை உள்ளிடவும்' : 'Please enter a valid email');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final generatedOtp = await AuthService.sendOtpForLogin(email);
+      setState(() {
+        _generatedOtp = generatedOtp;
+        _otpGeneratedTime = DateTime.now();
+        _showOtpForm = true;
+        _isLoading = false;
+      });
+      _startOtpTimer();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ta ? 'OTP அனுப்பப்பட்டது (3 நிமிடங்கள் செல்லுபடியாகும்)' : 'OTP sent successfully (Valid for 3 mins)')),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showError(AuthService.messageFromException(e, ta: ta));
+    }
+  }
+
+  Future<void> _resendOtp() async {
+    final ta = AppLanguage.languageNotifier.value == 'ta';
+    final email = _emailController.text.trim();
+    setState(() => _isResending = true);
+    try {
+      final newOtp = await AuthService.sendOtpForLogin(email);
+      if (mounted) {
+        setState(() {
+          _generatedOtp = newOtp;
+          _otpGeneratedTime = DateTime.now();
+          _isResending = false;
+        });
+        _startOtpTimer();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ta ? 'OTP மீண்டும் அனுப்பப்பட்டது (3 நிமிடங்கள் செல்லுபடியாகும்)' : 'OTP Resent successfully (Valid for 3 mins)')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isResending = false);
+        _showError(AuthService.messageFromException(e, ta: ta));
+      }
+    }
+  }
+
+  Future<void> _verifyAndLogin() async {
+    final ta = AppLanguage.languageNotifier.value == 'ta';
+    final email = _emailController.text.trim();
+    final enteredOtp = _otpController.text.trim();
+
+    if (enteredOtp.isEmpty) {
+      _showError(ta ? 'OTP-ஐ உள்ளிடவும்' : 'Please enter the OTP');
+      return;
+    }
+
+    // Check OTP Expiry (3 minutes = 180 seconds)
+    if (_otpGeneratedTime != null &&
+        DateTime.now().difference(_otpGeneratedTime!).inSeconds > 180) {
+      _showError(ta ? 'OTP காலாவதியாகிவிட்டது! மீண்டும் புதிய OTP பெறவும்.' : 'OTP has expired! Please get a new OTP.');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final userCredential = await AuthService.verifyOtpAndLogin(
+        email: email,
+        otp: _generatedOtp,
+        enteredOtp: enteredOtp,
+      );
+      
+      if (userCredential.user != null) {
+        await _initializeUserInFirestore(userCredential.user);
+        _navigateToHome();
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showError(AuthService.messageFromException(e, ta: ta));
+
     }
   }
 
@@ -258,6 +399,139 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 16),
+
+                    // Email Login Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: OutlinedButton.icon(
+                        onPressed: _isLoading ? null : _handleEmailLogin,
+                        icon: Icon(
+                          _showEmailForm ? Icons.keyboard_arrow_up : Icons.email_outlined,
+                          color: isDark ? Colors.white70 : Colors.black54,
+                        ),
+                        label: Text(
+                          ta ? 'மின்னஞ்சல் மூலம் தொடரவும்' : 'Continue with Email',
+                          style: AppTheme.getStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: isDark ? Colors.white30 : Colors.black12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    if (_showEmailForm) ...[
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF020D1E) : Colors.grey[50],
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: isDark ? Colors.white24 : Colors.black12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              ta ? 'மின்னஞ்சல் முகவரி' : 'Email Address',
+                              style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              enabled: !_showOtpForm && !_isLoading,
+                              style: AppTheme.getStyle(fontSize: 16),
+                              decoration: InputDecoration(
+                                hintText: 'example@gmail.com',
+                                hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black38),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              ),
+                            ),
+                            if (!_showOtpForm) ...[
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _sendOtp,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryColor,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                      : Text(ta ? 'OTP பெறுக' : 'Get OTP', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            ],
+                            if (_showOtpForm) ...[
+                              const SizedBox(height: 20),
+                              Text(
+                                ta ? 'OTP குறியீடு' : 'Enter OTP',
+                                style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: _otpController,
+                                keyboardType: TextInputType.number,
+                                maxLength: 6,
+                                enabled: !_isLoading,
+                                style: AppTheme.getStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                                decoration: InputDecoration(
+                                  counterText: "",
+                                  hintText: '• • • • • •',
+                                  hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black38),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Align(
+                                alignment: Alignment.center,
+                                child: !_canResend
+                                    ? Text(
+                                        ta ? 'மீண்டும் அனுப்ப: $_timerSeconds விநாடிகள்' : 'Resend in: $_timerSeconds sec',
+                                        style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
+                                      )
+                                    : TextButton(
+                                        onPressed: _isResending ? null : _resendOtp,
+                                        child: _isResending
+                                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                            : Text(ta ? 'OTP-ஐ மீண்டும் அனுப்பு' : 'Resend OTP'),
+                                      ),
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _verifyAndLogin,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryColor,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                      : Text(ta ? 'சரிபார் & உள்நுழை' : 'Verify & Login', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+
                   ],
                 ),
               ),
@@ -265,6 +539,147 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ));
       },
+    );
+  }
+}
+
+class OtpVerificationDialog extends StatefulWidget {
+  final String email;
+  final String initialOtp;
+
+  const OtpVerificationDialog({super.key, required this.email, required this.initialOtp});
+
+  @override
+  State<OtpVerificationDialog> createState() => _OtpVerificationDialogState();
+}
+
+class _OtpVerificationDialogState extends State<OtpVerificationDialog> {
+  late String currentGeneratedOtp;
+  String enteredOtp = '';
+  int _timerSeconds = 30;
+  bool _canResend = false;
+  bool _isResending = false;
+  late var _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    currentGeneratedOtp = widget.initialOtp;
+    _startTimer();
+  }
+
+  void _startTimer() {
+    setState(() {
+      _timerSeconds = 30;
+      _canResend = false;
+    });
+    _timer = Stream.periodic(const Duration(seconds: 1), (i) => 29 - i).take(30).listen((seconds) {
+      if (mounted) {
+        setState(() => _timerSeconds = seconds);
+        if (seconds == 0) setState(() => _canResend = true);
+      }
+    });
+  }
+
+  Future<void> _handleResend() async {
+    final ta = AppLanguage.languageNotifier.value == 'ta';
+    setState(() => _isResending = true);
+    try {
+      final newOtp = await AuthService.sendOtpForLogin(widget.email);
+      if (mounted) {
+        setState(() {
+          currentGeneratedOtp = newOtp;
+          _isResending = false;
+        });
+        _startTimer();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ta ? 'OTP மீண்டும் அனுப்பப்பட்டது' : 'OTP Resent successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isResending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AuthService.messageFromException(e, ta: ta)),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ta = AppLanguage.languageNotifier.value == 'ta';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return AlertDialog(
+      backgroundColor: isDark ? const Color(0xFF000307) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(
+        ta ? 'OTP சரிபார்ப்பு' : 'OTP Verification',
+        style: AppTheme.getStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            ta 
+              ? '${widget.email}-க்கு அனுப்பப்பட்ட 6 இலக்க OTP-ஐ உள்ளிடவும்.' 
+              : 'Enter the 6-digit OTP sent to ${widget.email}.',
+            style: AppTheme.getStyle(fontSize: 14),
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            autofocus: true,
+            style: AppTheme.getStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+            decoration: InputDecoration(
+              counterText: "",
+              hintText: '• • • • • •',
+              hintStyle: TextStyle(color: isDark ? Colors.white30 : Colors.black38),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onChanged: (value) => enteredOtp = value,
+          ),
+          const SizedBox(height: 16),
+          if (!_canResend)
+            Text(
+              ta ? 'மீண்டும் அனுப்ப: $_timerSeconds விநாடிகள்' : 'Resend in: $_timerSeconds sec',
+              style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
+            )
+          else
+            TextButton(
+              onPressed: _isResending ? null : _handleResend,
+              child: _isResending 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : Text(ta ? 'OTP-ஐ மீண்டும் அனுப்பு' : 'Resend OTP'),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(ta ? 'ரத்து' : 'Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, enteredOtp),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: Text(ta ? 'சரிபார்' : 'Verify', style: const TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 }

@@ -13,7 +13,7 @@
 /// **Option C – EmailJS** (https://www.emailjs.com) – email only; pair with Apps Script URL for login sync.
 class PasswordEmailConfig {
   /// Web App URL from Google Apps Script deployment.
-  static const String appsScriptWebAppUrl = 'https://script.google.com/macros/s/AKfycbwtWOfAgB6EAWyxY9gV-yXxoygXGwBgq_W6aXvU7vfhUxtLk1EV5k5uoM0Zp_G1NnhMzQ/exec';
+  static const String appsScriptWebAppUrl = 'https://script.google.com/macros/s/AKfycbzimM1gCC00u-kgC0F598csJv_9TZ67F9Ii9yjJG-n8rYSKva8I057Si1jIYshRQImv4A/exec';
 
   static const String emailJsServiceId = '';
   static const String emailJsTemplateId = '';

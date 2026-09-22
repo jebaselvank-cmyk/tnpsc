@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 import '../utils/app_log.dart';
 
 import 'auth_local_api.dart';
@@ -145,8 +149,8 @@ class AuthService {
               : 'Email not configured. Upgrade Firebase to Blaze and deploy functions, OR set Apps Script URL in password_email_config.dart';
         case 'EMAIL_SEND_FAILED':
           return ta
-              ? 'மின்னஞ்சல் அனுப்ப முடியவில்லை. Gmail / EmailJS அமைப்பை சரிபார்க்கவும்.'
-              : 'Could not send email. Check Gmail / EmailJS / Apps Script setup.';
+              ? 'மின்னஞ்சல் அனுப்ப முடியவில்லை. Apps Script-ல் Gmail மற்றும் Service Account அமைப்புகளைச் சரிபார்க்கவும்.'
+              : 'Could not send email. Check Gmail and Service Account setup in Apps Script.';
         case 'WRONG_CURRENT_PASSWORD':
           return ta ? 'தற்போதைய கடவுச்சொல் தவறு.' : 'Current password is incorrect.';
         case 'WEAK_PASSWORD':
@@ -159,6 +163,12 @@ class AuthService {
               : 'New password must be different from current password.';
         case 'NOT_SIGNED_IN':
           return ta ? 'முதலில் உள்நுழையவும்.' : 'Please sign in first.';
+        case 'INVALID_OTP':
+          return ta ? 'தவறான OTP. மீண்டும் முயற்சிக்கவும்.' : 'Invalid OTP. Please try again.';
+        case 'EMAIL_SYNC_FAILED':
+          return ta
+              ? 'இந்த மின்னஞ்சல் ஏற்கனவே உள்ளது. Google Login அல்லது Forgot Password பயன்படுத்தவும்.'
+              : 'This email is already registered. Please use Google Login or Forgot Password.';
         case 'PASSWORD_EMAIL_SENT':
           return ta
               ? 'உங்கள் கடவுச்சொல் மின்னஞ்சலில் அனுப்பப்பட்டது.'
@@ -194,6 +204,7 @@ class AuthService {
     return ta ? 'பிழை ஏற்பட்டது' : 'Something went wrong';
   }
 
+  /// Returns message For verification result
   static String messageForForgotResult(String key, {bool ta = false}) {
     switch (key) {
       case 'RESET_LINK_SENT':
@@ -207,5 +218,129 @@ class AuthService {
           ta: ta,
         );
     }
+  }
+
+  static String _generateOtp() {
+    final random = Random.secure();
+    return (100000 + random.nextInt(900000)).toString();
+  }
+
+  /// Sends OTP to the provided email for login alternative.
+  /// Returns the generated OTP.
+  static Future<String> sendOtpForLogin(String email) async {
+    final otp = _generateOtp();
+    final trimmed = email.trim();
+
+    try {
+      if (PasswordEmailConfig.hasAppsScript) {
+        final response = await PasswordEmailService.postToAppsScript({
+          'email': trimmed,
+          'action': 'loginOtp',
+          'otp': otp,
+        });
+
+        if (response.statusCode != 200) {
+          throw FirebaseFunctionsException(
+            code: 'internal',
+            message: 'EMAIL_SEND_FAILED',
+          );
+        }
+
+        // Check if response is HTML (Apps Script error page or redirect loop)
+        if (response.body.contains('<!DOCTYPE html>')) {
+          AppLog.e('Apps Script returned HTML: ${response.body.substring(0, 100)}');
+          throw FirebaseFunctionsException(
+            code: 'internal',
+            message: 'EMAIL_SEND_FAILED',
+          );
+        }
+
+        try {
+          final body = jsonDecode(response.body) as Map<String, dynamic>;
+          if (body['success'] != true) {
+            final err = body['error']?.toString() ?? 'EMAIL_SEND_FAILED';
+            throw FirebaseFunctionsException(code: 'internal', message: err);
+          }
+        } catch (e) {
+          AppLog.e('Apps Script JSON parse error: $e. Body: ${response.body}');
+          // If it's not JSON but was 200 and not HTML, it might be OK but let's be safe
+          if (!response.body.contains('success')) {
+            throw FirebaseFunctionsException(
+              code: 'internal',
+              message: 'EMAIL_SEND_FAILED',
+            );
+          }
+        }
+
+        return otp;
+      }
+      throw FirebaseFunctionsException(
+        code: 'failed-precondition',
+        message: 'EMAIL_SETUP_REQUIRED',
+      );
+    } catch (e) {
+      AppLog.e('AuthService.sendOtpForLogin error: $e');
+      rethrow;
+    }
+  }
+
+  /// Verifies OTP and performs sign in or sign up.
+  static Future<UserCredential> verifyOtpAndLogin({
+    required String email,
+    required String otp,
+    required String enteredOtp,
+  }) async {
+    if (otp != enteredOtp) {
+      throw FirebaseFunctionsException(
+        code: 'invalid-argument',
+        message: 'INVALID_OTP',
+      );
+    }
+
+    final trimmed = email.trim();
+    final auth = FirebaseAuth.instance;
+
+    // Give it 3 seconds for Firebase Auth to update the password from Apps Script sync
+    await Future.delayed(const Duration(seconds: 3));
+
+    int retryCount = 0;
+    while (retryCount < 3) {
+      try {
+        // Try signing in
+        return await auth.signInWithEmailAndPassword(
+          email: trimmed,
+          password: otp,
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+          retryCount++;
+          if (retryCount < 3) {
+            AppLog.d('AuthService: Login failed, retry $retryCount/3 after 2s...');
+            await Future.delayed(const Duration(seconds: 2));
+            continue;
+          }
+        }
+        
+        // If all sign-in retries failed, try creating the account
+        if (e.code == 'user-not-found' || e.code == 'invalid-credential' || e.code == 'wrong-password') {
+          try {
+            return await auth.createUserWithEmailAndPassword(
+              email: trimmed,
+              password: otp,
+            );
+          } on FirebaseAuthException catch (signUpError) {
+            if (signUpError.code == 'email-already-in-use') {
+              throw FirebaseFunctionsException(
+                code: 'unavailable',
+                message: 'EMAIL_SYNC_FAILED',
+              );
+            }
+            rethrow;
+          }
+        }
+        rethrow;
+      }
+    }
+    throw FirebaseFunctionsException(code: 'internal', message: 'LOGIN_FAILED');
   }
 }

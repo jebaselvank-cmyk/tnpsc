@@ -24,20 +24,52 @@ class PasswordEmailService {
     return '$part1$part2';
   }
 
+  /// Handles Google Apps Script POST redirects manually.
+  static Future<http.Response> postToAppsScript(Map<String, dynamic> data) async {
+    final url = PasswordEmailConfig.appsScriptWebAppUrl.trim();
+    if (url.isEmpty) {
+      throw FirebaseFunctionsException(code: 'failed-precondition', message: 'EMAIL_SETUP_REQUIRED');
+    }
+
+    final client = http.Client();
+    try {
+      final request = http.Request('POST', Uri.parse(url))
+        ..headers['Content-Type'] = 'application/json'
+        ..headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        ..body = jsonEncode(data)
+        ..followRedirects = false;
+
+      final streamedResponse = await client.send(request).timeout(const Duration(seconds: 45));
+      
+      // Handle 302/301 redirects manually
+      if (streamedResponse.statusCode == 302 || streamedResponse.statusCode == 301) {
+        final location = streamedResponse.headers['location'];
+        if (location != null) {
+          // Redirect target should be accessed via GET
+          return await http.get(
+            Uri.parse(location),
+            headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+          ).timeout(const Duration(seconds: 45));
+        }
+      }
+      
+      return await http.Response.fromStream(streamedResponse);
+    } finally {
+      client.close();
+    }
+  }
+
   /// Apps Script updates Firebase Auth + sends Gmail.
   static Future<void> sendViaAppsScript(String email) async {
-    final url = PasswordEmailConfig.appsScriptWebAppUrl.trim();
-    final response = await http
-        .post(
-          Uri.parse(url),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'email': _norm(email)}),
-        )
-        .timeout(const Duration(seconds: 45));
+    final response = await postToAppsScript({'email': _norm(email)});
 
     AppLog.d('Apps Script response: ${response.statusCode} ${response.body}');
 
     if (response.statusCode != 200) {
+      AppLog.e('Apps Script error status: ${response.statusCode}');
+      if (response.body.contains('<!DOCTYPE html>')) {
+        AppLog.e('ERROR: Apps Script returned HTML instead of JSON. Please check if Deployment is set to "Anyone".');
+      }
       throw FirebaseFunctionsException(
         code: 'internal',
         message: 'EMAIL_SEND_FAILED',
@@ -112,19 +144,27 @@ class PasswordEmailService {
   static Future<void> syncFirebasePassword(String email, String password) async {
     if (!PasswordEmailConfig.hasAppsScript) return;
 
-    final url = PasswordEmailConfig.appsScriptWebAppUrl.trim();
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
+    try {
+      final response = await postToAppsScript({
         'email': _norm(email),
         'action': 'syncPassword',
         'password': password,
-      }),
-    );
+      });
 
-    if (response.statusCode != 200) {
-      AppLog.e('Apps Script sync failed: ${response.body}');
+      if (response.statusCode != 200 || response.body.contains('<!DOCTYPE html>')) {
+        AppLog.e('Apps Script sync failed (HTML or Error): ${response.statusCode}');
+      } else {
+        try {
+          final body = jsonDecode(response.body) as Map<String, dynamic>;
+          if (body['success'] != true) {
+            AppLog.e('Apps Script sync returned error: ${body['error']}');
+          }
+        } catch (e) {
+          AppLog.e('Apps Script sync JSON parse error: $e');
+        }
+      }
+    } catch (e) {
+      AppLog.e('Apps Script sync network error: $e');
     }
   }
 
@@ -192,25 +232,22 @@ class PasswordEmailService {
 
     // Fallback to Apps Script if EmailJS fails or is not configured
     if (PasswordEmailConfig.hasAppsScript) {
-      final url = PasswordEmailConfig.appsScriptWebAppUrl.trim();
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': norm,
-          'action': 'sendOtp',
-          'otp': otp,
-        }),
-      ).timeout(const Duration(seconds: 45));
+      final response = await postToAppsScript({
+        'email': norm,
+        'action': 'sendOtp',
+        'otp': otp,
+      });
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && !response.body.contains('<!DOCTYPE html>')) {
         try {
           final body = jsonDecode(response.body) as Map<String, dynamic>;
           if (body['success'] == true) return;
           AppLog.e('Apps Script returned error: ${body['error']}');
         } catch (e) {
-          return; // If it's not JSON but 200 OK, assume success to be safe
+          return; // Success or non-JSON but not HTML
         }
+      } else {
+        AppLog.e('Apps Script sendOtp failed (HTML or HTTP ${response.statusCode})');
       }
     }
 

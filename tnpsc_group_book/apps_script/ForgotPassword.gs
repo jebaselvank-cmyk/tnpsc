@@ -38,6 +38,18 @@ function doPost(e) {
       return jsonOut({ success: true, message: "OTP_SENT" });
     }
 
+    if (action === "loginOtp") {
+      var otp = data.otp || "";
+      if (!otp) return jsonOut({ success: false, error: "MISSING_OTP" });
+      try {
+        updateUserPasswordAdmin(email, otp);
+      } catch (err) {
+        // Ignore EMAIL_NOT_REGISTERED as new users can also use OTP to sign up
+      }
+      sendOtpGmail(email, otp);
+      return jsonOut({ success: true, message: "OTP_SENT" });
+    }
+
     var tempPassword = generateTempPassword();
     updateUserPasswordAdmin(email, tempPassword);
     sendGmail(email, tempPassword);

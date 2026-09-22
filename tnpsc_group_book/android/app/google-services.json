@@ -38,6 +38,14 @@
           }
         },
         {
+          "client_id": "384136070006-vius9os8spvh644nqnpr837esjam2h80.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tnpsc.groupbook.tnpsc_group_book",
+            "certificate_hash": "282fb9c684b8a8e91b80d6b1a2c3aedc4a61a18b"
+          }
+        },
+        {
           "client_id": "384136070006-mk6ul67oeqanp7qe7i61lcdr1k89ac5n.apps.googleusercontent.com",
           "client_type": 3
         }

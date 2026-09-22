@@ -16,22 +16,18 @@ class GoogleAuthService {
         _isInitialized = true;
       }
 
-      // Prompt the user to select a Google account
+      AppLog.d('AI_DEBUG: Starting Google Sign-In flow via authenticate()...');
+      
       GoogleSignInAccount? googleUser;
       try {
-        AppLog.d('AI_DEBUG: Calling authenticate()...');
         googleUser = await _googleSignIn.authenticate();
-        
         if (googleUser == null) {
           AppLog.d('AI_DEBUG: Google Sign-In was canceled by the user (result is null).');
           return null;
         }
-        
         AppLog.d('AI_DEBUG: Authenticate success: ${googleUser.email}');
       } catch (e) {
-        AppLog.e('AI_DEBUG: Google Sign In Error: $e');
-        AppLog.d('AI_DEBUG: Authenticate error type: ${e.runtimeType}');
-        
+        AppLog.e('AI_DEBUG: Google Sign In Error during authenticate: $e');
         if (e is GoogleSignInException && e.code == GoogleSignInExceptionCode.canceled) {
           AppLog.d('AI_DEBUG: User canceled the sign-in flow.');
           return null;
