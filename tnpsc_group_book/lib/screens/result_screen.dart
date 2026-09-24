@@ -105,16 +105,25 @@ class _ResultScreenState extends State<ResultScreen> {
       final qText = "${q.questionEn ?? ""} ${q.questionTa ?? ""} ${q.question}".toLowerCase();
 
       // Robust categorization using high-accuracy keyword matching (Same as Smart Analysis)
+      String category = 'general_studies';
       if (qType.contains('aptitude') || qSub.contains('aptitude') || qSub.contains('math') || qSub.contains('mental') || qText.contains('கணித') || qText.contains('aptitude') || qText.contains('எண்') || qText.contains('திறன்')) {
-        aptitudeTotal++;
-        if (isCorrect) aptitudeCorrect++;
-      } else if (qType.contains('general_tamil') || qSub.contains('tamil') || qText.contains('தமிழ்') || qSub.contains('பொதுத் தமிழ்')) {
+        category = 'aptitude';
+      } else if (qType.contains('general_tamil') || qSub.contains('tamil') || qText.contains('தமிழ்') || qText.contains('பொதுத் தமிழ்')) {
+        category = 'general_tamil';
+      } else {
+        category = 'general_studies';
+      }
+
+      if (category == 'general_tamil') {
         tamilTotal++;
         if (isCorrect) tamilCorrect++;
-      } else if (qType.contains('general_studies') || qSub.contains('general_studies') || qText.contains('gs')) {
+      } else if (category == 'aptitude') {
+        aptitudeTotal++;
+        if (isCorrect) aptitudeCorrect++;
+      } else {
         gsTotal++;
         if (isCorrect) gsCorrect++;
-      }else {}
+      }
     }
 
     AppLog.d("AI_DEBUG_STATS: Tamil: $tamilCorrect/$tamilTotal, GS: $gsCorrect/$gsTotal, Aptitude: $aptitudeCorrect/$aptitudeTotal");
