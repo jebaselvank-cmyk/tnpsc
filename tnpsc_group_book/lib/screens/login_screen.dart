@@ -112,7 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (user == null) return;
     await HiveService.clearUserSession();
     
-    final guestId = (1000 + Random().nextInt(900000)).toString(); // 4 to 6 digits
+    final guestId = (100000000 + Random().nextInt(900000000)).toString(); // 9 digits
     final guestName = 'guest_$guestId';
 
     try {
@@ -431,6 +431,141 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 48),
 
+                    // Email Login Button
+                    Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: OutlinedButton.icon(
+                            onPressed: _anyLoading ? null : _handleEmailLogin,
+                            icon: Icon(
+                              _showEmailForm ? Icons.keyboard_arrow_up : Icons.email_outlined,
+                              color: Colors.blue,
+                            ),
+                            label: Text(
+                              ta ? 'மின்னஞ்சல் மூலம் தொடரவும்' : 'Continue with Email',
+                              style: AppTheme.getStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: isDark ? Colors.white30 : Colors.black12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (_showEmailForm) ...[
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF020D1E) : Colors.grey[50],
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: isDark ? Colors.white24 : Colors.black12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  ta ? 'மின்னஞ்சல் முகவரி' : 'Email Address',
+                                  style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _emailController,
+                                  keyboardType: TextInputType.emailAddress,
+                                  enabled: !_showOtpForm && !_anyLoading,
+                                  style: AppTheme.getStyle(fontSize: 16),
+                                  decoration: InputDecoration(
+                                    hintText: 'example@gmail.com',
+                                    hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black38),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  ),
+                                ),
+                                if (!_showOtpForm) ...[
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 48,
+                                    child: ElevatedButton(
+                                      onPressed: _anyLoading ? null : _sendOtp,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.primaryColor,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                      child: _isOtpLoading
+                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                          : Text(ta ? 'OTP பெறுக' : 'Get OTP', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ),
+                                ],
+                                if (_showOtpForm) ...[
+                                  const SizedBox(height: 20),
+                                  Text(
+                                    ta ? 'OTP குறியீடு' : 'Enter OTP',
+                                    style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: _otpController,
+                                    keyboardType: TextInputType.number,
+                                    maxLength: 6,
+                                    enabled: !_anyLoading,
+                                    style: AppTheme.getStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                    textAlign: TextAlign.center,
+                                    decoration: InputDecoration(
+                                      counterText: "",
+                                      hintText: '• • • • • •',
+                                      hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black38),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.center,
+                                    child: !_canResend
+                                        ? Text(
+                                      ta ? 'மீண்டும் அனுப்ப: $_timerSeconds விநாடிகள்' : 'Resend in: $_timerSeconds sec',
+                                      style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
+                                    )
+                                        : TextButton(
+                                      onPressed: _isResending ? null : _resendOtp,
+                                      child: _isResending
+                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                          : Text(ta ? 'OTP-ஐ மீண்டும் அனுப்பு' : 'Resend OTP'),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 48,
+                                    child: ElevatedButton(
+                                      onPressed: _anyLoading ? null : _verifyAndLogin,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.primaryColor,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                      child: _isVerifyLoading
+                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                          : Text(ta ? 'சரிபார் & உள்நுழை' : 'Verify & Login', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
                     // Google Sign-In Button
                     SizedBox(
                       width: double.infinity,
@@ -456,34 +591,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                         label: Text(
                           ta ? 'Google மூலம் தொடரவும்' : 'Continue with Google',
-                          style: AppTheme.getStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: isDark ? Colors.white30 : Colors.black12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Email Login Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: OutlinedButton.icon(
-                        onPressed: _anyLoading ? null : _handleEmailLogin,
-                        icon: Icon(
-                          _showEmailForm ? Icons.keyboard_arrow_up : Icons.email_outlined,
-                          color: isDark ? Colors.white70 : Colors.black54,
-                        ),
-                        label: Text(
-                          ta ? 'மின்னஞ்சல் மூலம் தொடரவும்' : 'Continue with Email',
                           style: AppTheme.getStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -532,110 +639,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-
-                    if (_showEmailForm) ...[
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF020D1E) : Colors.grey[50],
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: isDark ? Colors.white24 : Colors.black12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              ta ? 'மின்னஞ்சல் முகவரி' : 'Email Address',
-                              style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              enabled: !_showOtpForm && !_anyLoading,
-                              style: AppTheme.getStyle(fontSize: 16),
-                              decoration: InputDecoration(
-                                hintText: 'example@gmail.com',
-                                hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black38),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              ),
-                            ),
-                            if (!_showOtpForm) ...[
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 48,
-                                child: ElevatedButton(
-                                  onPressed: _anyLoading ? null : _sendOtp,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.primaryColor,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                  child: _isOtpLoading
-                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                      : Text(ta ? 'OTP பெறுக' : 'Get OTP', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                ),
-                              ),
-                            ],
-                            if (_showOtpForm) ...[
-                              const SizedBox(height: 20),
-                              Text(
-                                ta ? 'OTP குறியீடு' : 'Enter OTP',
-                                style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 8),
-                              TextField(
-                                controller: _otpController,
-                                keyboardType: TextInputType.number,
-                                maxLength: 6,
-                                enabled: !_anyLoading,
-                                style: AppTheme.getStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                                decoration: InputDecoration(
-                                  counterText: "",
-                                  hintText: '• • • • • •',
-                                  hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black38),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Align(
-                                alignment: Alignment.center,
-                                child: !_canResend
-                                    ? Text(
-                                        ta ? 'மீண்டும் அனுப்ப: $_timerSeconds விநாடிகள்' : 'Resend in: $_timerSeconds sec',
-                                        style: AppTheme.getStyle(fontSize: 12, color: Colors.grey),
-                                      )
-                                    : TextButton(
-                                        onPressed: _isResending ? null : _resendOtp,
-                                        child: _isResending
-                                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                            : Text(ta ? 'OTP-ஐ மீண்டும் அனுப்பு' : 'Resend OTP'),
-                                      ),
-                              ),
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 48,
-                                child: ElevatedButton(
-                                  onPressed: _anyLoading ? null : _verifyAndLogin,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.primaryColor,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                  child: _isVerifyLoading
-                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                      : Text(ta ? 'சரிபார் & உள்நுழை' : 'Verify & Login', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
 
                   ],
                 ),

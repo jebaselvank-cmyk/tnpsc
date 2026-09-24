@@ -3,7 +3,6 @@ import 'dart:math';
 
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
 import '../utils/app_log.dart';
 
 import 'auth_local_api.dart';
@@ -133,75 +132,80 @@ class AuthService {
       switch (msg) {
         case 'INVALID_EMAIL':
           return ta
-              ? 'தவறான மின்னஞ்சல் முகவரி. சரியான email உள்ளிடவும்.'
-              : 'Invalid email address. Please enter a valid email.';
+              ? 'தயவுசெய்து சரியான மின்னஞ்சல் முகவரியை (Email) உள்ளிடவும்.'
+              : 'Please enter a valid email address.';
         case 'EMAIL_NOT_REGISTERED':
           return ta
-              ? 'இந்த மின்னஞ்சல் பதிவு செய்யப்படவில்லை. Sign Up செய்து புதிய கணக்கு உருவாக்கவும்.'
+              ? 'இந்த மின்னஞ்சல் பதிவு செய்யப்படவில்லை. புதிய கணக்கு உருவாக்க Sign Up செய்யவும்.'
               : 'This email is not registered. Please Sign Up to create an account.';
         case 'EMAIL_NOT_CONFIGURED':
-          return ta
-              ? 'மின்னஞ்சல் சேவை அமைக்கப்படவில்லை. Admin-ஐ தொடர்பு கொள்ளுங்கள்.'
-              : 'Email service is not configured on server. Contact admin.';
         case 'EMAIL_SETUP_REQUIRED':
           return ta
-              ? 'மின்னஞ்சல் அமைப்பு இல்லை. Firebase Blaze + Functions deploy அல்லது Apps Script URL-ஐ config-ல் சேர்க்கவும்.'
-              : 'Email not configured. Upgrade Firebase to Blaze and deploy functions, OR set Apps Script URL in password_email_config.dart';
+              ? 'மின்னஞ்சல் சேவை தற்காலிகமாக கிடைக்கவில்லை. தயவுசெய்து சிறிது நேரம் கழித்து முயற்சிக்கவும்.'
+              : 'Email service is temporarily unavailable. Please try again later.';
         case 'EMAIL_SEND_FAILED':
           return ta
-              ? 'மின்னஞ்சல் அனுப்ப முடியவில்லை. Apps Script-ல் Gmail மற்றும் Service Account அமைப்புகளைச் சரிபார்க்கவும்.'
-              : 'Could not send email. Check Gmail and Service Account setup in Apps Script.';
+              ? 'மின்னஞ்சல் அனுப்புவதில் தோல்வி. தயவுசெய்து உங்கள் மின்னஞ்சல் முகவரியைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.'
+              : 'Failed to send email. Please check your email address and try again.';
         case 'WRONG_CURRENT_PASSWORD':
-          return ta ? 'தற்போதைய கடவுச்சொல் தவறு.' : 'Current password is incorrect.';
+          return ta
+              ? 'தற்போதைய கடவுச்சொல் தவறாக உள்ளது. சரியாக உள்ளிட்டு மீண்டும் முயற்சிக்கவும்.'
+              : 'Current password is incorrect. Please try again.';
         case 'WEAK_PASSWORD':
           return ta
-              ? 'கடவுச்சொல் குறைந்தது 6 எழுத்துக்கள்.'
-              : 'Password must be at least 6 characters.';
+              ? 'கடவுச்சொல் மிகச் சிறியது. குறைந்தபட்சம் 6 எழுத்துகள் இருக்க வேண்டும்.'
+              : 'Password must be at least 6 characters long.';
         case 'SAME_AS_OLD_PASSWORD':
           return ta
-              ? 'புதிய கடவுச்சொல் பழையதை விட வித்தியாசமாக இருக்க வேண்டும்.'
-              : 'New password must be different from current password.';
+              ? 'புதிய கடவுச்சொல் தற்போதைய கடவுச்சொல்லில் இருந்து வித்தியாசமாக இருக்க வேண்டும்.'
+              : 'New password must be different from your current password.';
         case 'NOT_SIGNED_IN':
-          return ta ? 'முதலில் உள்நுழையவும்.' : 'Please sign in first.';
+          return ta
+              ? 'தொடர தயவுசெய்து உள்நுழையவும்.'
+              : 'Please sign in to continue.';
         case 'INVALID_OTP':
-          return ta ? 'தவறான OTP. மீண்டும் முயற்சிக்கவும்.' : 'Invalid OTP. Please try again.';
+          return ta
+              ? 'தவறான OTP குறியீடு. சரியான குறியீட்டை உள்ளிடவும்.'
+              : 'Invalid verification code (OTP). Please try again.';
         case 'EMAIL_SYNC_FAILED':
           return ta
-              ? 'இந்த மின்னஞ்சல் ஏற்கனவே உள்ளது. Google Login அல்லது Forgot Password பயன்படுத்தவும்.'
+              ? 'இந்த மின்னஞ்சல் ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது. Google Login அல்லது கடவுச்சொல் மீட்பு (Forgot Password) பயன்படுத்தவும்.'
               : 'This email is already registered. Please use Google Login or Forgot Password.';
         case 'PASSWORD_EMAIL_SENT':
           return ta
-              ? 'உங்கள் கடவுச்சொல் மின்னஞ்சலில் அனுப்பப்பட்டது.'
-              : 'Your password has been sent to your email.';
+              ? 'உங்கள் கடவுச்சொல் உங்கள் மின்னஞ்சலுக்கு வெற்றிகரமாக அனுப்பப்பட்டது.'
+              : 'Your password has been successfully sent to your email.';
         case 'RESET_LINK_SENT':
           return ta
-              ? 'கடவுச்சொல் மாற்ற இணைப்பு உங்கள் மின்னஞ்சலுக்கு அனுப்பப்பட்டது.'
-              : 'Password reset link sent to your email.';
+              ? 'கடவுச்சொல் மாற்றும் இணைப்பு உங்கள் மின்னஞ்சலுக்கு அனுப்பப்பட்டுள்ளது.'
+              : 'Password reset link has been sent to your email.';
         default:
           if (e.code == 'not-found' && msg != 'EMAIL_NOT_REGISTERED') {
             return ta
-                ? 'API சேவை கிடைக்கவில்லை. மீண்டும் login செய்து முயற்சிக்கவும்.'
-                : 'API service unavailable. Please login again and retry.';
+                ? 'சேவை தற்காலிகமாக கிடைக்கவில்லை. மீண்டும் login செய்து முயற்சிக்கவும்.'
+                : 'Service is temporarily unavailable. Please login again and try.';
           }
-          return e.message ?? (ta ? 'பிழை ஏற்பட்டது' : 'Something went wrong');
+          return e.message ?? (ta ? 'பிழை ஏற்பட்டது. மீண்டும் முயற்சிக்கவும்.' : 'Something went wrong. Please try again.');
       }
     }
     if (e is FirebaseAuthException) {
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        return ta ? 'தவறான கடவுச்சொல்.' : 'Incorrect password.';
+        return ta
+            ? 'தவறான கடவுச்சொல் அல்லது மின்னஞ்சல். மீண்டும் முயற்சிக்கவும்.'
+            : 'Incorrect password or email. Please check and try again.';
       }
       if (e.code == 'requires-recent-login') {
         return ta
-            ? 'பாதுகாப்புக்காக மீண்டும் உள்நுழைந்து முயற்சிக்கவும்.'
-            : 'For security, sign out and sign in again, then try.';
+            ? 'பாதுகாப்பு காரணங்களுக்காக, மீண்டும் வெளியேறி உள்நுழையவும்.'
+            : 'For security, please sign out and sign in again.';
       }
       if (e.code == 'user-not-found') {
         return ta
-            ? 'இந்த மின்னஞ்சல் பதிவு செய்யப்படவில்லை. Sign Up செய்யவும்.'
+            ? 'இந்த மின்னஞ்சல் பதிவு செய்யப்படவில்லை. தயவுசெய்து Sign Up செய்யவும்.'
             : 'Email not registered. Please Sign Up.';
       }
     }
-    return ta ? 'பிழை ஏற்பட்டது' : 'Something went wrong';
+    return ta ? 'பிழை ஏற்பட்டது. மீண்டும் முயற்சிக்கவும்.' : 'Something went wrong. Please try again.';
   }
 
   /// Returns message For verification result
