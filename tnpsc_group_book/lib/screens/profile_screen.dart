@@ -180,8 +180,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       final int globalRank = snapshot.data?[1] as int? ?? 0;
                       final userData = userDataDoc?.data() as Map<String, dynamic>?;
 
-                      final String name = userData?['name'] ?? user?.displayName ?? AppLanguage.getString('user_fallback');
-                      final String email = userData?['email'] ?? user?.email ?? AppLanguage.getString('no_email_linked');
+                      final currentUser = user;
+                      final String defaultFallback = () {
+                        if (currentUser?.isAnonymous == true) {
+                          final u = currentUser!;
+                          if (u.displayName != null && u.displayName!.isNotEmpty) return u.displayName!;
+                          final uid = u.uid;
+                          return 'guest_${uid.substring(0, uid.length >= 8 ? 8 : uid.length)}';
+                        }
+                        return AppLanguage.getString('user_fallback');
+                      }();
+
+                      final String name = userData?['name'] ?? user?.displayName ?? defaultFallback;
+                      final String emailField = userData?['email'] ?? user?.email ?? '';
+                      final bool isGuest = userData?['isGuest'] == true || emailField.contains('@guest.com') || emailField.isEmpty;
+                      final String email = isGuest ? '' : emailField;
                       final String rankVal = globalRank > 0 ? globalRank.toString() : "--";
 
                       final int totalPoints = userData?['totalScore'] ?? 0;
@@ -270,14 +283,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ],
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  email,
-                                  style: AppTheme.getStyle(
-                                    fontSize: 14,
-                                    color: isDark ? Colors.white70 : AppTheme.textSecondaryColor,
+                                if (email.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    email,
+                                    style: AppTheme.getStyle(
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white70 : AppTheme.textSecondaryColor,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
@@ -501,6 +516,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     final email = FirebaseAuth.instance.currentUser?.email;
                                     if (email != null) await CredentialStorage.clearPassword(email);
                                     await HiveService.resetSessionLeaderboardFetched();
+                                    await HiveService.clearUserSession();
                                     await FirebaseAuth.instance.signOut();
                                     if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
                                   },

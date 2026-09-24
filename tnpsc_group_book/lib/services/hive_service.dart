@@ -344,6 +344,13 @@ class HiveService {
     await box.delete('host_room_date');
   }
 
+  static Future<void> clearUserSession() async {
+    try {
+      final box = Hive.box(userBoxName);
+      await box.clear();
+    } catch (_) {}
+  }
+
   // TTS Speed Setting (default: 0.5 speech rate, stored as a double)
   static Future<void> setTtsSpeed(double speed) async {
     await Hive.box(userBoxName).put('tts_speed', speed);

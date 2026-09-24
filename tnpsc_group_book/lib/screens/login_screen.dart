@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:math';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -23,7 +24,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  bool _isGuestLoading = false;
+  bool _isOtpLoading = false;
+  bool _isVerifyLoading = false;
+  bool get _anyLoading => _isGoogleLoading || _isGuestLoading || _isOtpLoading || _isVerifyLoading;
   bool _isExiting = false;
 
   // Email/OTP Form State
@@ -52,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
-    setState(() => _isLoading = true);
+    setState(() => _isGoogleLoading = true);
     final ta = AppLanguage.languageNotifier.value == 'ta';
     AppLog.d("LOGIN SCREEN OPENED");
     AppLog.d("Current User = ${FirebaseAuth.instance.currentUser?.uid}");
@@ -62,12 +67,30 @@ class _LoginScreenState extends State<LoginScreen> {
         await _initializeUserInFirestore(userCredential.user);
         _navigateToHome();
       } else {
-        setState(() => _isLoading = false);
+        setState(() => _isGoogleLoading = false);
         // User canceled sign-in
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() => _isGoogleLoading = false);
       _showError(ta ? 'Google உள்நுழைவு தோல்வியடைந்தது.' : 'Google Sign-In failed.');
+    }
+  }
+
+  Future<void> _handleGuestLogin() async {
+    setState(() => _isGuestLoading = true);
+    final ta = AppLanguage.languageNotifier.value == 'ta';
+    try {
+      final userCredential = await FirebaseAuth.instance.signInAnonymously();
+      if (userCredential.user != null) {
+        await _initializeGuestUserInFirestore(userCredential.user);
+        _navigateToHome();
+      } else {
+        setState(() => _isGuestLoading = false);
+      }
+    } catch (e) {
+      setState(() => _isGuestLoading = false);
+      AppLog.e("Guest login error: $e");
+      _showError(ta ? 'விருந்தினர் உள்நுழைவு தோல்வியடைந்தது.' : 'Guest login failed.');
     }
   }
 
@@ -83,6 +106,53 @@ class _LoginScreenState extends State<LoginScreen> {
         if (seconds == 0) setState(() => _canResend = true);
       }
     });
+  }
+
+  Future<void> _initializeGuestUserInFirestore(User? user) async {
+    if (user == null) return;
+    await HiveService.clearUserSession();
+    
+    final guestId = (1000 + Random().nextInt(900000)).toString(); // 4 to 6 digits
+    final guestName = 'guest_$guestId';
+
+    try {
+      await user.updateDisplayName(guestName);
+    } catch (_) {}
+
+    final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final docSnapshot = await userDoc.get();
+
+    if (!docSnapshot.exists) {
+      await userDoc.set({
+        'name': guestName,
+        'email': '', // No email for guest
+        'isGuest': true,
+        'streak': 1,
+        'points': 0,
+        'totalScore': 0,
+        'lastActive': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      await userDoc.update({
+        'lastActive': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Cache user data in Hive immediately
+    await HiveService.cacheUserData({
+      'name': guestName,
+      'email': '',
+      'isGuest': true,
+      'streak': 1,
+      'points': 0,
+      'totalScore': 0,
+    });
+
+    // Force refresh user data from Firestore to populate Hive on fresh install
+    final fs = FirestoreService();
+    await fs.getUserData(forceRefresh: true);
+    await NotificationService.saveFCMToken();
   }
 
   Future<void> _handleEmailLogin() async {
@@ -109,21 +179,21 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => _isOtpLoading = true);
     try {
       final generatedOtp = await AuthService.sendOtpForLogin(email);
       setState(() {
         _generatedOtp = generatedOtp;
         _otpGeneratedTime = DateTime.now();
         _showOtpForm = true;
-        _isLoading = false;
+        _isOtpLoading = false;
       });
       _startOtpTimer();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(ta ? 'OTP அனுப்பப்பட்டது (3 நிமிடங்கள் செல்லுபடியாகும்)' : 'OTP sent successfully (Valid for 3 mins)')),
       );
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() => _isOtpLoading = false);
       _showError(AuthService.messageFromException(e, ta: ta));
     }
   }
@@ -170,7 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => _isVerifyLoading = true);
     try {
       final userCredential = await AuthService.verifyOtpAndLogin(
         email: email,
@@ -182,10 +252,10 @@ class _LoginScreenState extends State<LoginScreen> {
         await _initializeUserInFirestore(userCredential.user);
         _navigateToHome();
       } else {
-        setState(() => _isLoading = false);
+        setState(() => _isVerifyLoading = false);
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() => _isVerifyLoading = false);
       _showError(AuthService.messageFromException(e, ta: ta));
 
     }
@@ -193,6 +263,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _initializeUserInFirestore(User? user) async {
     if (user == null) return;
+    await HiveService.clearUserSession();
     final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
     final docSnapshot = await userDoc.get();
 
@@ -365,8 +436,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       height: 55,
                       child: OutlinedButton.icon(
-                        onPressed: _isLoading ? null : _handleGoogleSignIn,
-                        icon: _isLoading 
+                        onPressed: _anyLoading ? null : _handleGoogleSignIn,
+                        icon: _isGoogleLoading 
                           ? const SizedBox(
                               width: 20, 
                               height: 20, 
@@ -406,13 +477,47 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       height: 55,
                       child: OutlinedButton.icon(
-                        onPressed: _isLoading ? null : _handleEmailLogin,
+                        onPressed: _anyLoading ? null : _handleEmailLogin,
                         icon: Icon(
                           _showEmailForm ? Icons.keyboard_arrow_up : Icons.email_outlined,
                           color: isDark ? Colors.white70 : Colors.black54,
                         ),
                         label: Text(
                           ta ? 'மின்னஞ்சல் மூலம் தொடரவும்' : 'Continue with Email',
+                          style: AppTheme.getStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: isDark ? Colors.white30 : Colors.black12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Guest Login Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: OutlinedButton.icon(
+                        onPressed: _anyLoading ? null : _handleGuestLogin,
+                        icon: _isGuestLoading 
+                          ? const SizedBox(
+                              width: 20, 
+                              height: 20, 
+                              child: CircularProgressIndicator(strokeWidth: 2)
+                            )
+                          : Icon(
+                              Icons.person_outline,
+                              color: isDark ? Colors.white70 : Colors.black54,
+                            ),
+                        label: Text(
+                          ta ? 'விருந்தினராக தொடரவும் (Guest)' : 'Continue as Guest',
                           style: AppTheme.getStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -448,7 +553,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             TextField(
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
-                              enabled: !_showOtpForm && !_isLoading,
+                              enabled: !_showOtpForm && !_anyLoading,
                               style: AppTheme.getStyle(fontSize: 16),
                               decoration: InputDecoration(
                                 hintText: 'example@gmail.com',
@@ -463,12 +568,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 width: double.infinity,
                                 height: 48,
                                 child: ElevatedButton(
-                                  onPressed: _isLoading ? null : _sendOtp,
+                                  onPressed: _anyLoading ? null : _sendOtp,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.primaryColor,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   ),
-                                  child: _isLoading
+                                  child: _isOtpLoading
                                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                       : Text(ta ? 'OTP பெறுக' : 'Get OTP', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                 ),
@@ -485,7 +590,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 controller: _otpController,
                                 keyboardType: TextInputType.number,
                                 maxLength: 6,
-                                enabled: !_isLoading,
+                                enabled: !_anyLoading,
                                 style: AppTheme.getStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                 textAlign: TextAlign.center,
                                 decoration: InputDecoration(
@@ -516,12 +621,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 width: double.infinity,
                                 height: 48,
                                 child: ElevatedButton(
-                                  onPressed: _isLoading ? null : _verifyAndLogin,
+                                  onPressed: _anyLoading ? null : _verifyAndLogin,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.primaryColor,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   ),
-                                  child: _isLoading
+                                  child: _isVerifyLoading
                                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                       : Text(ta ? 'சரிபார் & உள்நுழை' : 'Verify & Login', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                 ),

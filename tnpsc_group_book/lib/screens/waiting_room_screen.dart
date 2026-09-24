@@ -138,12 +138,12 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
       ),
       // 4. Slate Silver (Charcoal)
       _PosterTheme(
-        backgroundStart: const Color(0xFFB09A04),
-        backgroundMid: const Color(0xFFDCCB59),
-        accentColor: const Color(0xFFD9AA36),
-        glassColor: const Color(0xFFEECD6B).withOpacity(0.5),
-        mascotColor: Colors.yellow.shade200,
-        stripeColor: Colors.yellowAccent.shade700,
+        backgroundStart: const Color(0xFFB04B03),
+        backgroundMid: const Color(0xFF4D2C00),
+        accentColor: const Color(0xFFF0B669),
+        glassColor: const Color(0xFF5E3D1B).withOpacity(0.4),
+        mascotColor: Colors.orange,
+        stripeColor: Colors.orangeAccent,
       ),
       // 5. Royal Crimson (Maroon)
       _PosterTheme(

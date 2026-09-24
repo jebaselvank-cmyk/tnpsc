@@ -434,6 +434,56 @@ class AiService {
     return context;
   }
 
+  static bool _validateQuestion(Map<String, dynamic> q) {
+    try {
+      final qEn = q['question_en']?.toString().trim() ?? '';
+      final qTa = q['question_ta']?.toString().trim() ?? '';
+      if (qEn.isEmpty || qTa.isEmpty || qEn.length < 5 || qTa.length < 5) return false;
+
+      final options = q['options'];
+      if (options is! List || options.length != 4) return false;
+
+      Set<String> optionTextsEn = {};
+      Set<String> optionTextsTa = {};
+      for (var opt in options) {
+        if (opt is! Map) return false;
+        final optEn = opt['en']?.toString().trim() ?? '';
+        final optTa = opt['ta']?.toString().trim() ?? '';
+        if (optEn.isEmpty || optTa.isEmpty) return false;
+        optionTextsEn.add(optEn);
+        optionTextsTa.add(optTa);
+      }
+      if (optionTextsEn.length != 4 || optionTextsTa.length != 4) return false;
+
+      final correctIdx = q['correctOptionIndex'];
+      if (correctIdx is! int && correctIdx is! num) return false;
+      final idx = (correctIdx as num).toInt();
+      if (idx < 0 || idx > 3) return false;
+
+      final expEn = q['explanation_en']?.toString().toLowerCase() ?? '';
+      final expTa = q['explanation_ta']?.toString().toLowerCase() ?? '';
+      if (expEn.isEmpty || expTa.isEmpty) return false;
+
+      // Reject questions where explanation states no such event/answer exists or is hypothetical/untrue
+      if ((expEn.contains('no ') && (expEn.contains('awarded') || expEn.contains('exist') || expEn.contains('scientist') || expEn.contains('record'))) ||
+          expEn.contains('hypothetical') || expEn.contains('future event') ||
+          expTa.contains('வழங்கப்படவில்லை') || expTa.contains('இல்லை') || expTa.contains('கருத்தியல்') || expTa.contains('தகவல் இல்லை')) {
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static List<dynamic> _filterValidQuestions(List<dynamic> questions) {
+    return questions.where((q) {
+      if (q is! Map<String, dynamic>) return false;
+      return _validateQuestion(q);
+    }).toList();
+  }
+
   static Future<bool> generateAndSaveDailyQuiz(DateTime date) async {
     // If we're generating for 'today' or 'tomorrow', we should ensure the input date is interpreted correctly.
     // To be safe, we format the passed date object using en_US.
@@ -499,6 +549,8 @@ STRICT QUALITY RULES (MUST FOLLOW)
 28. Do not use unnecessary quotation marks.
 29. Never invent incorrect historical or scientific facts.
 30. Validate every answer before returning JSON.
+31. FACTUAL & ANSWER ACCURACY (CRITICAL): Double-check that `correctOptionIndex` (0-3) precisely points to the correct answer. Verify historical, scientific, and mathematical facts against authentic TNPSC data to ensure zero errors. Do not generate incorrect, misleading, or outdated answers.
+32. NO HALLUCINATED OR HYPOTHETICAL QUESTIONS: Never generate questions about events, awards, or facts that did not happen or do not exist. Every question must be 100% historically and factually accurate based on official TNPSC records. If an award or event did not occur, do not create a question about it.
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?
@@ -592,18 +644,19 @@ $commonRules
         try {
           // Note: _generateWithFallback already trims and handles code blocks
           List q = jsonDecode(res);
+          List<dynamic> validQ = _filterValidQuestions(q);
 
           // Validation: Trim if more, fail if less
-          if (q.length > expectedCount) q = q.sublist(0, expectedCount);
-          if (q.length < expectedCount) {
+          if (validQ.length > expectedCount) validQ = validQ.sublist(0, expectedCount);
+          if (validQ.length < expectedCount) {
             AppLog.d(
-              "AI_DEBUG: Count mismatch for $quizType. Got ${q.length}, expected $expectedCount",
+              "AI_DEBUG: Count/Validation mismatch for $quizType. Got valid ${validQ.length}, expected $expectedCount",
             );
             return;
           }
 
           allQuestions.addAll(
-            q.map((item) => {...item, 'quiz_type': quizType}),
+            validQ.map((item) => {...item, 'quiz_type': quizType}),
           );
         } catch (e) {
           AppLog.d("AI_DEBUG: JSON Decode Error in fetchAndTag ($quizType): $e");
@@ -799,14 +852,15 @@ $commonRules
       if (res != null) {
         try {
           List<dynamic> batch = jsonDecode(res);
-          if (batch.length > expectedCount) batch = batch.sublist(0, expectedCount);
-          if (batch.length == expectedCount) {
+          List<dynamic> validBatch = _filterValidQuestions(batch);
+          if (validBatch.length > expectedCount) validBatch = validBatch.sublist(0, expectedCount);
+          if (validBatch.length == expectedCount) {
             allQuestions.addAll(
-              batch.map((q) => {...q, 'quiz_type': quizType}),
+              validBatch.map((q) => {...q, 'quiz_type': quizType}),
             );
             return true;
           } else {
-            AppLog.d("AI_DEBUG: $quizType batch count mismatch. Got ${batch.length}, expected $expectedCount");
+            AppLog.d("AI_DEBUG: $quizType batch count/validation mismatch. Got valid ${validBatch.length}, expected $expectedCount");
           }
         } catch (e) {
           AppLog.d("AI_DEBUG: $quizType JSON Parse Error: $e");
@@ -969,8 +1023,9 @@ Only return the raw JSON array, no other text or markdown formatting.
           List<dynamic> questions = jsonDecode(
             res.substring(start, end + 1),
           );
+          List<dynamic> validQuestions = _filterValidQuestions(questions);
 
-          if (questions.length < 20) return false;
+          if (validQuestions.length < 20) return false;
 
           final docRef = FirebaseFirestore.instance.collection('room_predefined_quizzes').doc(subject);
 
@@ -983,7 +1038,7 @@ Only return the raw JSON array, no other text or markdown formatting.
           }
 
           // 2. Prepare new questions
-          List<dynamic> sanitizedNewQs = questions.map((q) => {
+          List<dynamic> sanitizedNewQs = validQuestions.map((q) => {
             ...q, 
             'quiz_type': subject,
             'subject': subject,
@@ -1080,13 +1135,13 @@ Return only the raw JSON array of EXACTLY $count items.
           List<dynamic> allQuestions = jsonDecode(
             res.substring(start, end + 1),
           );
+          allQuestions = _filterValidQuestions(allQuestions);
 
           // STRICT VALIDATION: Ensure exactly 'count' questions
           if (allQuestions.length != count) {
             AppLog.d(
-              "AI_DEBUG: Count mismatch. Got ${allQuestions.length}, expected $count. Retrying logic...",
+              "AI_DEBUG: Count/Validation mismatch. Got valid ${allQuestions.length}, expected $count. Retrying logic...",
             );
-            // If too many, trim. If too few, this attempt failed.
             if (allQuestions.length > count) {
               allQuestions = allQuestions.sublist(0, count);
             } else {
@@ -1241,6 +1296,7 @@ Only return the raw JSON array, no other text or markdown formatting.
           List<dynamic> newQuestions = jsonDecode(
             res.substring(start, end + 1),
           );
+          newQuestions = _filterValidQuestions(newQuestions);
           newQuestions = newQuestions
               .map((q) => {...q, 'quiz_type': 'subject_question'})
               .toList();
@@ -1407,8 +1463,10 @@ Only return the raw JSON array, no other text or markdown formatting.
       try {
         int start = res.indexOf('[');
         int end = res.lastIndexOf(']');
-        if (start != -1 && end != -1)
-          return jsonDecode(res.substring(start, end + 1));
+        if (start != -1 && end != -1) {
+          List<dynamic> raw = jsonDecode(res.substring(start, end + 1));
+          return _filterValidQuestions(raw);
+        }
       } catch (e) {}
     }
     return [];
@@ -1527,9 +1585,10 @@ JSON Format:
         int end = res.lastIndexOf(']');
         if (start != -1 && end != -1) {
           List q = jsonDecode(res.substring(start, end + 1));
-          if (q.length < 15) return false; // Fail if too few questions
+          List<dynamic> validQ = _filterValidQuestions(q);
+          if (validQ.length < 15) return false; // Fail if too few valid questions
 
-          final allQuestions = q.map((item) => {...item, 'quiz_type': 'current_affairs'}).toList();
+          final allQuestions = validQ.map((item) => {...item, 'quiz_type': 'current_affairs'}).toList();
 
           final quizData = {
             'date': dateStr,

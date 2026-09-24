@@ -220,19 +220,30 @@ class _SubjectScreenState extends State<SubjectScreen> {
             child: FutureBuilder<DocumentSnapshot?>(
               future: _userDataFuture,
               builder: (context, snapshot) {
-                String userName = AppLanguage.getString('user_fallback');
+                final currentUser = FirebaseAuth.instance.currentUser;
+                final String defaultFallback = () {
+                  if (currentUser?.isAnonymous == true) {
+                    final u = currentUser!;
+                    if (u.displayName != null && u.displayName!.isNotEmpty) return u.displayName!;
+                    final uid = u.uid;
+                    return 'guest_${uid.substring(0, uid.length >= 8 ? 8 : uid.length)}';
+                  }
+                  return AppLanguage.getString('user_fallback');
+                }();
+
+                String userName = defaultFallback;
                 int streak = 0;
                 int totalPoints = 0;
 
                 if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
                   var data = snapshot.data!.data() as Map<String, dynamic>;
-                  userName = data['name'] ?? AppLanguage.getString('user_fallback');
+                  userName = data['name'] ?? defaultFallback;
                   streak = data['streak'] ?? 0;
                   totalPoints = data['totalScore'] ?? 0;
                 } else {
                   var cachedData = HiveService.getCachedUserData();
                   if (cachedData != null) {
-                    userName = cachedData['name'] ?? AppLanguage.getString('user_fallback');
+                    userName = cachedData['name'] ?? defaultFallback;
                     streak = cachedData['streak'] ?? 0;
                     totalPoints = cachedData['totalScore'] ?? 0;
                   }
