@@ -961,46 +961,51 @@ class FirestoreService {
   }
 
   // Fetch Current Affairs Quiz Questions with Caching
-  Future<List<Question>> getCurrentAffairsQuiz() async {
+  Future<List<Question>> getCurrentAffairsQuiz({DateTime? date}) async {
     try {
+      final targetDate = date ?? AppDate.getISTNow();
+      String dateStr = AppDate.format(targetDate);
       String today = AppDate.getTodayString();
+      bool isToday = (dateStr == today);
 
-      // Check Hive first
-      List<Question> cachedToday = HiveService.getQuestions("Current Affairs Quiz");
-      String? lastActiveDate = Hive.box(HiveService.userBoxName).get('last_active_ca_quiz_date') as String?;
-      if (cachedToday.isNotEmpty && lastActiveDate == today) {
-        AppLog.d("AI_DEBUG: Today's CA quiz fetched from HIVE");
-        return cachedToday;
+      // Check Hive first if fetching today
+      if (isToday) {
+        List<Question> cachedToday = HiveService.getQuestions("Current Affairs Quiz");
+        String? lastActiveDate = Hive.box(HiveService.userBoxName).get('last_active_ca_quiz_date') as String?;
+        if (cachedToday.isNotEmpty && lastActiveDate == today) {
+          AppLog.d("AI_DEBUG: Today's CA quiz fetched from HIVE");
+          return cachedToday;
+        }
       }
 
-      // 1. Check if today's CA quiz exists
-      QuerySnapshot todaySnap = await _db
+      // 1. Check if CA quiz for target date exists
+      QuerySnapshot dateSnap = await _db
           .collection('quizzes')
           .where('type', isEqualTo: 'current_affairs')
-          .where('date', isEqualTo: today)
+          .where('date', isEqualTo: dateStr)
           .limit(1)
           .get();
 
       DocumentSnapshot? resolvedDoc;
-      if (todaySnap.docs.isNotEmpty) {
-        resolvedDoc = todaySnap.docs.first;
-        AppLog.d("AI_DEBUG: Today's CA quiz found in Firestore");
+      if (dateSnap.docs.isNotEmpty) {
+        resolvedDoc = dateSnap.docs.first;
+        AppLog.d("AI_DEBUG: CA quiz for $dateStr found in Firestore");
       } else {
-        // 2. Not found, try generating via AI
-        AppLog.d("AI_DEBUG: Today's CA quiz not found. Generating via AI...");
+        // 2. Not found, try generating via AI for the target date
+        AppLog.d("AI_DEBUG: CA quiz for $dateStr not found. Generating via AI...");
         try {
-          bool generated = await AiService.generateAndSaveCurrentAffairsQuiz(AppDate.getISTNow())
+          bool generated = await AiService.generateAndSaveCurrentAffairsQuiz(targetDate)
               .timeout(const Duration(seconds: 40));
           if (generated) {
-            QuerySnapshot newTodaySnap = await _db
+            QuerySnapshot newSnap = await _db
                 .collection('quizzes')
                 .where('type', isEqualTo: 'current_affairs')
-                .where('date', isEqualTo: today)
+                .where('date', isEqualTo: dateStr)
                 .limit(1)
                 .get();
-            if (newTodaySnap.docs.isNotEmpty) {
-              resolvedDoc = newTodaySnap.docs.first;
-              AppLog.d("AI_DEBUG: AI Generated CA quiz for today fetched successfully");
+            if (newSnap.docs.isNotEmpty) {
+              resolvedDoc = newSnap.docs.first;
+              AppLog.d("AI_DEBUG: AI Generated CA quiz for $dateStr fetched successfully");
             }
           }
         } catch (e) {

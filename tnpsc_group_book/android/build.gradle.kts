@@ -26,6 +26,24 @@ subprojects {
     }
 }
 
+subprojects {
+    plugins.withId("com.android.library") {
+        (extensions.findByName("android") as? com.android.build.gradle.BaseExtension)?.apply {
+            ndkVersion = "27.0.12077973"
+            defaultConfig {
+                externalNativeBuild {
+                    cmake {
+                        arguments("-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384")
+                    }
+                    ndkBuild {
+                        arguments("APP_LDFLAGS=-Wl,-z,max-page-size=16384")
+                    }
+                }
+            }
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

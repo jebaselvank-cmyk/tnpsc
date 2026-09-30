@@ -1525,6 +1525,38 @@ Only return the raw JSON array. No preamble, no markdown, no explanation.
 
   static Future<bool> generateAndSaveCurrentAffairsQuiz(DateTime date) async {
     final dateStr = AppDate.format(date);
+    final db = FirebaseFirestore.instance;
+
+    // Calculate 30-day lookback window
+    DateTime thirtyDaysAgo = date.subtract(const Duration(days: 30));
+    String cutoffDateStr = AppDate.format(thirtyDaysAgo);
+
+    // 1. Check if daily news points exist for this date. If not, generate them first.
+    final todayNewsSnap = await db.collection('current_affairs_points')
+        .where('date', isEqualTo: dateStr)
+        .limit(1)
+        .get();
+
+    if (todayNewsSnap.docs.isEmpty) {
+      AppLog.d("AI_DEBUG: Generating news points first for date: $dateStr");
+      await generateAndSaveDailyNews(date);
+    }
+
+    // 2. Fetch news items from the last 30 days (up to target date) to provide rich, comprehensive context
+    final recentNewsSnap = await db.collection('current_affairs_points')
+        .where('date', isGreaterThanOrEqualTo: cutoffDateStr)
+        .where('date', isLessThanOrEqualTo: dateStr)
+        .orderBy('date', descending: true)
+        .limit(30)
+        .get();
+
+    String newsContext = "";
+    if (recentNewsSnap.docs.isNotEmpty) {
+      newsContext = "OFFICIAL NEWS DATA FROM LAST 30 DAYS (Up to $dateStr):\n" + recentNewsSnap.docs.map((doc) {
+        final d = doc.data();
+        return "- [${d['date'] ?? ''}] ${d['titleEn'] ?? ''} (${d['titleTa'] ?? ''}): ${d['contentEn'] ?? ''} | ${d['contentTa'] ?? ''}";
+      }).join("\n");
+    }
 
     // Get recent CA context to avoid repeats
     String recentContext = await _getRecentQuizContext('quizzes', 30);
@@ -1537,16 +1569,22 @@ $recentContext
 Rules:
 - Do NOT repeat the same question.
 - Do NOT repeat the same news item.
-- Ensure all news items are from the last 3-6 months only.
 """
         : "";
 
     final prompt = '''
-Generate 20 UNIQUE TNPSC Current Affairs MCQs for $dateStr.
-Focus on:
-1. Tamil Nadu Government Schemes, Awards, and News (60%)
-2. National Important Events, Appointments, and Awards (30%)
-3. International Sports and Summits (10%)
+Generate 20 UNIQUE TNPSC Current Affairs MCQs for $dateStr based on official government news sources and the following news items from the last 60 days:
+
+$newsContext
+
+EXACT CATEGORY DISTRIBUTION (Total 20 Questions):
+1. Tamil Nadu Government & News (5 questions): TN Govt press releases, state schemes, TN budget, state appointments, infrastructure & local developments.
+2. India / National Current Affairs (4 questions): PIB updates, Central Govt schemes, Parliament/Polity developments, Union Budget, national policies.
+3. Science & Technology (3 questions): ISRO space missions, DRDO, defense technology, AI & tech developments.
+4. Economy & Banking (2 questions): RBI policy announcements, Economic reports/indices, major financial developments.
+5. International Current Affairs (2 questions): Global summits, international organisations (UN, G20, etc.), key bilateral agreements.
+6. Awards, Sports & Key Appointments (2 questions): Major national/state awards, sports milestones, important constitutional & official appointments.
+7. Environment & Geography (2 questions): Wildlife conservation, climate change initiatives, environmental policies & geography news.
 
 $avoidPrompt
 
@@ -1556,9 +1594,9 @@ STRICT QUALITY RULES (MUST FOLLOW):
 3. Every field MUST BE BILINGUAL (English and Tamil).
 4. NO MIXED LANGUAGE in any sentence.
 5. NO OTHER LANGUAGES (Hindi, etc.).
-6. SSLC Standard.
+6. SSLC / Degree Standard aligned directly with TNPSC Group I/II/IIA/IV syllabus.
 7. Correct index MUST match the answer.
-8. Explanation must be detailed in both languages.
+8. Explanation must be detailed in both languages with official background context.
 
 JSON Format:
 [

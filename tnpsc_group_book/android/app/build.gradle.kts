@@ -20,8 +20,8 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.tnpsc.groupbook.tnpsc_group_book"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 36
+    ndkVersion = "27.0.12077973"
 
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
@@ -50,9 +50,18 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        externalNativeBuild {
+            cmake {
+                arguments("-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384")
+            }
+            ndkBuild {
+                arguments("APP_LDFLAGS=-Wl,-z,max-page-size=16384")
+            }
+        }
     }
 
     buildTypes {
