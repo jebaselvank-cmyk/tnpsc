@@ -29,7 +29,7 @@ subprojects {
 subprojects {
     plugins.withId("com.android.library") {
         (extensions.findByName("android") as? com.android.build.gradle.BaseExtension)?.apply {
-            ndkVersion = "27.0.12077973"
+            ndkVersion = "28.2.13676358"
             defaultConfig {
                 externalNativeBuild {
                     cmake {

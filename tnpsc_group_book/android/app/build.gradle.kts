@@ -21,7 +21,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.tnpsc.groupbook.tnpsc_group_book"
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.2.13676358"
 
     signingConfigs {
         if (keystorePropertiesFile.exists()) {

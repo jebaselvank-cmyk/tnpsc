@@ -2270,11 +2270,183 @@ class FirestoreService {
          }
       }
 
+      // Filter for Direct MCQs (Clear 4-option questions suitable for Share Posters)
+      List<Question> directMcqs = pool.where(_isDirectMcq).toList();
+      if (directMcqs.isNotEmpty) pool = directMcqs;
+
       pool.shuffle();
       return pool.take(limit).toList();
     } catch (e) {
       AppLog.e("Error fetching large share quiz pool: $e");
       return [];
+    }
+  }
+
+  static bool _isDirectMcq(Question q) {
+    String qText = q.question.toLowerCase();
+    if (qText.contains('(a)') && qText.contains('(b)') && qText.contains('1.')) return false;
+    if (qText.contains('பொருத்துக') || qText.contains('match the following')) return false;
+    if (qText.contains('கூற்று') && qText.contains('காரணம்')) return false;
+    if (qText.contains('assertion') && qText.contains('reason')) return false;
+    if (qText.contains('தவறான இணை') || qText.contains('incorrect pair')) return false;
+    if (qText.contains('வரிசைப்படுத்துக') || qText.contains('chronological')) return false;
+
+    for (String opt in q.options) {
+      if (opt.contains('(a)-') || opt.contains('(b)-')) return false;
+    }
+    return true;
+  }
+
+  // ------------------- Exam Papers (PYQ / Official Papers) -------------------
+
+  /// Save or create an exam paper document in 'exam_papers'
+  Future<bool> saveExamPaper({
+    String? id,
+    required String examType, // "Group 4", "Group 2/2A", "Group 1", etc.
+    required int year, // 2025, 2024, 2022, etc.
+    required String title,
+    required List<Map<String, dynamic>> questions,
+    String? rawText,
+    int? totalQuestions,
+    int? processedCount,
+    bool? isCompleted,
+  }) async {
+    try {
+      final docId = id ?? "${examType.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}_$year";
+      final data = {
+        'id': docId,
+        'examType': examType,
+        'year': year,
+        'title': title,
+        'totalQuestions': totalQuestions ?? questions.length,
+        'processedCount': processedCount ?? questions.length,
+        'isCompleted': isCompleted ?? (questions.isNotEmpty && (totalQuestions == null || questions.length >= totalQuestions)),
+        'questions': questions,
+        if (rawText != null) 'rawText': rawText,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await _db.collection('exam_papers').doc(docId).set(data, SetOptions(merge: true));
+      AppLog.d("AI_DEBUG: Exam paper saved successfully: $docId");
+      return true;
+    } catch (e) {
+      AppLog.e("Error saving exam paper: $e", e);
+      return false;
+    }
+  }
+
+  /// Append a newly processed AI questions chunk to an existing exam paper and update progress
+  Future<bool> appendExamPaperChunk({
+    required String paperDocId,
+    required List<Map<String, dynamic>> newQuestionsChunk,
+    required bool isCompleted,
+  }) async {
+    try {
+      DocumentReference docRef = _db.collection('exam_papers').doc(paperDocId);
+      DocumentSnapshot docSnap = await docRef.get();
+      if (!docSnap.exists) return false;
+
+      Map<String, dynamic> data = Map<String, dynamic>.from(docSnap.data() as Map);
+      List<dynamic> existingQuestions = List<dynamic>.from(data['questions'] ?? []);
+
+      existingQuestions.addAll(newQuestionsChunk);
+
+      await docRef.update({
+        'questions': existingQuestions,
+        'processedCount': existingQuestions.length,
+        'isCompleted': isCompleted,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      AppLog.d("AI_DEBUG: Appended chunk of ${newQuestionsChunk.length} questions to $paperDocId. Total now: ${existingQuestions.length}");
+      return true;
+    } catch (e) {
+      AppLog.e("Error appending exam paper chunk: $e", e);
+      return false;
+    }
+  }
+
+  /// Fetch all exam papers from 'exam_papers' collection
+  Future<List<Map<String, dynamic>>> getExamPapers({String? examType, int? year}) async {
+    try {
+      Query query = _db.collection('exam_papers');
+      if (examType != null && examType != "All") {
+        query = query.where('examType', isEqualTo: examType);
+      }
+      if (year != null) {
+        query = query.where('year', isEqualTo: year);
+      }
+
+      QuerySnapshot snap = await query.get();
+      List<Map<String, dynamic>> list = [];
+      for (var doc in snap.docs) {
+        var data = Map<String, dynamic>.from(doc.data() as Map);
+        data['docId'] = doc.id;
+        list.add(data);
+      }
+
+      // Sort by Year descending, then title
+      list.sort((a, b) {
+        int yA = a['year'] is int ? a['year'] : 0;
+        int yB = b['year'] is int ? b['year'] : 0;
+        if (yB != yA) return yB.compareTo(yA);
+        return (a['title'] ?? '').toString().compareTo((b['title'] ?? '').toString());
+      });
+
+      return list;
+    } catch (e) {
+      AppLog.e("Error fetching exam papers: $e", e);
+      return [];
+    }
+  }
+
+  /// Delete an exam paper by document ID
+  Future<bool> deleteExamPaper(String docId) async {
+    try {
+      await _db.collection('exam_papers').doc(docId).delete();
+      AppLog.d("AI_DEBUG: Exam paper deleted: $docId");
+      return true;
+    } catch (e) {
+      AppLog.e("Error deleting exam paper: $e", e);
+      return false;
+    }
+  }
+
+  /// Update a specific question's answer key & explanation inside an exam paper
+  Future<bool> updateQuestionAnswerKey({
+    required String paperDocId,
+    required int questionIndex,
+    required int newCorrectOptionIndex,
+    String? newExplanationEn,
+    String? newExplanationTa,
+  }) async {
+    try {
+      DocumentReference docRef = _db.collection('exam_papers').doc(paperDocId);
+      DocumentSnapshot docSnap = await docRef.get();
+      if (!docSnap.exists) return false;
+
+      Map<String, dynamic> data = Map<String, dynamic>.from(docSnap.data() as Map);
+      List<dynamic> questions = List<dynamic>.from(data['questions'] ?? []);
+
+      if (questionIndex < 0 || questionIndex >= questions.length) return false;
+
+      Map<String, dynamic> q = Map<String, dynamic>.from(questions[questionIndex] as Map);
+      q['correctOptionIndex'] = newCorrectOptionIndex;
+      if (newExplanationEn != null) q['explanation_en'] = newExplanationEn;
+      if (newExplanationTa != null) q['explanation_ta'] = newExplanationTa;
+
+      questions[questionIndex] = q;
+
+      await docRef.update({
+        'questions': questions,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      AppLog.d("AI_DEBUG: Question $questionIndex answer key updated for $paperDocId");
+      return true;
+    } catch (e) {
+      AppLog.e("Error updating question answer key: $e", e);
+      return false;
     }
   }
 }

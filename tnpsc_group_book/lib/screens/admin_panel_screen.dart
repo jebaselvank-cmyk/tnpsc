@@ -13,6 +13,7 @@ import '../services/firestore_service.dart';
 import 'admin_feedback_screen.dart';
 import 'admin_quiz_manage_screen.dart';
 import 'admin_promote_screen.dart';
+import 'admin_exam_papers_screen.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -60,6 +61,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               color: Colors.indigo,
               onTap: () {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminQuizManageScreen()));
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Manage Exam Papers & Answer Keys (PDF/PYQ)
+            _buildAdminCard(
+              context,
+              title: "Manage Exam Papers & Answer Keys (PDF/PYQ)",
+              icon: Icons.picture_as_pdf_rounded,
+              color: Colors.redAccent,
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminExamPapersScreen()));
               },
             ),
             const SizedBox(height: 12),

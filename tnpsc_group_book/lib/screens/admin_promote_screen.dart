@@ -105,6 +105,22 @@ class _AdminPromoteScreenState extends State<AdminPromoteScreen> with TickerProv
         pool.addAll(tempDefaults);
       }
 
+      // Filter for Direct MCQs (Clear 4-option questions suitable for Promote/Share Posters)
+      List<Question> directMcqs = pool.where((q) {
+        String qt = q.question.toLowerCase();
+        if (qt.contains('(a)') && qt.contains('(b)') && qt.contains('1.')) return false;
+        if (qt.contains('பொருத்துக') || qt.contains('match the following')) return false;
+        if (qt.contains('கூற்று') && qt.contains('காரணம்')) return false;
+        if (qt.contains('assertion') && qt.contains('reason')) return false;
+        if (qt.contains('தவறான இணை') || qt.contains('incorrect pair')) return false;
+        if (qt.contains('வரிசைப்படுத்துக') || qt.contains('chronological')) return false;
+        for (String opt in q.options) {
+          if (opt.contains('(a)-') || opt.contains('(b)-')) return false;
+        }
+        return true;
+      }).toList();
+      if (directMcqs.isNotEmpty) pool = directMcqs;
+
       setState(() {
         _quizzes = pool.take(3).toList();
         _isLoading = false;

@@ -24,6 +24,7 @@ import 'ai_tutor_screen.dart';
 import 'quiz_screen.dart';
 import 'leaderboard_screen.dart';
 import 'room_setup_screen.dart';
+import 'exam_papers_screen.dart';
 import '../models/news_item.dart';
 import 'news_detail_screen.dart';
 import '../services/reward_service.dart';
@@ -317,6 +318,8 @@ class _SubjectScreenState extends State<SubjectScreen> {
                                         _buildQuickActionCard(context, title: AppLanguage.getString('saved_quizzes'), icon: "🔖", color: Colors.blue, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BookmarkScreen()))),
                                         const SizedBox(width: 12),
                                         _buildQuickActionCard(context, title: AppLanguage.getString('group_test_lobby'), icon: "👥", color: Colors.green, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RoomSetupScreen()))),
+                                        const SizedBox(width: 12),
+                                        _buildQuickActionCard(context, title: AppLanguage.languageNotifier.value == 'ta' ? 'அசல் வினாத்தாள்கள்' : 'Exam Papers', icon: "📄", color: Colors.purple, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ExamPapersScreen()))),
                                       ],
                                     ),
                                   ),

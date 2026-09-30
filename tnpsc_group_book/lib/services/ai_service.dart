@@ -551,6 +551,13 @@ STRICT QUALITY RULES (MUST FOLLOW)
 30. Validate every answer before returning JSON.
 31. FACTUAL & ANSWER ACCURACY (CRITICAL): Double-check that `correctOptionIndex` (0-3) precisely points to the correct answer. Verify historical, scientific, and mathematical facts against authentic TNPSC data to ensure zero errors. Do not generate incorrect, misleading, or outdated answers.
 32. NO HALLUCINATED OR HYPOTHETICAL QUESTIONS: Never generate questions about events, awards, or facts that did not happen or do not exist. Every question must be 100% historically and factually accurate based on official TNPSC records. If an award or event did not occur, do not create a question about it.
+33. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
+    - Must include a rich mix of all 5 authentic TNPSC exam formats:
+      a) Standard Direct MCQs (~40%)
+      b) "Match the Following / பொருத்துக" Questions (~25%): List 4 paired items (a, b, c, d vs 1, 2, 3, 4) in question text and matching combination choices in options A, B, C, D (e.g. "(a)-2, (b)-1, (c)-4, (d)-3").
+      c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%).
+      d) "Find the Incorrect Pair / Statement (தவறான கூற்று / தவறான இணை எது?)" (~10%): Identify the wrongly matched pair or false statement among options.
+      e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): Arrange historical events, numbers, or facts in chronological/sequence order.
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?
@@ -764,6 +771,14 @@ STRICT QUALITY RULES (MUST FOLLOW)
 28. Do not use unnecessary quotation marks.
 29. Never invent incorrect historical or scientific facts.
 30. Validate every answer before returning JSON.
+31. FACTUAL & ANSWER ACCURACY (CRITICAL): Double-check that `correctOptionIndex` (0-3) precisely points to the correct answer. Verify historical, scientific, and mathematical facts against authentic TNPSC data to ensure zero errors.
+32. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
+    - Must include a rich mix of all 5 authentic TNPSC exam formats:
+      a) Standard Direct MCQs (~40%)
+      b) "Match the Following / பொருத்துக" Questions (~25%): List 4 paired items (a, b, c, d vs 1, 2, 3, 4) in question text and matching combination choices in options A, B, C, D (e.g. "(a)-2, (b)-1, (c)-4, (d)-3").
+      c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%).
+      d) "Find the Incorrect Pair / Statement (தவறான கூற்று / தவறான இணை எது?)" (~10%): Identify the wrongly matched pair or false statement among options.
+      e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): Arrange historical events, numbers, or facts in chronological/sequence order.
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?
@@ -1595,8 +1610,15 @@ STRICT QUALITY RULES (MUST FOLLOW):
 4. NO MIXED LANGUAGE in any sentence.
 5. NO OTHER LANGUAGES (Hindi, etc.).
 6. SSLC / Degree Standard aligned directly with TNPSC Group I/II/IIA/IV syllabus.
-7. Correct index MUST match the answer.
-8. Explanation must be detailed in both languages with official background context.
+7. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
+   - Include a rich mix of all 5 authentic TNPSC exam formats:
+     a) Direct MCQs (~40%)
+     b) "Match the Following / பொருத்துக" Questions (~25%): List 4 paired items (a, b, c, d vs 1, 2, 3, 4) in question text and matching combination choices in options A, B, C, D (e.g. "(a)-2, (b)-1, (c)-4, (d)-3").
+     c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%).
+     d) "Find the Incorrect Pair / Statement (தவறான கூற்று / தவறான இணை எது?)" (~10%).
+     e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%).
+8. Correct index MUST match the answer.
+9. Explanation must be detailed in both languages with official background context.
 
 JSON Format:
 [
@@ -1696,6 +1718,139 @@ JSON Format:
       }
     } catch (e) {
       AppLog.e("AI_DEBUG: Error in auto news generation", e);
+    }
+  }
+
+  /// AI Answer Key Verifier & Bilingual Explanation Generator for Exam Papers / PDFs
+  static Future<List<Map<String, dynamic>>> verifyAndEnrichExamPaperQuestions(
+    List<Map<String, dynamic>> questions,
+  ) async {
+    try {
+      List<Map<String, dynamic>> verifiedQuestions = [];
+
+      // Process in batches of 10 questions to avoid LLM token/context limits
+      int batchSize = 10;
+      for (int i = 0; i < questions.length; i += batchSize) {
+        int end = (i + batchSize < questions.length) ? i + batchSize : questions.length;
+        List<Map<String, dynamic>> batch = questions.sublist(i, end);
+
+        String batchJson = jsonEncode(batch);
+
+        final prompt = '''
+You are an Expert TNPSC Examiner and Fact Verifier.
+Analyze the following batch of TNPSC exam paper questions extracted from a PDF/Answer key.
+
+YOUR MANDATORY TASKS:
+1. FACT-CHECK EVERY QUESTION: Verify if the marked `correctOptionIndex` (0-3) is 100% factually and mathematically correct.
+2. CORRECT ANY WRONG ANSWERS: If `correctOptionIndex` is wrong or points to the wrong option, update `correctOptionIndex` to the TRUE correct option index (0, 1, 2, or 3).
+3. GENERATE DETAILED BILINGUAL EXPLANATIONS:
+   - For `explanation_ta`: Provide a clear, detailed 2-3 sentence explanation in pure literary Tamil explaining why the answer is correct (and step-by-step formula/math steps for Aptitude).
+   - For `explanation_en`: Provide a clear, detailed 2-3 sentence explanation in English explaining why the answer is correct (and step-by-step math steps for Aptitude).
+4. ENSURE BILINGUAL FIELDS:
+   - Ensure `question_en` and `question_ta` are accurate.
+   - Ensure `options` array contains 4 objects `[{"en": "...", "ta": "..."}]`.
+
+INPUT QUESTIONS BATCH:
+$batchJson
+
+STRICT OUTPUT FORMAT:
+Return ONLY a valid JSON array containing the verified and enriched questions. NO Markdown, no preamble, no surrounding text.
+''';
+
+        final res = await _generateWithFallback(prompt);
+        if (res != null) {
+          try {
+            int start = res.indexOf('[');
+            int last = res.lastIndexOf(']');
+            if (start != -1 && last != -1) {
+              List<dynamic> parsed = jsonDecode(res.substring(start, last + 1));
+              for (var q in parsed) {
+                if (q is Map) {
+                  verifiedQuestions.add(Map<String, dynamic>.from(q));
+                }
+              }
+              continue;
+            }
+          } catch (e) {
+            AppLog.e("AI_DEBUG: Error parsing verified exam batch $i-$end: $e");
+          }
+        }
+
+        // Fallback: If AI batch call failed or timed out, retain original batch items
+        verifiedQuestions.addAll(batch);
+      }
+
+      return verifiedQuestions;
+    } catch (e) {
+      AppLog.e("Error in verifyAndEnrichExamPaperQuestions: $e");
+      return questions;
+    }
+  }
+
+  /// AI Chunked PDF Parser: Extracts 10-15 questions from raw PDF text chunk,
+  /// fact-checks answer keys, ensures bilingual fields, and generates explanations.
+  static Future<List<Map<String, dynamic>>> parseAndEnrichPdfChunk({
+    required String rawChunkText,
+    required int startQuestionNum,
+    required String examType,
+  }) async {
+    try {
+      final prompt = '''
+You are an Expert TNPSC Question Paper Converter and Fact Verifier.
+Extract and convert the following raw PDF text chunk into structured $examType exam MCQs starting from Question #$startQuestionNum.
+
+RAW PDF TEXT CHUNK:
+$rawChunkText
+
+MANDATORY RULES:
+1. EXTRACT 10 to 15 QUESTIONS: Extract each question, options A, B, C, D, and marked answer key.
+2. FACT-CHECK EVERY ANSWER KEY: Verify if marked answer is factually correct. Set `correctOptionIndex` (0, 1, 2, or 3) to the TRUE correct answer.
+3. GENERATE BILINGUAL FIELDS:
+   - "question_en": Natural English text.
+   - "question_ta": Pure literary Tamil text.
+   - "options": List of 4 objects [{"en": "...", "ta": "..."}].
+   - "explanation_en": Detailed English explanation (with math steps if Aptitude).
+   - "explanation_ta": Detailed Tamil explanation (with math steps if Aptitude).
+4. AUTHENTIC TNPSC FORMAT VARIETY: Preserving "Match the following (பொருத்துக)", Statement-based, and Direct MCQs.
+
+JSON FORMAT:
+[
+  {
+    "question_en": "...",
+    "question_ta": "...",
+    "options": [
+      {"en": "Option A", "ta": "விருப்பம் A"},
+      {"en": "Option B", "ta": "விருப்பம் B"},
+      {"en": "Option C", "ta": "விருப்பம் C"},
+      {"en": "Option D", "ta": "விருப்பம் D"}
+    ],
+    "correctOptionIndex": 0,
+    "explanation_en": "...",
+    "explanation_ta": "..."
+  }
+]
+Return ONLY raw JSON array.
+''';
+
+      final res = await _generateWithFallback(prompt);
+      if (res != null) {
+        int start = res.indexOf('[');
+        int last = res.lastIndexOf(']');
+        if (start != -1 && last != -1) {
+          List<dynamic> parsed = jsonDecode(res.substring(start, last + 1));
+          List<Map<String, dynamic>> questions = [];
+          for (var item in parsed) {
+            if (item is Map) {
+              questions.add(Map<String, dynamic>.from(item));
+            }
+          }
+          return questions;
+        }
+      }
+      return [];
+    } catch (e) {
+      AppLog.e("Error in parseAndEnrichPdfChunk: $e");
+      return [];
     }
   }
 }
