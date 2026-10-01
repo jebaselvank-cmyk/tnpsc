@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import '../models/question.dart';
 import '../services/firestore_service.dart';
 import '../services/ai_service.dart';
@@ -129,6 +131,53 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
     }
   }
 
+  Future<void> _pickFileAndFill(
+    TextEditingController titleCtrl,
+    TextEditingController rawTextCtrl,
+    TextEditingController jsonCtrl,
+  ) async {
+    try {
+      List<PlatformFile> files = await FilePickerPlatform.instance.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'txt', 'json'],
+      );
+
+      if (files.isNotEmpty) {
+        PlatformFile file = files.first;
+        String fileName = file.name;
+
+        if (titleCtrl.text.trim().isEmpty) {
+          String cleanTitle = fileName
+              .replaceAll(RegExp(r'\.(pdf|txt|json)$', caseSensitive: false), '')
+              .replaceAll('-', ' ')
+              .replaceAll('_', ' ');
+          titleCtrl.text = cleanTitle;
+        }
+
+        String content = "";
+        if (file.path != null) {
+          content = await File(file.path!).readAsString();
+        }
+
+        if (content.isNotEmpty) {
+          if (fileName.toLowerCase().endsWith('.json')) {
+            jsonCtrl.text = content;
+          } else {
+            rawTextCtrl.text = content;
+          }
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text("Selected '$fileName' successfully!"),
+            ));
+          }
+        }
+      }
+    } catch (e) {
+      AppLog.e("Error picking file in admin: $e");
+    }
+  }
+
   void _showAddPaperDialog() {
     String examType = _examTypes.first;
     final yearController = TextEditingController(text: "2025");
@@ -189,6 +238,21 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pickFileAndFill(titleController, rawTextController, jsonController),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                      side: BorderSide(color: AppTheme.primaryColor),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf_rounded),
+                    label: const Text("Select & Upload PDF / File (PDF கோப்பைத் தேர்வுசெய்)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(

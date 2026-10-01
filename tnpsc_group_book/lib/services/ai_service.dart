@@ -4,6 +4,7 @@ import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:http/http.dart' as http;
 import 'package:tnpsc_group_book/utils/app_date.dart';
 import '../utils/app_log.dart';
+import '../models/question.dart';
 import 'hive_service.dart';
 
 class AiService {
@@ -478,10 +479,25 @@ class AiService {
   }
 
   static List<dynamic> _filterValidQuestions(List<dynamic> questions) {
-    return questions.where((q) {
-      if (q is! Map<String, dynamic>) return false;
-      return _validateQuestion(q);
-    }).toList();
+    List<dynamic> validList = [];
+    for (var item in questions) {
+      if (item is Map<String, dynamic>) {
+        if (!_validateQuestion(item)) continue;
+
+        // Auto-format question text for newlines on Match, Statement, and Sequence questions
+        if (item['question_ta'] != null) {
+          item['question_ta'] = Question.formatQuestionText(item['question_ta'].toString());
+        }
+        if (item['question_en'] != null) {
+          item['question_en'] = Question.formatQuestionText(item['question_en'].toString());
+        }
+        if (item['question'] != null) {
+          item['question'] = Question.formatQuestionText(item['question'].toString());
+        }
+        validList.add(item);
+      }
+    }
+    return validList;
   }
 
   static Future<bool> generateAndSaveDailyQuiz(DateTime date) async {
@@ -558,6 +574,13 @@ STRICT QUALITY RULES (MUST FOLLOW)
       c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%).
       d) "Find the Incorrect Pair / Statement (தவறான கூற்று / தவறான இணை எது?)" (~10%): Identify the wrongly matched pair or false statement among options.
       e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): Arrange historical events, numbers, or facts in chronological/sequence order.
+34. MANDATORY QUESTION FORMATTING INSTRUCTIONS (CRITICAL FOR NEWLINES):
+    - For "Match the following (பொருத்துக)", list items (a), (b), (c), (d) on SEPARATE NEW LINES using \n.
+      Example: "பொருத்துக:\n(a) பரணி — 1. யானைப்படை\n(b) தூது — 2. செய்தி\n(c) உலா — 3. வீதி உலா\n(d) குறவஞ்சி — 4. குறத்தி"
+    - For "Statement & Reason (கூற்று மற்றும் காரணம்)", place Assertion and Reason on SEPARATE NEW LINES using \n.
+      Example: "கூற்று (A): சிலப்பதிகாரமும் மணிமேகலையும் இரட்டைக் காப்பியங்கள்.\nகாரணம் (R): இரண்டும் ஒரே காலக்கட்டத்தில் தோன்றியவை."
+    - For "Chronological Order (காலவரிசைப்படுத்துக)", place numbered items on SEPARATE NEW LINES using \n.
+      Example: "காலவரிசைப்படுத்துக:\n(1) சிலப்பதிகாரம்\n(2) மணிமேகலை\n(3) சீவக சிந்தாமணி\n(4) வளையாபதி"
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?
@@ -779,6 +802,13 @@ STRICT QUALITY RULES (MUST FOLLOW)
       c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%).
       d) "Find the Incorrect Pair / Statement (தவறான கூற்று / தவறான இணை எது?)" (~10%): Identify the wrongly matched pair or false statement among options.
       e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): Arrange historical events, numbers, or facts in chronological/sequence order.
+33. MANDATORY QUESTION FORMATTING INSTRUCTIONS (CRITICAL FOR NEWLINES):
+    - For "Match the following (பொருத்துக)", list items (a), (b), (c), (d) on SEPARATE NEW LINES using \n.
+      Example: "பொருத்துக:\n(a) பரணி — 1. யானைப்படை\n(b) தூது — 2. செய்தி\n(c) உலா — 3. வீதி உலா\n(d) குறவஞ்சி — 4. குறத்தி"
+    - For "Statement & Reason (கூற்று மற்றும் காரணம்)", place Assertion and Reason on SEPARATE NEW LINES using \n.
+      Example: "கூற்று (A): சிலப்பதிகாரமும் மணிமேகலையும் இரட்டைக் காப்பியங்கள்.\nகாரணம் (R): இரண்டும் ஒரே காலக்கட்டத்தில் தோன்றியவை."
+    - For "Chronological Order (காலவரிசைப்படுத்துக)", place numbered items on SEPARATE NEW LINES using \n.
+      Example: "காலவரிசைப்படுத்துக:\n(1) சிலப்பதிகாரம்\n(2) மணிமேகலை\n(3) சீவக சிந்தாமணி\n(4) வளையாபதி"
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?

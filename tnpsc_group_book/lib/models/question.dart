@@ -130,15 +130,37 @@ class Question {
 
   String get uniqueId => id ?? question.hashCode.toString();
 
+  /// Automatic Formatter for TNPSC Match, Statement, and Chronological Questions
+  static String formatQuestionText(String? rawText) {
+    if (rawText == null || rawText.isEmpty) return "";
+
+    String text = rawText.replaceAll('\\n', '\n');
+
+    // 1. Add newline before items (a), (b), (c), (d)
+    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(\([a-d]\))', caseSensitive: false), (m) => '\n${m[1]}');
+
+    // 2. Add newline before numbered items (1), (2), (3), (4)
+    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(\([1-9]\))'), (m) => '\n${m[1]}');
+
+    // 3. Add newline before Assertion / Reason / கூற்று / காரணம் headers
+    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(காரணம்\s*\([R|r]\)\s*:?)', caseSensitive: false), (m) => '\n${m[1]}');
+    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(Reason\s*\([R|r]\)\s*:?)', caseSensitive: false), (m) => '\n${m[1]}');
+    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(கூற்று\s*\([A|a]\)\s*:?)', caseSensitive: false), (m) => '\n${m[1]}');
+    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(Assertion\s*\([A|a]\)\s*:?)', caseSensitive: false), (m) => '\n${m[1]}');
+
+    return text.trim();
+  }
+
   // Getters to simplify UI usage with language selection
   String get displayQuestion {
     final lang = AppLanguage.languageNotifier.value;
+    String raw = question;
     if (lang == 'ta') {
-      return questionTa ?? question;
+      raw = questionTa ?? question;
     } else if (lang == 'en') {
-      return questionEn ?? question;
+      raw = questionEn ?? question;
     }
-    return question; // Default to combined
+    return formatQuestionText(raw);
   }
 
   List<String> get displayOptions {
@@ -162,9 +184,12 @@ class Question {
   }
 
   // Legacy format for places that still need both (like Review)
-  String get bilingualQuestion => (questionEn != null && questionTa != null) 
+  String get bilingualQuestion {
+    String raw = (questionEn != null && questionTa != null) 
       ? "$questionEn\n$questionTa" 
       : question;
+    return formatQuestionText(raw);
+  }
 
   List<String> get bilingualOptions {
     if (optionsEn != null && optionsTa != null) {
