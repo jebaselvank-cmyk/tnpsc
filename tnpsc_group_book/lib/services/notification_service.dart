@@ -131,7 +131,6 @@ class NotificationService {
   static Future<void> reschedulePersonalizedReminders() async {
     try {
       final box = Hive.box(HiveService.userBoxName);
-      final bool isTa = AppLanguage.languageNotifier.value == 'ta';
 
       // --- 1. Morning Reminder (8:00 AM) - Score Based ---
       // AI_DYNAMIC: Calculate score based on when the notification will actually show

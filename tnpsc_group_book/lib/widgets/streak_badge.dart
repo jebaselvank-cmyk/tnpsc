@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../utils/app_theme.dart';
-import '../utils/app_language.dart';
 
 class StreakBadge extends StatelessWidget {
   final int streak;
@@ -11,17 +10,11 @@ class StreakBadge extends StatelessWidget {
     if (streak < 7) return const SizedBox.shrink();
 
     String icon = '🎖️';
-    String labelKey = 'streak_7';
-    Color color = Colors.orange;
 
     if (streak >= 30) {
       icon = '👑';
-      labelKey = 'streak_30';
-      color = Colors.purple;
     } else if (streak >= 14) {
       icon = '🛡️';
-      labelKey = 'streak_14';
-      color = Colors.blue;
     }
 
     return Container(

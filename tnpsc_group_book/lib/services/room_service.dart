@@ -482,11 +482,6 @@ class RoomService {
     String? uid = _auth.currentUser?.uid;
     if (uid == null) return 'auth_error';
 
-    // Admin check logic matching RoomSetupScreen
-    bool isAdmin = _auth.currentUser?.phoneNumber == '+918754236411' || 
-                   _auth.currentUser?.email == 'adminjeba@gmail.com' || 
-                   _auth.currentUser?.email == 'kjebaselvan987@gmail.com';
-
     try {
       // Logic: Users can join a room even if hosting or joined elsewhere.
       // Joining a NEW room replaces the 'joined' membership but keeps the 'hosted' one.
@@ -587,7 +582,7 @@ class RoomService {
          AppLog.d("AI_DEBUG: Joined room and deducted $cost points");
       }
 
-      return transactionResult as String;
+      return transactionResult;
     } catch (e) {
       AppLog.e("Error joining room", e);
       return 'error';
@@ -915,7 +910,6 @@ class RoomService {
     if (uid == null) return null;
 
     try {
-      String today = AppDate.getTodayString();
       final userDoc = await _db.collection('users').doc(uid).get();
       final lastJoinedRoom = userDoc.data()?['last_joined_room'] as String?;
       final lastRoomPlayedFallback = userDoc.data()?['last_room_played'] as String?;

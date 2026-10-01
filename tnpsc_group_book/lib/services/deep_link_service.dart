@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../utils/app_log.dart';
-import 'package:tnpsc_group_book/utils/app_language.dart';
 import 'dart:ui';
-import '../main.dart';
 
 class DeepLinkService with WidgetsBindingObserver {
   static final DeepLinkService _instance = DeepLinkService._internal();

@@ -1192,9 +1192,6 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     TimeOfDay start = _testStartTime != null
         ? AppDate.getISTTimeOfDay(_testStartTime!)
         : AppDate.getISTTimeOfDay();
-    TimeOfDay end = _roomEndTime != null
-        ? AppDate.getISTTimeOfDay(_roomEndTime!)
-        : TimeOfDay(hour: (start.hour + 1) % 24, minute: start.minute);
 
     await showModalBottomSheet(
       context: context,
