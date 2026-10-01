@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import '../models/question.dart';
+import '../data/seed_papers_2025.dart';
 import '../services/firestore_service.dart';
 import '../services/ai_service.dart';
 import '../utils/app_theme.dart';
@@ -156,7 +157,12 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
 
         String content = "";
         if (file.path != null) {
-          content = await File(file.path!).readAsString();
+          try {
+            content = await File(file.path!).readAsString();
+          } catch (_) {
+            final bytes = await File(file.path!).readAsBytes();
+            content = _extractTextFromPdfBytes(bytes);
+          }
         }
 
         if (content.isNotEmpty) {
@@ -168,13 +174,31 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text("Selected '$fileName' successfully!"),
+              content: Text("Selected '$fileName'! Extracted ${content.length} characters."),
+            ));
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text("Selected '$fileName'. Ready for paper creation."),
             ));
           }
         }
       }
     } catch (e) {
       AppLog.e("Error picking file in admin: $e");
+    }
+  }
+
+  String _extractTextFromPdfBytes(List<int> bytes) {
+    try {
+      String raw = String.fromCharCodes(bytes);
+      RegExp readableRegex = RegExp(r'[\u0B80-\u0BFFa-zA-Z0-9\s.,\-():]{4,}');
+      Iterable<Match> matches = readableRegex.allMatches(raw);
+      List<String> validStrings = matches.map((m) => m.group(0)!.trim()).where((s) => s.length > 5).toList();
+      return validStrings.join('\n');
+    } catch (e) {
+      return "";
     }
   }
 
@@ -253,6 +277,46 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                     icon: const Icon(Icons.picture_as_pdf_rounded),
                     label: const Text("Select & Upload PDF / File (PDF கோப்பைத் தேர்வுசெய்)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ActionChip(
+                        avatar: const Icon(Icons.bolt, size: 16, color: Colors.purple),
+                        label: const Text("Preset: 2025 TN Paper", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          var paper = SeedPapers2025.getGroup4TamilPaper();
+                          setDialogState(() {
+                            examType = paper['examType'];
+                            yearController.text = "${paper['year']}";
+                            totalController.text = "${paper['totalQuestions']}";
+                            titleController.text = paper['title'];
+                            jsonController.text = jsonEncode(paper['questions']);
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Loaded 2025 Group 4 Tamil Preset!")));
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ActionChip(
+                        avatar: const Icon(Icons.bolt, size: 16, color: Colors.indigo),
+                        label: const Text("Preset: 2025 GS Paper", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          var paper = SeedPapers2025.getGroup4GsPaper();
+                          setDialogState(() {
+                            examType = paper['examType'];
+                            yearController.text = "${paper['year']}";
+                            totalController.text = "${paper['totalQuestions']}";
+                            titleController.text = paper['title'];
+                            jsonController.text = jsonEncode(paper['questions']);
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Loaded 2025 Group 4 GS Preset!")));
+                        },
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -341,9 +405,61 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
 
   Future<void> _runAiVerification(Map<String, dynamic> paper, StateSetter modalSetState) async {
     List<dynamic> rawQuestions = paper['questions'] ?? [];
+    String rawText = paper['rawText'] ?? "";
+
     if (rawQuestions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No questions to verify.")));
-      return;
+      if (rawText.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("No questions or raw text found in this paper."),
+        ));
+        return;
+      }
+
+      // If questions list is empty but rawText exists, extract questions from rawText!
+      modalSetState(() => _isAiVerifying = true);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("AI is extracting & verifying questions from PDF text..."),
+        duration: Duration(seconds: 4),
+      ));
+
+      List<Map<String, dynamic>> extracted = await AiService.parseAndEnrichPdfChunk(
+        rawChunkText: rawText,
+        startQuestionNum: 1,
+        examType: paper['examType'] ?? 'Group 4',
+      );
+
+      if (extracted.isNotEmpty) {
+        int totalExpected = paper['totalQuestions'] is int ? paper['totalQuestions'] : 100;
+        bool ok = await _firestoreService.saveExamPaper(
+          id: paper['docId'] ?? paper['id'],
+          examType: paper['examType'] ?? 'Group 4',
+          year: paper['year'] is int ? paper['year'] : 2025,
+          title: paper['title'] ?? 'Exam Paper',
+          questions: extracted,
+          rawText: rawText,
+          totalQuestions: totalExpected,
+          processedCount: extracted.length,
+          isCompleted: extracted.length >= totalExpected,
+        );
+
+        modalSetState(() => _isAiVerifying = false);
+        if (ok && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("Successfully generated ${extracted.length} questions from PDF!"),
+          ));
+          Navigator.pop(context);
+          _fetchPapers();
+        }
+        return;
+      } else {
+        modalSetState(() => _isAiVerifying = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Failed to extract questions from raw text. Please check text format."),
+          ));
+        }
+        return;
+      }
     }
 
     modalSetState(() => _isAiVerifying = true);
@@ -362,6 +478,10 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
       year: paper['year'] is int ? paper['year'] : 2025,
       title: paper['title'] ?? 'Exam Paper',
       questions: verified,
+      rawText: paper['rawText'],
+      totalQuestions: paper['totalQuestions'],
+      processedCount: verified.length,
+      isCompleted: verified.length >= (paper['totalQuestions'] ?? 100),
     );
 
     modalSetState(() => _isAiVerifying = false);
@@ -431,32 +551,75 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                         ? const SizedBox(width: 16, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.auto_awesome, size: 18),
                     label: Text(
-                      _isAiVerifying ? "AI Verifying & Generating Explanations..." : "AI Auto-Verify Answers & Add Explanations",
+                      _isAiVerifying
+                          ? "AI Extracting & Verifying Answers..."
+                          : (questions.isEmpty
+                              ? "✨ Extract All Questions & Answers with AI"
+                              : "AI Auto-Verify Answers & Add Explanations"),
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ),
                 ),
                 const Divider(),
                 Expanded(
-                  child: ListView.builder(
-                    controller: scrollController,
-                    itemCount: questions.length,
-                    itemBuilder: (ctx, index) {
-                      Question q = questions[index];
-                      return _AnswerKeyQuestionCard(
-                        paperDocId: paperDocId,
-                        index: index,
-                        question: q,
-                        onUpdated: () => _fetchPapers(),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+                  child: questions.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.auto_awesome, size: 64, color: AppTheme.primaryColor),
+                                const SizedBox(height: 16),
+                                Text(
+                                  "No questions generated yet (0 Questions)",
+                                  style: AppTheme.getStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  "Click the purple button above to let AI extract all questions & answer keys from the PDF text and generate explanations automatically!",
+                                  textAlign: TextAlign.center,
+                                  style: AppTheme.getStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+                                ),
+                                const SizedBox(height: 20),
+                                ElevatedButton.icon(
+                                  onPressed: _isAiVerifying ? null : () => _runAiVerification(paper, modalSetState),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.deepPurple,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  ),
+                                  icon: _isAiVerifying
+                                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                      : const Icon(Icons.auto_awesome),
+                                  label: Text(
+                                    _isAiVerifying ? "Generating Questions..." : "Extract All Questions & Answers with AI",
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: scrollController,
+                          itemCount: questions.length,
+                          itemBuilder: (ctx, index) {
+                            Question q = questions[index];
+                            return _AnswerKeyQuestionCard(
+                              paperDocId: paperDocId,
+                              index: index,
+                              question: q,
+                              onUpdated: () => _fetchPapers(),
+                            );
+                          },
+                        ),
+              ),
+            ],
           ),
         ),
       ),
+    ),
     );
   }
 
