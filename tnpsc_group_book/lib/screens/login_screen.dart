@@ -1,7 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -667,7 +667,7 @@ class _OtpVerificationDialogState extends State<OtpVerificationDialog> {
   int _timerSeconds = 30;
   bool _canResend = false;
   bool _isResending = false;
-  late var _timer;
+  StreamSubscription<int>? _timer;
 
   @override
   void initState() {
@@ -677,6 +677,7 @@ class _OtpVerificationDialogState extends State<OtpVerificationDialog> {
   }
 
   void _startTimer() {
+    _timer?.cancel();
     setState(() {
       _timerSeconds = 30;
       _canResend = false;
@@ -719,7 +720,7 @@ class _OtpVerificationDialogState extends State<OtpVerificationDialog> {
 
   @override
   void dispose() {
-    _timer.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 

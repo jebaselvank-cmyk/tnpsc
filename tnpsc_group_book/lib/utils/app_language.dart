@@ -200,9 +200,9 @@ class AppLanguage {
         return ta ? 'நீங்கள்' : 'You';
       case 'score':
         return ta ? 'மதிப்பெண்' : 'Score';
-      case 'daily':
+      case 'daily_score':
         return ta ? 'தினசரி வினா மதிப்பெண்' : 'Daily Quiz Score';
-      case 'mock':
+      case 'mock_score':
         return ta ? 'மாதிரி வினா மதிப்பெண்' : 'Mock Quiz Score';
       case 'rewards_gifts':
         return ta ? 'பரிசுகள் & வெகுமதிகள்' : 'Rewards & Gifts';
@@ -874,8 +874,6 @@ class AppLanguage {
         return ta ? 'நீங்கள் புதிய குழுவை உருவாக்கலாம்.' : 'You can create a new room.';
       case 'select_subject':
         return ta ? 'பாடத்தை தேர்ந்தெடுக்கவும்' : 'Select Subject';
-      case 'max_players_label':
-        return ta ? 'அதிகபட்ச வீரர்கள்' : 'Max Players';
       case 'extra_player_cost':
         return ta ? 'கூடுதல் வீரர் செலவு: {points} புள்ளிகள்' : 'Extra player cost: {points} points';
       case 'base_room_cost':

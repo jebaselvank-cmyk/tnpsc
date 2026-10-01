@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -217,8 +216,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       child: CircleAvatar(
                                         radius: 40,
                                         backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                                        backgroundImage: (userData?['avatar'] != null && userData!['avatar']!.isNotEmpty)
-                                            ? NetworkImage(userData!['avatar']!)
+                                        backgroundImage: (userData?['avatar'] != null && userData!['avatar'].toString().isNotEmpty)
+                                            ? NetworkImage(userData!['avatar'].toString())
                                             : (user?.photoURL != null && user!.photoURL!.isNotEmpty)
                                                 ? NetworkImage(user!.photoURL!)
                                                 : NetworkImage("https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(name)}${userData?['gender'] == 'female' ? '-female' : userData?['gender'] == 'male' ? '-male' : ''}&backgroundColor=b6e3f4,c0aede,d1d4f9"),

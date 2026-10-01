@@ -87,6 +87,8 @@ class _MultiplayerQuizScreenState extends State<MultiplayerQuizScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _stopwatch.stop();
+    TtsService.stop();
     super.dispose();
   }
 

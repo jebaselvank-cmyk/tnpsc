@@ -26,6 +26,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     _loadUserData();
   }
 
+  @override
+  void dispose() {
+    _feedbackController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadUserData() async {
     final userData = await _firestoreService.getUserData();
     if (userData != null && userData.exists) {

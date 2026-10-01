@@ -3,7 +3,7 @@ description: "TNPSC Master Flutter application"
 publish_to: 'none' # private package
 
 # Version Change
-version: 1.1.6+18
+version: 1.2.3+26
 
 environment:
   sdk: ">=3.11.0 <4.0.0"
@@ -13,12 +13,12 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  firebase_core: ^4.12.1
-  firebase_auth: ^6.5.6
-  cloud_firestore: ^6.7.1
-  firebase_messaging: ^16.4.3
-  firebase_analytics: ^12.4.5
-  firebase_remote_config: ^6.5.5
+  firebase_core: ^4.15.0
+  firebase_auth: ^6.7.0
+  cloud_firestore: ^6.10.0
+  firebase_messaging: ^16.7.0
+  firebase_analytics: ^12.6.0
+  firebase_remote_config: ^6.7.0
   google_nav_bar: ^5.0.6
   google_mobile_ads: ^9.0.0
   google_fonts: ^8.1.0

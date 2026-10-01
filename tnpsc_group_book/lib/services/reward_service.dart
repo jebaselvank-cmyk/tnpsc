@@ -22,7 +22,7 @@ class RewardService {
   static const String testInterstitialId = 'ca-app-pub-3940256099942544/1033173712';
   static const String realInterstitialId = 'ca-app-pub-9952621231526514/2643599886'; 
 
-  static bool useTestAds = false;
+  static bool useTestAds = kDebugMode;
 
   static String get rewardedAdUnitId => useTestAds ? testRewardedId : realRewardedId;
   static String get interstitialAdUnitId => useTestAds ? testInterstitialId : realInterstitialId;

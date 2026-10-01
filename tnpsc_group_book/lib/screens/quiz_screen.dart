@@ -290,6 +290,8 @@ class _QuizScreenState extends State<QuizScreen> {
     _teaserTimer?.cancel();
     _teaserController?.dispose();
     _timer?.cancel();
+    _stopwatch.stop();
+    TtsService.stop();
     super.dispose();
   }
 

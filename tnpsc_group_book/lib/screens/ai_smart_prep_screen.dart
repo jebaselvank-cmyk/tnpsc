@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/ai_service.dart';
@@ -31,6 +30,13 @@ class _AiSmartPrepScreenState extends State<AiSmartPrepScreen> {
   void initState() {
     super.initState();
     RewardService.loadRewardedAd();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _sendMessage() async {
@@ -367,7 +373,7 @@ class ChatMessage extends StatelessWidget {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(AppLanguage.getString('copied_to_clipboard') ?? "Copied to clipboard"),
+        content: Text(AppLanguage.getString('copied_to_clipboard')),
         duration: const Duration(seconds: 1),
         behavior: SnackBarBehavior.floating,
       ),

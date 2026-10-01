@@ -808,7 +808,7 @@ class _ResultScreenState extends State<ResultScreen> {
       }
     }
     if (wrongCounts.isEmpty) {
-      return AppLanguage.getString('none') ?? 'None';
+      return AppLanguage.getString('none');
     }
     var weak = wrongCounts.entries.reduce((a, b) => a.value > b.value ? a : b);
     return weak.key;

@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/ai_service.dart';
 import '../services/hive_service.dart';
 import '../services/reward_service.dart';
-import '../services/firestore_service.dart';
 import '../utils/app_theme.dart';
 import '../utils/app_language.dart';
 import '../utils/app_icons.dart';
@@ -22,13 +20,19 @@ class _AiTutorScreenState extends State<AiTutorScreen> {
   final List<ChatMessage> _messages = [];
   bool _isTyping = false;
   final ScrollController _scrollController = ScrollController();
-  final FirestoreService _firestoreService = FirestoreService();
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   @override
   void initState() {
     super.initState();
     RewardService.loadRewardedAd();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _sendMessage() async {
@@ -243,7 +247,7 @@ class ChatMessage extends StatelessWidget {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(AppLanguage.getString('copied_to_clipboard') ?? "Copied to clipboard"),
+        content: Text(AppLanguage.getString('copied_to_clipboard')),
         duration: const Duration(seconds: 1),
         behavior: SnackBarBehavior.floating,
       ),

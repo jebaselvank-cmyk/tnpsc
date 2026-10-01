@@ -298,8 +298,6 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
       );
       if (mounted) Navigator.pop(context); // Dismiss loading
 
-      if (image == null) return;
-
       if (mounted) {
         _showSharePreviewDialog(image, roomData);
       }
@@ -1694,7 +1692,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                     ),
                   ),
                 );
-              } else if (roomData!['status'] == 'finished') {
+              } else if (roomData['status'] == 'finished') {
                 // Room finished and user hasn't played, go to leaderboard
                 Navigator.pushReplacement(
                   context,

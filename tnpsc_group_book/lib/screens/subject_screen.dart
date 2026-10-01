@@ -53,12 +53,18 @@ class SubjectScreen extends StatefulWidget {
 class _SubjectScreenState extends State<SubjectScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   Future<DocumentSnapshot?>? _userDataFuture;
+  late Stream<QuerySnapshot> _currentAffairsStream;
   bool _isCheckingNews = false;
 
   @override
   void initState() {
     super.initState();
     _userDataFuture = _firestoreService.getUserData();
+    _currentAffairsStream = FirebaseFirestore.instance
+        .collection('current_affairs_points')
+        .orderBy('timestamp', descending: true)
+        .limit(10)
+        .snapshots();
     _checkNews();
   }
 
@@ -318,8 +324,8 @@ class _SubjectScreenState extends State<SubjectScreen> {
                                         _buildQuickActionCard(context, title: AppLanguage.getString('saved_quizzes'), icon: "🔖", color: Colors.blue, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BookmarkScreen()))),
                                         const SizedBox(width: 12),
                                         _buildQuickActionCard(context, title: AppLanguage.getString('group_test_lobby'), icon: "👥", color: Colors.green, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RoomSetupScreen()))),
-                                        const SizedBox(width: 12),
-                                        _buildQuickActionCard(context, title: AppLanguage.languageNotifier.value == 'ta' ? 'அசல் வினாத்தாள்கள்' : 'Exam Papers', icon: "📄", color: Colors.purple, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ExamPapersScreen()))),
+                                        // const SizedBox(width: 12),
+                                        // _buildQuickActionCard(context, title: AppLanguage.languageNotifier.value == 'ta' ? 'அசல் வினாத்தாள்கள்' : 'Exam Papers', icon: "📄", color: Colors.purple, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ExamPapersScreen()))),
                                       ],
                                     ),
                                   ),
@@ -494,11 +500,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
         ),
         const SizedBox(height: 12),
         StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('current_affairs_points')
-              .orderBy('timestamp', descending: true)
-              .limit(10)
-              .snapshots(),
+          stream: _currentAffairsStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -507,7 +509,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
               return Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Center(

@@ -21,10 +21,6 @@ class GoogleAuthService {
       GoogleSignInAccount? googleUser;
       try {
         googleUser = await _googleSignIn.authenticate();
-        if (googleUser == null) {
-          AppLog.d('AI_DEBUG: Google Sign-In was canceled by the user (result is null).');
-          return null;
-        }
         AppLog.d('AI_DEBUG: Authenticate success: ${googleUser.email}');
       } catch (e) {
         AppLog.e('AI_DEBUG: Google Sign In Error during authenticate: $e');
