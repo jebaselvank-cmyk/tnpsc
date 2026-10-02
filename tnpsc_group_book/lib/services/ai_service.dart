@@ -349,9 +349,9 @@ class AiService {
                 ],
                 'generationConfig': {
                   'responseMimeType': 'application/json',
-                  'temperature': 0.9,
-                  'topP': 0.95,
-                  'topK': 40,
+                  'temperature': 0.4,
+                  'topP': 0.85,
+                  'topK': 20,
                   'maxOutputTokens': 8192,
                 },
               }),
@@ -465,10 +465,17 @@ class AiService {
       final expTa = q['explanation_ta']?.toString().toLowerCase() ?? '';
       if (expEn.isEmpty || expTa.isEmpty) return false;
 
-      // Reject questions where explanation states no such event/answer exists or is hypothetical/untrue
-      if ((expEn.contains('no ') && (expEn.contains('awarded') || expEn.contains('exist') || expEn.contains('scientist') || expEn.contains('record'))) ||
-          expEn.contains('hypothetical') || expEn.contains('future event') ||
-          expTa.contains('வழங்கப்படவில்லை') || expTa.contains('இல்லை') || expTa.contains('கருத்தியல்') || expTa.contains('தகவல் இல்லை')) {
+      // Strict Anti-Hallucination & Non-Existent Facts Filter:
+      // Reject questions where explanation or question states no such event exists, or admits it is hypothetical, fictional, or unrecorded
+      if ((expEn.contains('no ') && (expEn.contains('awarded') || expEn.contains('exist') || expEn.contains('scientist') || expEn.contains('record') || expEn.contains('such'))) ||
+          expEn.contains('hypothetical') || expEn.contains('future event') || expEn.contains('fictional') || expEn.contains('imaginary') || expEn.contains('not yet happened') ||
+          expTa.contains('வழங்கப்படவில்லை') || expTa.contains('இல்லை') || expTa.contains('கருத்தியல்') || expTa.contains('தகவல் இல்லை') ||
+          expTa.contains('உண்மையில் இல்லை') || expTa.contains('கற்பனையான') || expTa.contains('நிகழவில்லை')) {
+        return false;
+      }
+
+      // Check Explanation vs correctOptionIndex Coherence:
+      if (!_validateOptionExplanationCoherence(idx, expEn, expTa)) {
         return false;
       }
 
@@ -477,10 +484,122 @@ class AiService {
         return false;
       }
 
+      // Check Award, Sports, and Event questions: Year or Date must be present!
+      if (!_validateCurrentAffairsYear(qEn, qTa)) {
+        return false;
+      }
+
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  /// Ensures that the explanation does NOT contradict the correctOptionIndex.
+  /// E.g. If correctOptionIndex is 0 (A), the explanation must NOT claim "Option B is correct" or "விடை B".
+  static bool _validateOptionExplanationCoherence(int idx, String expEn, String expTa) {
+    const letters = ['a', 'b', 'c', 'd'];
+    final correctLetter = letters[idx];
+
+    for (int i = 0; i < 4; i++) {
+      if (i != idx) {
+        final wrongLetter = letters[i];
+        final wrongNum = i + 1;
+
+        final enContradictions = [
+          'option $wrongLetter is correct',
+          'option ($wrongLetter) is correct',
+          'correct option is $wrongLetter',
+          'correct option is ($wrongLetter)',
+          'correct answer is option $wrongLetter',
+          'correct answer is ($wrongLetter)',
+          'option $wrongNum is correct',
+          'correct option is $wrongNum',
+        ];
+        for (var p in enContradictions) {
+          if (expEn.contains(p)) {
+            AppLog.d("AI_DEBUG: Rejected Question - Explanation claims option $wrongLetter is correct, but correctOptionIndex is $idx ($correctLetter)");
+            return false;
+          }
+        }
+
+        final taContradictions = [
+          'சரியான விடை $wrongLetter',
+          'சரியான விடை ($wrongLetter)',
+          'விடை $wrongLetter',
+          'விருப்பம் $wrongLetter சரியானது',
+          'விருப்பம் ($wrongLetter) சரியானது',
+          'விருப்பம் $wrongNum சரியானது',
+          'சரியான விருப்பம் $wrongLetter',
+        ];
+        for (var p in taContradictions) {
+          if (expTa.contains(p)) {
+            AppLog.d("AI_DEBUG: Rejected Question - Tamil explanation claims option $wrongLetter is correct, but correctOptionIndex is $idx ($correctLetter)");
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /// Validates that questions about Awards, Sports Tournaments, Summits, and Events
+  /// explicitly mention the year or date (e.g. 2024, 2025) so they are unambiguous.
+  static bool _validateCurrentAffairsYear(String qEn, String qTa) {
+    final lowerEn = qEn.toLowerCase();
+    final lowerTa = qTa.toLowerCase();
+
+    final isAward = lowerTa.contains('விருது') ||
+        lowerTa.contains('நோபல்') ||
+        lowerTa.contains('பால்கே') ||
+        lowerTa.contains('சாகித்திய') ||
+        lowerTa.contains('சாகித்ய') ||
+        lowerTa.contains('பத்ம') ||
+        lowerEn.contains('award') ||
+        lowerEn.contains('nobel') ||
+        lowerEn.contains('prize') ||
+        lowerEn.contains('phalke') ||
+        lowerEn.contains('padma') ||
+        lowerEn.contains('sahitya');
+
+    final isSportsEvent = lowerTa.contains('ஒலிம்பிக்') ||
+        lowerTa.contains('உலகக் கோப்பை') ||
+        lowerTa.contains('சாம்பியன்ஷிப்') ||
+        lowerTa.contains('கிராண்ட் பிரிக்ஸ்') ||
+        lowerTa.contains('விம்பிள்டன்') ||
+        lowerEn.contains('olympic') ||
+        lowerEn.contains('world cup') ||
+        lowerEn.contains('championship') ||
+        lowerEn.contains('grand prix') ||
+        lowerEn.contains('wimbledon');
+
+    final isSummit = lowerTa.contains('உச்சி மாநாடு') ||
+        lowerTa.contains('ஜி20') ||
+        lowerTa.contains('பிரிக்ஸ்') ||
+        lowerEn.contains('summit') ||
+        lowerEn.contains('g20') ||
+        lowerEn.contains('brics');
+
+    if (!isAward && !isSportsEvent && !isSummit) return true; // Not an award/sports/summit question
+
+    // Allow questions explicitly asking for the "first" ever recipient or inaugural event
+    final isFirstOrInaugural = lowerTa.contains('முதல்') ||
+        lowerEn.contains('first') ||
+        lowerTa.contains('தொடக்க') ||
+        lowerEn.contains('inaugural');
+    if (isFirstOrInaugural) return true;
+
+    // Must contain a 4-digit year (e.g. 2024, 2025, 2023, 1990...) in question text
+    final yearRegex = RegExp(r'\b(19\d\d|20\d\d)\b');
+    final hasYear = yearRegex.hasMatch(qTa) || yearRegex.hasMatch(qEn);
+
+    if (!hasYear) {
+      AppLog.d("AI_DEBUG: Rejected Award/Sports/Summit Question - Missing year or date in question: $qTa");
+      return false;
+    }
+
+    return true;
   }
 
   /// Strictly validates that "Match the Following" (பொருத்துக) questions contain
@@ -646,8 +765,21 @@ STRICT QUALITY RULES (MUST FOLLOW)
 28. Do not use unnecessary quotation marks.
 29. Never invent incorrect historical or scientific facts.
 30. Validate every answer before returning JSON.
-31. FACTUAL & ANSWER ACCURACY (CRITICAL): Double-check that `correctOptionIndex` (0-3) precisely points to the correct answer. Verify historical, scientific, and mathematical facts against authentic TNPSC data to ensure zero errors. Do not generate incorrect, misleading, or outdated answers.
-32. NO HALLUCINATED OR HYPOTHETICAL QUESTIONS: Never generate questions about events, awards, or facts that did not happen or do not exist. Every question must be 100% historically and factually accurate based on official TNPSC records. If an award or event did not occur, do not create a question about it.
+31. FACTUAL & ANSWER ACCURACY (CRITICAL - 100% REAL DATA ONLY):
+    - Every question MUST be based exclusively on REAL, VERIFIED FACTS from:
+      * Tamil Nadu State Board (Samacheer Kalvi) Textbooks (Classes 6-12)
+      * Authentic Classical & Modern Tamil Literature (Thirukkural, Silappatikaram, Manimekalai, Naladiyar, Bharathiyar, etc.)
+      * Authentic Constitution of India (Articles, Parts, Schedules, Amendments)
+      * Real Indian & Tamil Nadu History, Geography, Economy, and Science
+      * Official Government Releases (PIB, DIPR TN, Official Portals)
+    - NEVER invent fictional poets, fake book titles, imaginary awards, or non-existent government acts.
+    - Zero hallucination. Every fact must be authentic and verifiable.
+32. 100% COHERENCE BETWEEN QUESTION, OPTIONS, CORRECT ANSWER & EXPLANATION:
+    - `correctOptionIndex` (0-3) MUST precisely point to the single correct option (0=Option 1, 1=Option 2, 2=Option 3, 3=Option 4).
+    - The Explanation MUST directly explain and validate why `options[correctOptionIndex]` is the right answer.
+    - NEVER let the explanation mention another option as correct (e.g. claiming Option B is correct while index is 0).
+    - The 3 incorrect options (distractors) MUST be authentic, real alternatives from the same syllabus.
+    - For Aptitude & Math: Solve step-by-step. The calculation result MUST EXACTLY match the number in the chosen option.
 33. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
     - Must include a rich mix of all 5 authentic TNPSC exam formats:
       a) Standard Direct MCQs (~40%)
@@ -668,6 +800,11 @@ STRICT QUALITY RULES (MUST FOLLOW)
       Example: "கூற்று (A): சிலப்பதிகாரமும் மணிமேகலையும் இரட்டைக் காப்பியங்கள்.\nகாரணம் (R): இரண்டும் ஒரே காலக்கட்டத்தில் தோன்றியவை."
     - For "Chronological Order (காலவரிசைப்படுத்துக)", place numbered items on SEPARATE NEW LINES using \n.
       Example: "காலவரிசைப்படுத்துக:\n(1) சிலப்பதிகாரம்\n(2) மணிமேகலை\n(3) சீவக சிந்தாமணி\n(4) வளையாபதி"
+35. MANDATORY YEAR/DATE SPECIFICATION (AWARDS, SPORTS, SCHEMES, SUMMITS, EVENTS):
+    - For any question related to an Award (விருது), Sports Tournament (விளையாட்டு/போட்டி), Government Scheme (திட்டம்), Summit/Conference (மாநாடு), or Current Affairs event, YOU MUST EXPLICITLY INCLUDE THE YEAR (e.g. 2024, 2025) or DATE / MONTH & YEAR (e.g. '2024-ஆம் ஆண்டிற்கான...', 'செப்டம்பர் 2024-ல்...') in BOTH question_en and question_ta!
+    - Example: '2024-ஆம் ஆண்டிற்கான தாதாசாகேப் பால்கே விருதை வென்றவர் யார்? / Who received the Dadasaheb Phalke Award for the year 2024?'
+    - Example: '2024 பாரிஸ் ஒலிம்பிக்கில் தங்கம் வென்றவர் யார்? / Who won gold at the 2024 Paris Olympics?'
+    - NEVER generate an award, sports, or event question without the year or date. Without the year, questions are ambiguous because awards and sports tournaments occur annually.
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?
@@ -880,9 +1017,22 @@ STRICT QUALITY RULES (MUST FOLLOW)
 27. Use proper punctuation.
 28. Do not use unnecessary quotation marks.
 29. Never invent incorrect historical or scientific facts.
-30. Validate every answer before returning JSON.
-31. FACTUAL & ANSWER ACCURACY (CRITICAL): Double-check that `correctOptionIndex` (0-3) precisely points to the correct answer. Verify historical, scientific, and mathematical facts against authentic TNPSC data to ensure zero errors.
-32. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
+31. FACTUAL & ANSWER ACCURACY (CRITICAL - 100% REAL DATA ONLY):
+    - Every question MUST be based exclusively on REAL, VERIFIED FACTS from:
+      * Tamil Nadu State Board (Samacheer Kalvi) Textbooks (Classes 6-12)
+      * Authentic Classical & Modern Tamil Literature (Thirukkural, Silappatikaram, Manimekalai, Naladiyar, Bharathiyar, etc.)
+      * Authentic Constitution of India (Articles, Parts, Schedules, Amendments)
+      * Real Indian & Tamil Nadu History, Geography, Economy, and Science
+      * Official Government Releases (PIB, DIPR TN, Official Portals)
+    - NEVER invent fictional poets, fake book titles, imaginary awards, or non-existent government acts.
+    - Zero hallucination. Every fact must be authentic and verifiable.
+32. 100% COHERENCE BETWEEN QUESTION, OPTIONS, CORRECT ANSWER & EXPLANATION:
+    - `correctOptionIndex` (0-3) MUST precisely point to the single correct option (0=Option 1, 1=Option 2, 2=Option 3, 3=Option 4).
+    - The Explanation MUST directly explain and validate why `options[correctOptionIndex]` is the right answer.
+    - NEVER let the explanation mention another option as correct (e.g. claiming Option B is correct while index is 0).
+    - The 3 incorrect options (distractors) MUST be authentic, real alternatives from the same syllabus.
+    - For Aptitude & Math: Solve step-by-step. The calculation result MUST EXACTLY match the number in the chosen option.
+33. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
     - Must include a rich mix of all 5 authentic TNPSC exam formats:
       a) Standard Direct MCQs (~40%)
       b) "Match the Following / பொருத்துக" Questions (~25%): 
@@ -902,6 +1052,11 @@ STRICT QUALITY RULES (MUST FOLLOW)
       Example: "கூற்று (A): சிலப்பதிகாரமும் மணிமேகலையும் இரட்டைக் காப்பியங்கள்.\nகாரணம் (R): இரண்டும் ஒரே காலக்கட்டத்தில் தோன்றியவை."
     - For "Chronological Order (காலவரிசைப்படுத்துக)", place numbered items on SEPARATE NEW LINES using \n.
       Example: "காலவரிசைப்படுத்துக:\n(1) சிலப்பதிகாரம்\n(2) மணிமேகலை\n(3) சீவக சிந்தாமணி\n(4) வளையாபதி"
+34. MANDATORY YEAR/DATE SPECIFICATION (AWARDS, SPORTS, SCHEMES, SUMMITS, EVENTS):
+    - For any question related to an Award (விருது), Sports Tournament (விளையாட்டு/போட்டி), Government Scheme (திட்டம்), Summit/Conference (மாநாடு), or Current Affairs event, YOU MUST EXPLICITLY INCLUDE THE YEAR (e.g. 2024, 2025) or DATE / MONTH & YEAR (e.g. '2024-ஆம் ஆண்டிற்கான...', 'செப்டம்பர் 2024-ல்...') in BOTH question_en and question_ta!
+    - Example: '2024-ஆம் ஆண்டிற்கான தாதாசாகேப் பால்கே விருதை வென்றவர் யார்? / Who received the Dadasaheb Phalke Award for the year 2024?'
+    - Example: '2024 பாரிஸ் ஒலிம்பிக்கில் தங்கம் வென்றவர் யார்? / Who won gold at the 2024 Paris Olympics?'
+    - NEVER generate an award, sports, or event question without the year or date.
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?
@@ -1636,6 +1791,7 @@ STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 2. NO MIXED LANGUAGE: Do not mix English and Tamil in the same sentence.
 3. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages. No Hindi words in brackets.
 4. Ensure there are NO spelling mistakes in Tamil or English.
+5. MANDATORY DATES AND YEARS: Every news item about an award, sports event, scheme, summit, or milestone MUST clearly mention the exact Date, Month, or Year when it occurred.
 
 Strictly use this BILINGUAL JSON format:
 [
@@ -1757,6 +1913,12 @@ STRICT QUALITY RULES (MUST FOLLOW):
      e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): (1), (2), (3), (4) on separate lines using \n.
 8. Correct index MUST match the answer.
 9. Explanation must be detailed in both languages with official background context.
+10. MANDATORY YEAR/DATE SPECIFICATION (AWARDS, SPORTS, SCHEMES, SUMMITS, EVENTS):
+    - For EVERY question about Awards, Sports Tournaments, Summits, Government Schemes, or Appointments, you MUST EXPLICITLY specify the YEAR (e.g. 2024, 2025) or DATE / MONTH & YEAR (e.g. '2024-ஆம் ஆண்டிற்கான...', 'செப்டம்பர் 2024-ல்...') in BOTH question_en and question_ta!
+    - Example: '2024-ஆம் ஆண்டிற்கான தாதாசாகேப் பால்கே விருதை வென்றவர் யார்? / Who received the Dadasaheb Phalke Award for the year 2024?'
+    - Example: '2024 பாரிஸ் ஒலிம்பிக்கில் ஆடவர் ஈட்டி எறிதலில் தங்கம் வென்றவர் யார்? / Who won gold in men\'s javelin throw at the 2024 Paris Olympics?'
+    - Example: 'செப்டம்பர் 2024-ல் தொடங்கப்பட்ட தமிழ்நாடு அரசின் திட்டம் எது? / Which Tamil Nadu government scheme was launched in September 2024?'
+    - The explanation MUST also clearly state the exact date or month/year, venue/edition, and official background.
 
 JSON Format:
 [
