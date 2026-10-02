@@ -19,3 +19,9 @@
 # Fix for R8 missing Play Core classes
 -dontwarn com.google.android.play.core.**
 -dontwarn io.flutter.embedding.engine.deferredcomponents.**
+
+# Room / WorkManager / SQLite — prevent R8 from stripping classes
+# instantiated reflectively by Room & WorkManager (fixes 16KB page-size crash)
+-keep class androidx.work.** { *; }
+-keep class androidx.room.** { *; }
+-keep class androidx.sqlite.** { *; }

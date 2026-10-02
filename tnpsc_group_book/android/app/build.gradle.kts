@@ -87,6 +87,14 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.1")
     implementation("androidx.fragment:fragment-ktx:1.8.2")
+
+    // Fix: Force 16KB-page-size-compatible versions of WorkManager & Room.
+    // The transitive versions from flutter_local_notifications / firebase_messaging
+    // bundle native SQLite binaries not aligned to 16KB, crashing on Android 16.
+    implementation("androidx.work:work-runtime:2.10.1")
+    implementation("androidx.room:room-runtime:2.7.1")
+    implementation("androidx.sqlite:sqlite-framework:2.5.1")
+    implementation("androidx.sqlite:sqlite:2.5.1")
 }
 
 flutter {
