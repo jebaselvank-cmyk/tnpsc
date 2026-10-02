@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/question.dart';
 import '../data/seed_papers_2025.dart';
 import '../services/firestore_service.dart';
 import '../services/ai_service.dart';
 import '../utils/app_theme.dart';
-import '../utils/app_language.dart';
 import '../utils/app_log.dart';
 
 class AdminExamPapersScreen extends StatefulWidget {
@@ -23,6 +23,12 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
   String _selectedExamFilter = "All";
   List<Map<String, dynamic>> _papers = [];
   bool _isChunkProcessing = false;
+
+  List<int>? _selectedPdfBytes;
+  String? _selectedPdfPath;
+  String? _selectedPdfName;
+  int _selectedPdfPages = 0;
+  bool _selectedPdfIsScanned = false;
 
   final List<String> _examTypes = ["Group 4", "Group 2/2A", "Group 1", "VAO", "Other"];
 
@@ -53,28 +59,84 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
     List<dynamic> currentQuestions = paper['questions'] ?? [];
     int startQuestionNum = currentQuestions.length + 1;
     int totalExpected = paper['totalQuestions'] is int ? paper['totalQuestions'] : 100;
+    String examType = paper['examType'] ?? 'Group 4';
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text("Processing Chunk from Question #$startQuestionNum with AI..."),
       duration: const Duration(seconds: 4),
     ));
 
-    // Extract next text slice if rawText is provided, or pass rawText for AI chunking
-    String chunkText = rawText;
-    if (rawText.length > 3000) {
-      // Approximate 3000 chars per 10-15 questions chunk
-      int startOffset = (currentQuestions.length * 250);
-      if (startOffset < rawText.length) {
-        int endOffset = (startOffset + 3500 < rawText.length) ? startOffset + 3500 : rawText.length;
-        chunkText = rawText.substring(startOffset, endOffset);
-      }
-    }
+    bool isScanned = rawText.contains('[SCANNED_PDF:') || paper['pdfPath'] != null;
+    List<Map<String, dynamic>> newQuestions = [];
 
-    List<Map<String, dynamic>> newQuestions = await AiService.parseAndEnrichPdfChunk(
-      rawChunkText: chunkText,
-      startQuestionNum: startQuestionNum,
-      examType: paper['examType'] ?? 'Group 4',
-    );
+    if (isScanned) {
+      List<int>? pdfBytes = _selectedPdfBytes;
+      if (pdfBytes == null && paper['pdfPath'] != null) {
+        final f = File(paper['pdfPath']);
+        if (f.existsSync()) {
+          pdfBytes = await f.readAsBytes();
+        }
+      }
+
+      if (pdfBytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Please select the PDF file to resume extraction."),
+          ));
+        }
+        List<PlatformFile> files = await FilePickerPlatform.instance.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['pdf'],
+        );
+        if (files.isNotEmpty && files.first.path != null) {
+          pdfBytes = await File(files.first.path!).readAsBytes();
+          _selectedPdfBytes = pdfBytes;
+          _selectedPdfPath = files.first.path;
+        }
+      }
+
+      if (pdfBytes != null) {
+        int totalPages = AiService.getPdfPageCount(pdfBytes);
+        int processedPages = paper['processedPages'] is int ? paper['processedPages'] : 0;
+        if (processedPages == 0 && currentQuestions.isNotEmpty) {
+          processedPages = (currentQuestions.length * 0.7).floor().clamp(0, totalPages);
+        }
+        int pagesPerChunk = 6;
+        int startPage = processedPages;
+        if (startPage >= totalPages) startPage = 0;
+
+        List<int>? sliced = AiService.slicePdfPages(pdfBytes, startPage, pagesPerChunk);
+        newQuestions = await AiService.extractQuestionsFromPdfBytes(
+          pdfBytes: sliced ?? pdfBytes,
+          examType: examType,
+          startQuestionNum: startQuestionNum,
+          maxQuestions: 15,
+        );
+
+        if (newQuestions.isNotEmpty) {
+          int newProcessedPages = (startPage + pagesPerChunk < totalPages) ? startPage + pagesPerChunk : totalPages;
+          await FirebaseFirestore.instance.collection('exam_papers').doc(paperDocId).update({
+            'processedPages': newProcessedPages,
+          });
+        }
+      }
+    } else {
+      // Digital / Plain text chunking
+      String chunkText = rawText;
+      if (rawText.length > 3000) {
+        int startOffset = (currentQuestions.length * 250);
+        if (startOffset < rawText.length) {
+          int endOffset = (startOffset + 3500 < rawText.length) ? startOffset + 3500 : rawText.length;
+          chunkText = rawText.substring(startOffset, endOffset);
+        }
+      }
+
+      newQuestions = await AiService.parseAndEnrichPdfChunk(
+        rawChunkText: chunkText,
+        startQuestionNum: startQuestionNum,
+        examType: examType,
+      );
+    }
 
     if (newQuestions.isNotEmpty) {
       int totalNow = currentQuestions.length + newQuestions.length;
@@ -94,7 +156,7 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("No more questions extracted from chunk or timeout. Try verifying existing questions."),
+          content: Text("No questions extracted from this chunk. Try verifying or selecting PDF."),
         ));
       }
     }
@@ -135,8 +197,9 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
   Future<void> _pickFileAndFill(
     TextEditingController titleCtrl,
     TextEditingController rawTextCtrl,
-    TextEditingController jsonCtrl,
-  ) async {
+    TextEditingController jsonCtrl, [
+    StateSetter? setDialogState,
+  ]) async {
     try {
       List<PlatformFile> files = await FilePickerPlatform.instance.pickFiles(
         type: FileType.custom,
@@ -155,50 +218,61 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
           titleCtrl.text = cleanTitle;
         }
 
-        String content = "";
         if (file.path != null) {
-          try {
-            content = await File(file.path!).readAsString();
-          } catch (_) {
+          if (fileName.toLowerCase().endsWith('.pdf')) {
             final bytes = await File(file.path!).readAsBytes();
-            content = _extractTextFromPdfBytes(bytes);
-          }
-        }
+            _selectedPdfBytes = bytes;
+            _selectedPdfPath = file.path;
+            _selectedPdfName = fileName;
+            _selectedPdfPages = AiService.getPdfPageCount(bytes);
 
-        if (content.isNotEmpty) {
+            String digitalText = AiService.extractDigitalTextFromPdf(bytes);
+            if (digitalText.length > 300) {
+              _selectedPdfIsScanned = false;
+              rawTextCtrl.text = digitalText;
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text("Selected Digital PDF '$fileName' ($_selectedPdfPages pages). Extracted ${digitalText.length} characters!"),
+                ));
+              }
+            } else {
+              _selectedPdfIsScanned = true;
+              rawTextCtrl.text = "[SCANNED_PDF: $fileName | Pages: $_selectedPdfPages]";
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text("Selected Scanned PDF '$fileName' ($_selectedPdfPages pages). Ready for AI Vision extraction!"),
+                ));
+              }
+            }
+            if (setDialogState != null) {
+              setDialogState(() {});
+            }
+            return;
+          }
+
           if (fileName.toLowerCase().endsWith('.json')) {
+            String content = await File(file.path!).readAsString();
             jsonCtrl.text = content;
-          } else {
-            rawTextCtrl.text = content;
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text("Selected JSON '$fileName'! Ready to save."),
+              ));
+            }
+            return;
           }
 
+          // txt or other
+          String content = await File(file.path!).readAsString();
+          rawTextCtrl.text = content;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text("Selected '$fileName'! Extracted ${content.length} characters."),
-            ));
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text("Selected '$fileName'. Ready for paper creation."),
             ));
           }
         }
       }
     } catch (e) {
       AppLog.e("Error picking file in admin: $e");
-    }
-  }
-
-  String _extractTextFromPdfBytes(List<int> bytes) {
-    try {
-      String raw = String.fromCharCodes(bytes);
-      RegExp readableRegex = RegExp(r'[\u0B80-\u0BFFa-zA-Z0-9\s.,\-():]{4,}');
-      Iterable<Match> matches = readableRegex.allMatches(raw);
-      List<String> validStrings = matches.map((m) => m.group(0)!.trim()).where((s) => s.length > 5).toList();
-      return validStrings.join('\n');
-    } catch (e) {
-      return "";
     }
   }
 
@@ -268,7 +342,7 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                   width: double.infinity,
                   height: 44,
                   child: OutlinedButton.icon(
-                    onPressed: () => _pickFileAndFill(titleController, rawTextController, jsonController),
+                    onPressed: () => _pickFileAndFill(titleController, rawTextController, jsonController, setDialogState),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.primaryColor,
                       side: BorderSide(color: AppTheme.primaryColor),
@@ -278,6 +352,31 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                     label: const Text("Select & Upload PDF / File (PDF கோப்பைத் தேர்வுசெய்)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ),
+                if (_selectedPdfName != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "$_selectedPdfName ($_selectedPdfPages pages - ${_selectedPdfIsScanned ? 'Scanned PDF' : 'Digital PDF'})",
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -379,6 +478,7 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                         title: titleController.text.trim(),
                         questions: questions,
                         rawText: rawTextController.text.trim().isNotEmpty ? rawTextController.text.trim() : null,
+                        pdfPath: _selectedPdfPath,
                         totalQuestions: total,
                         processedCount: questions.length,
                         isCompleted: questions.isNotEmpty && questions.length >= total,
@@ -406,37 +506,85 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
   Future<void> _runAiVerification(Map<String, dynamic> paper, StateSetter modalSetState) async {
     List<dynamic> rawQuestions = paper['questions'] ?? [];
     String rawText = paper['rawText'] ?? "";
+    String paperDocId = paper['docId'] ?? paper['id'];
+    String examType = paper['examType'] ?? 'Group 4';
+    int totalExpected = paper['totalQuestions'] is int ? paper['totalQuestions'] : 100;
 
     if (rawQuestions.isEmpty) {
-      if (rawText.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("No questions or raw text found in this paper."),
-        ));
-        return;
-      }
+      bool isScanned = rawText.contains('[SCANNED_PDF:') || paper['pdfPath'] != null;
 
-      // If questions list is empty but rawText exists, extract questions from rawText!
       modalSetState(() => _isAiVerifying = true);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("AI is extracting & verifying questions from PDF text..."),
+        content: Text("AI is extracting & verifying questions from PDF with Vision..."),
         duration: Duration(seconds: 4),
       ));
 
-      List<Map<String, dynamic>> extracted = await AiService.parseAndEnrichPdfChunk(
-        rawChunkText: rawText,
-        startQuestionNum: 1,
-        examType: paper['examType'] ?? 'Group 4',
-      );
+      List<Map<String, dynamic>> extracted = [];
+
+      if (isScanned || rawText.isEmpty) {
+        List<int>? pdfBytes = _selectedPdfBytes;
+        if (pdfBytes == null && paper['pdfPath'] != null) {
+          final f = File(paper['pdfPath']);
+          if (f.existsSync()) {
+            pdfBytes = await f.readAsBytes();
+          }
+        }
+
+        if (pdfBytes == null) {
+          modalSetState(() => _isAiVerifying = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text("Please select the PDF file to extract questions."),
+            ));
+          }
+          List<PlatformFile> files = await FilePickerPlatform.instance.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: ['pdf'],
+          );
+          if (files.isNotEmpty && files.first.path != null) {
+            pdfBytes = await File(files.first.path!).readAsBytes();
+            _selectedPdfBytes = pdfBytes;
+            _selectedPdfPath = files.first.path;
+            modalSetState(() => _isAiVerifying = true);
+          } else {
+            return;
+          }
+        }
+
+        int totalPages = AiService.getPdfPageCount(pdfBytes);
+        int pagesPerChunk = 6;
+        List<int>? sliced = AiService.slicePdfPages(pdfBytes, 0, pagesPerChunk);
+
+        extracted = await AiService.extractQuestionsFromPdfBytes(
+          pdfBytes: sliced ?? pdfBytes,
+          examType: examType,
+          startQuestionNum: 1,
+          maxQuestions: 15,
+        );
+
+        if (extracted.isNotEmpty) {
+          await FirebaseFirestore.instance.collection('exam_papers').doc(paperDocId).update({
+            'processedPages': pagesPerChunk < totalPages ? pagesPerChunk : totalPages,
+          });
+        }
+      } else {
+        // Plain text extraction
+        extracted = await AiService.parseAndEnrichPdfChunk(
+          rawChunkText: rawText,
+          startQuestionNum: 1,
+          examType: examType,
+        );
+      }
 
       if (extracted.isNotEmpty) {
-        int totalExpected = paper['totalQuestions'] is int ? paper['totalQuestions'] : 100;
         bool ok = await _firestoreService.saveExamPaper(
-          id: paper['docId'] ?? paper['id'],
-          examType: paper['examType'] ?? 'Group 4',
+          id: paperDocId,
+          examType: examType,
           year: paper['year'] is int ? paper['year'] : 2025,
           title: paper['title'] ?? 'Exam Paper',
           questions: extracted,
-          rawText: rawText,
+          rawText: rawText.isNotEmpty ? rawText : null,
+          pdfPath: paper['pdfPath'] ?? _selectedPdfPath,
           totalQuestions: totalExpected,
           processedCount: extracted.length,
           isCompleted: extracted.length >= totalExpected,
@@ -455,7 +603,7 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
         modalSetState(() => _isAiVerifying = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Failed to extract questions from raw text. Please check text format."),
+            content: Text("Failed to extract questions from PDF. Please verify PDF file quality."),
           ));
         }
         return;
@@ -473,12 +621,13 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
     List<Map<String, dynamic>> verified = await AiService.verifyAndEnrichExamPaperQuestions(questionsMap);
 
     bool ok = await _firestoreService.saveExamPaper(
-      id: paper['docId'] ?? paper['id'],
-      examType: paper['examType'] ?? 'Group 4',
+      id: paperDocId,
+      examType: examType,
       year: paper['year'] is int ? paper['year'] : 2025,
       title: paper['title'] ?? 'Exam Paper',
       questions: verified,
       rawText: paper['rawText'],
+      pdfPath: paper['pdfPath'],
       totalQuestions: paper['totalQuestions'],
       processedCount: verified.length,
       isCompleted: verified.length >= (paper['totalQuestions'] ?? 100),

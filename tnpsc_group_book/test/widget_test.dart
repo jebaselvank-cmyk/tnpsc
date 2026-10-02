@@ -1,30 +1,21 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:tnpsc_group_book/main.dart';
+import 'package:tnpsc_group_book/models/question.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MainWrapper());
+  test('Question model serialization and formatting test', () {
+    final q = Question(
+      question: 'கீழ்க்காண்பனவற்றை பொருத்துக:\n(a) A — 1. X\n(b) B — 2. Y\n(c) C — 3. Z\n(d) D — 4. W',
+      options: ['(a)-1, (b)-2, (c)-3, (d)-4', '(a)-2, (b)-1, (c)-4, (d)-3', '(a)-3, (b)-4, (c)-1, (d)-2', '(a)-4, (b)-3, (c)-2, (d)-1'],
+      correctOptionIndex: 0,
+      explanation: 'விளக்கம்',
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(q.correctOptionIndex, 0);
+    expect(q.options.length, 4);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    final map = q.toMap();
+    final reconstructed = Question.fromMap(map);
+    expect(reconstructed.correctOptionIndex, 0);
+    expect(reconstructed.question, contains('(a) A — 1. X'));
   });
 }

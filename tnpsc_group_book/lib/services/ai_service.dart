@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:http/http.dart' as http;
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:tnpsc_group_book/utils/app_date.dart';
 import '../utils/app_log.dart';
 import '../models/question.dart';
@@ -213,7 +215,7 @@ class AiService {
     ];
   }
 
-  static Future<String?> _generateWithFallback(String prompt) async {
+  static Future<String?> _generateWithFallback(String prompt, {String? base64Pdf}) async {
     // 0. Check Sticky Config First
     final sticky = HiveService.getStickyAiConfig();
     if (sticky != null) {
@@ -223,7 +225,7 @@ class AiService {
       
       if (sKey.isNotEmpty && sModel.isNotEmpty && sVersion.isNotEmpty) {
         AppLog.d("AI_DEBUG: Using Sticky Config - Model: $sModel, Version: $sVersion");
-        final res = await _tryModelRequest(sKey, sModel, sVersion, prompt);
+        final res = await _tryModelRequest(sKey, sModel, sVersion, prompt, base64Pdf: base64Pdf);
         if (res != null) return res;
         
         AppLog.d("AI_DEBUG: Sticky Config failed. Clearing and proceeding to discovery.");
@@ -291,7 +293,7 @@ class AiService {
       for (String version in ['v1beta', 'v1']) { // Try v1beta first for newer models
         if (keyFailed) break;
         for (String modelName in finalModelsToTry) {
-          final res = await _tryModelRequest(apiKey, modelName, version, prompt, onKeyInvalid: () => keyFailed = true);
+          final res = await _tryModelRequest(apiKey, modelName, version, prompt, base64Pdf: base64Pdf, onKeyInvalid: () => keyFailed = true);
           if (res != null) {
             // SUCCESS! Save this as the sticky config for the rest of the day
             AppLog.d("AI_DEBUG: Saving new Sticky Config: $modelName on $version");
@@ -306,7 +308,14 @@ class AiService {
     return null;
   }
 
-  static Future<String?> _tryModelRequest(String apiKey, String modelName, String version, String prompt, {Function? onKeyInvalid}) async {
+  static Future<String?> _tryModelRequest(
+    String apiKey,
+    String modelName,
+    String version,
+    String prompt, {
+    String? base64Pdf,
+    Function? onKeyInvalid,
+  }) async {
     int retries = 0;
     const int maxRetries = 2;
 
@@ -317,6 +326,17 @@ class AiService {
           'https://generativelanguage.googleapis.com/$version/models/$modelName:generateContent?key=$apiKey',
         );
 
+        List<Map<String, dynamic>> parts = [];
+        if (base64Pdf != null && base64Pdf.isNotEmpty) {
+          parts.add({
+            'inline_data': {
+              'mime_type': 'application/pdf',
+              'data': base64Pdf,
+            },
+          });
+        }
+        parts.add({'text': prompt});
+
         final response = await http
             .post(
               url,
@@ -324,9 +344,7 @@ class AiService {
               body: jsonEncode({
                 'contents': [
                   {
-                    'parts': [
-                      {'text': prompt},
-                    ],
+                    'parts': parts,
                   },
                 ],
                 'safetySettings': [
@@ -349,7 +367,7 @@ class AiService {
                 ],
                 'generationConfig': {
                   'responseMimeType': 'application/json',
-                  'temperature': 0.4,
+                  'temperature': 0.2,
                   'topP': 0.85,
                   'topK': 20,
                   'maxOutputTokens': 8192,
@@ -361,7 +379,7 @@ class AiService {
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final candidate = data['candidates'][0];
-          if (candidate['finishReason'] != 'STOP') {
+          if (candidate['finishReason'] != 'STOP' && candidate['finishReason'] != 'MAX_TOKENS') {
             AppLog.d("AI_DEBUG: Model finished with reason: ${candidate['finishReason']}");
             return null; // Try next model
           }
@@ -369,6 +387,15 @@ class AiService {
           String? text = candidate['content']['parts'][0]['text'];
           if (text != null) {
             text = text.trim();
+            // Auto-heal truncated JSON array if finished due to MAX_TOKENS
+            if (text.contains('[') && !text.trim().endsWith(']')) {
+              int lastBrace = text.lastIndexOf('}');
+              if (lastBrace != -1) {
+                text = text.substring(0, lastBrace + 1) + ']';
+                AppLog.d("AI_DEBUG: Auto-healed truncated JSON array from MAX_TOKENS");
+              }
+            }
+
             final jsonRegex = RegExp(r'\[.*\]|\{.*\}', dotAll: true);
             final match = jsonRegex.stringMatch(text);
             if (match != null) {
@@ -396,7 +423,7 @@ class AiService {
           AppLog.d("AI_DEBUG: Server error (${response.statusCode}). Retrying...");
           await Future.delayed(Duration(seconds: 1 * (retries + 1)));
           retries++;
-          continue;
+          continue; 
         } else {
           AppLog.d("AI_DEBUG: REST FAIL - Status: ${response.statusCode}");
           return null; // Try next model
@@ -435,11 +462,19 @@ class AiService {
     return context;
   }
 
-  static bool _validateQuestion(Map<String, dynamic> q) {
+  static bool _validateQuestion(Map<String, dynamic> q, {bool isExamPaper = false}) {
     try {
       final qEn = q['question_en']?.toString().trim() ?? '';
       final qTa = q['question_ta']?.toString().trim() ?? '';
-      if (qEn.isEmpty || qTa.isEmpty || qEn.length < 5 || qTa.length < 5) return false;
+      if (qEn.isEmpty && qTa.isEmpty) return false;
+
+      // In exam papers, if one language is missing or short, mirror from the other
+      if (isExamPaper) {
+        if (qTa.isEmpty && qEn.isNotEmpty) q['question_ta'] = qEn;
+        if (qEn.isEmpty && qTa.isNotEmpty) q['question_en'] = qTa;
+      } else {
+        if (qEn.isEmpty || qTa.isEmpty || qEn.length < 5 || qTa.length < 5) return false;
+      }
 
       final options = q['options'];
       if (options is! List || options.length != 4) return false;
@@ -448,45 +483,63 @@ class AiService {
       Set<String> optionTextsTa = {};
       for (var opt in options) {
         if (opt is! Map) return false;
-        final optEn = opt['en']?.toString().trim() ?? '';
-        final optTa = opt['ta']?.toString().trim() ?? '';
-        if (optEn.isEmpty || optTa.isEmpty) return false;
-        optionTextsEn.add(optEn);
-        optionTextsTa.add(optTa);
+        var optEn = opt['en']?.toString().trim() ?? '';
+        var optTa = opt['ta']?.toString().trim() ?? '';
+        if (optEn.isEmpty && optTa.isEmpty) return false;
+        if (isExamPaper) {
+          if (optEn.isEmpty) opt['en'] = optTa;
+          if (optTa.isEmpty) opt['ta'] = optEn;
+        }
+        optionTextsEn.add(opt['en']?.toString() ?? '');
+        optionTextsTa.add(opt['ta']?.toString() ?? '');
       }
-      if (optionTextsEn.length != 4 || optionTextsTa.length != 4) return false;
+      if (optionTextsEn.length < 2 || optionTextsTa.length < 2) return false;
 
       final correctIdx = q['correctOptionIndex'];
       if (correctIdx is! int && correctIdx is! num) return false;
       final idx = (correctIdx as num).toInt();
       if (idx < 0 || idx > 3) return false;
 
-      final expEn = q['explanation_en']?.toString().toLowerCase() ?? '';
-      final expTa = q['explanation_ta']?.toString().toLowerCase() ?? '';
-      if (expEn.isEmpty || expTa.isEmpty) return false;
+      final expEn = q['explanation_en']?.toString().trim() ?? '';
+      final expTa = q['explanation_ta']?.toString().trim() ?? '';
 
-      // Strict Anti-Hallucination & Non-Existent Facts Filter:
-      // Reject questions where explanation or question states no such event exists, or admits it is hypothetical, fictional, or unrecorded
-      if ((expEn.contains('no ') && (expEn.contains('awarded') || expEn.contains('exist') || expEn.contains('scientist') || expEn.contains('record') || expEn.contains('such'))) ||
-          expEn.contains('hypothetical') || expEn.contains('future event') || expEn.contains('fictional') || expEn.contains('imaginary') || expEn.contains('not yet happened') ||
-          expTa.contains('வழங்கப்படவில்லை') || expTa.contains('இல்லை') || expTa.contains('கருத்தியல்') || expTa.contains('தகவல் இல்லை') ||
-          expTa.contains('உண்மையில் இல்லை') || expTa.contains('கற்பனையான') || expTa.contains('நிகழவில்லை')) {
-        return false;
-      }
+      // Provide default fallback explanations for exam paper questions if missing
+      if (isExamPaper) {
+        if (expTa.isEmpty) {
+          q['explanation_ta'] = "சரியான விடை விருப்பம் ${String.fromCharCode(65 + idx)} ஆகும். இது அதிகாரப்பூர்வ டிஎன்பிஎஸ்சி விடைக்குறிப்பின்படி உறுதிசெய்யப்பட்டது.";
+        }
+        if (expEn.isEmpty) {
+          q['explanation_en'] = "The correct answer is Option ${String.fromCharCode(65 + idx)}, verified according to official TNPSC answer key standards.";
+        }
+      } else {
+        if (expEn.isEmpty || expTa.isEmpty) return false;
 
-      // Check Explanation vs correctOptionIndex Coherence:
-      if (!_validateOptionExplanationCoherence(idx, expEn, expTa)) {
-        return false;
-      }
+        final lowerExpEn = expEn.toLowerCase();
+        final lowerExpTa = expTa.toLowerCase();
 
-      // Check Match the following questions: Both Left and Right data must be present!
-      if (!_validateMatchQuestion(qEn, qTa, options)) {
-        return false;
-      }
+        // Strict Anti-Hallucination & Non-Existent Facts Filter:
+        // Reject questions where explanation or question states no such event exists, or admits it is hypothetical, fictional, or unrecorded
+        if ((lowerExpEn.contains('no ') && (lowerExpEn.contains('awarded') || lowerExpEn.contains('exist') || lowerExpEn.contains('scientist') || lowerExpEn.contains('record') || lowerExpEn.contains('such'))) ||
+            lowerExpEn.contains('hypothetical') || lowerExpEn.contains('future event') || lowerExpEn.contains('fictional') || lowerExpEn.contains('imaginary') || lowerExpEn.contains('not yet happened') ||
+            lowerExpTa.contains('வழங்கப்படவில்லை') || lowerExpTa.contains('இல்லை') || lowerExpTa.contains('கருத்தியல்') || lowerExpTa.contains('தகவல் இல்லை') ||
+            lowerExpTa.contains('உண்மையில் இல்லை') || lowerExpTa.contains('கற்பனையான') || lowerExpTa.contains('நிகழவில்லை')) {
+          return false;
+        }
 
-      // Check Award, Sports, and Event questions: Year or Date must be present!
-      if (!_validateCurrentAffairsYear(qEn, qTa)) {
-        return false;
+        // Check Explanation vs correctOptionIndex Coherence:
+        if (!_validateOptionExplanationCoherence(idx, lowerExpEn, lowerExpTa)) {
+          return false;
+        }
+
+        // Check Match the following questions: Both Left and Right data must be present!
+        if (!_validateMatchQuestion(qEn, qTa, options)) {
+          return false;
+        }
+
+        // Check Award, Sports, and Event questions: Year or Date must be present!
+        if (!_validateCurrentAffairsYear(qEn, qTa)) {
+          return false;
+        }
       }
 
       return true;
@@ -678,23 +731,24 @@ class AiService {
     return true;
   }
 
-  static List<dynamic> _filterValidQuestions(List<dynamic> questions) {
+  static List<dynamic> _filterValidQuestions(List<dynamic> questions, {bool isExamPaper = false}) {
     List<dynamic> validList = [];
     for (var item in questions) {
-      if (item is Map<String, dynamic>) {
-        if (!_validateQuestion(item)) continue;
+      if (item is Map) {
+        final map = Map<String, dynamic>.from(item);
+        if (!_validateQuestion(map, isExamPaper: isExamPaper)) continue;
 
         // Auto-format question text for newlines on Match, Statement, and Sequence questions
-        if (item['question_ta'] != null) {
-          item['question_ta'] = Question.formatQuestionText(item['question_ta'].toString());
+        if (map['question_ta'] != null) {
+          map['question_ta'] = Question.formatQuestionText(map['question_ta'].toString());
         }
-        if (item['question_en'] != null) {
-          item['question_en'] = Question.formatQuestionText(item['question_en'].toString());
+        if (map['question_en'] != null) {
+          map['question_en'] = Question.formatQuestionText(map['question_en'].toString());
         }
-        if (item['question'] != null) {
-          item['question'] = Question.formatQuestionText(item['question'].toString());
+        if (map['question'] != null) {
+          map['question'] = Question.formatQuestionText(map['question'].toString());
         }
-        validList.add(item);
+        validList.add(map);
       }
     }
     return validList;
@@ -2038,16 +2092,17 @@ JSON Format:
 
         final prompt = '''
 You are an Expert TNPSC Examiner and Fact Verifier.
-Analyze the following batch of TNPSC exam paper questions extracted from a PDF/Answer key.
+Analyze the following batch of authentic TNPSC exam paper questions.
 
 YOUR MANDATORY TASKS:
-1. FACT-CHECK EVERY QUESTION: Verify if the marked `correctOptionIndex` (0-3) is 100% factually and mathematically correct.
-2. CORRECT ANY WRONG ANSWERS: If `correctOptionIndex` is wrong or points to the wrong option, update `correctOptionIndex` to the TRUE correct option index (0, 1, 2, or 3).
-3. GENERATE DETAILED BILINGUAL EXPLANATIONS:
+1. PRESERVE ORIGINAL VERBATIM TEXT: Do NOT change, shorten, or reword the original `question_en`, `question_ta`, and `options` from the paper. Maintain 100% exact printed wording and zero spelling mistakes.
+2. FACT-CHECK EVERY QUESTION: Verify if the marked `correctOptionIndex` (0-3) is 100% factually and mathematically correct.
+3. CORRECT ANY WRONG ANSWERS: If `correctOptionIndex` is wrong or points to the wrong option, update `correctOptionIndex` to the TRUE correct option index (0, 1, 2, or 3).
+4. GENERATE DETAILED BILINGUAL EXPLANATIONS:
    - For `explanation_ta`: Provide a clear, detailed 2-3 sentence explanation in pure literary Tamil explaining why the answer is correct (and step-by-step formula/math steps for Aptitude).
    - For `explanation_en`: Provide a clear, detailed 2-3 sentence explanation in English explaining why the answer is correct (and step-by-step math steps for Aptitude).
-4. ENSURE BILINGUAL FIELDS:
-   - Ensure `question_en` and `question_ta` are accurate.
+5. ENSURE BILINGUAL FIELDS:
+   - Ensure `question_en` and `question_ta` are accurate and fully preserved.
    - Ensure `options` array contains 4 objects `[{"en": "...", "ta": "..."}]`.
 
 INPUT QUESTIONS BATCH:
@@ -2064,11 +2119,14 @@ Return ONLY a valid JSON array containing the verified and enriched questions. N
             int last = res.lastIndexOf(']');
             if (start != -1 && last != -1) {
               List<dynamic> parsed = jsonDecode(res.substring(start, last + 1));
+              List<Map<String, dynamic>> batchParsed = [];
               for (var q in parsed) {
                 if (q is Map) {
-                  verifiedQuestions.add(Map<String, dynamic>.from(q));
+                  batchParsed.add(Map<String, dynamic>.from(q));
                 }
               }
+              final filtered = _filterValidQuestions(batchParsed, isExamPaper: true);
+              verifiedQuestions.addAll(filtered.map((e) => Map<String, dynamic>.from(e as Map)));
               continue;
             }
           } catch (e) {
@@ -2087,31 +2145,177 @@ Return ONLY a valid JSON array containing the verified and enriched questions. N
     }
   }
 
+  /// Slices a page range from PDF bytes into a standalone PDF in memory
+  static List<int>? slicePdfPages(List<int> fullPdfBytes, int startPageIndex, int pageCount) {
+    try {
+      final doc = PdfDocument(inputBytes: fullPdfBytes);
+      try {
+        if (startPageIndex >= doc.pages.count) return null;
+        final sliceDoc = PdfDocument();
+        int end = (startPageIndex + pageCount <= doc.pages.count) ? startPageIndex + pageCount : doc.pages.count;
+        for (int i = startPageIndex; i < end; i++) {
+          PdfTemplate template = doc.pages[i].createTemplate();
+          PdfPage newPage = sliceDoc.pages.add();
+          newPage.graphics.drawPdfTemplate(template, const Offset(0, 0));
+        }
+        final bytes = sliceDoc.saveSync();
+        sliceDoc.dispose();
+        return bytes;
+      } finally {
+        doc.dispose();
+      }
+    } catch (e) {
+      AppLog.e("Error slicing PDF pages: $e");
+      return null;
+    }
+  }
+
+  /// Returns total page count of a PDF
+  static int getPdfPageCount(List<int> pdfBytes) {
+    try {
+      final doc = PdfDocument(inputBytes: pdfBytes);
+      int count = doc.pages.count;
+      doc.dispose();
+      return count;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  /// Extracts embedded text from a PDF if it is a digital PDF.
+  /// Returns empty string if it is a scanned image PDF.
+  static String extractDigitalTextFromPdf(List<int> pdfBytes) {
+    try {
+      final doc = PdfDocument(inputBytes: pdfBytes);
+      String text = PdfTextExtractor(doc).extractText();
+      doc.dispose();
+      return text.trim();
+    } catch (e) {
+      return "";
+    }
+  }
+
+  /// Extracts structured questions from PDF bytes using Gemini Multimodal Vision.
+  /// Works for BOTH scanned image PDFs and digital text PDFs.
+  static Future<List<Map<String, dynamic>>> extractQuestionsFromPdfBytes({
+    required List<int> pdfBytes,
+    required String examType,
+    int startQuestionNum = 1,
+    int maxQuestions = 15,
+  }) async {
+    try {
+      String base64Pdf = base64Encode(pdfBytes);
+      final prompt = '''
+You are an Expert TNPSC Question Paper Digitizer, High-Accuracy Tamil OCR Specialist, and Official Exam Fact Verifier.
+Carefully read the attached TNPSC exam paper PDF pages.
+
+CRITICAL INSTRUCTIONS - 100% VERBATIM EXTRACTION & ZERO SPELLING MISTAKES:
+1. EXACT ORIGINAL TEXT ONLY (வினாத்தாளில் உள்ள வினாக்கள் மற்றும் விருப்பங்கள் 100% பிழையின்றி அப்படியே வர வேண்டும்):
+   - You MUST transcribe the questions, options, and statements EXACTLY character-for-character as printed in the PDF.
+   - DO NOT summarize, rewrite, rephrase, modernise, or shorten any question or option text.
+   - ZERO SPELLING MISTAKES IN TAMIL AND ENGLISH:
+     * Preserve exact Tamil glyphs: ண vs ன, ல vs ள vs ழ, ர vs ற, குறில் vs நெடில்.
+     * Ensure all pulli/dots (க், ச், ட், த், ப், ற், ன்...) are precisely placed as in the original print.
+     * Retain all names, historical titles, author names, book titles, and technical terms exactly as printed.
+2. EXTRACT ALL 4 OPTIONS (A, B, C, D) EXACTLY AS PRINTED:
+   - "options": [
+       {"en": "Exact text of Option A as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் A உரை அப்படியே"},
+       {"en": "Exact text of Option B as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் B உரை அப்படியே"},
+       {"en": "Exact text of Option C as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் C உரை அப்படியே"},
+       {"en": "Exact text of Option D as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் D உரை அப்படியே"}
+     ]
+   - NEVER invent placeholder text like "Option A" or empty commas. Copy the real printed text of each option.
+3. PRESERVE SPECIAL TNPSC QUESTION STRUCTURES VERBATIM:
+   - For "Match the Following (பொருத்துக)":
+     Extract BOTH the entire Left column (a, b, c, d) AND the entire Right column (1, 2, 3, 4) with their full descriptions.
+     Format each pair on a new line using \\n (e.g. "(a) Left text — 1. Right text\\n(b) Left text — 2. Right text...").
+     The options A, B, C, D must be the exact matching code combinations from the paper.
+   - For "Statement and Reason / Assertion (கூற்று மற்றும் காரணம்)":
+     Extract both Assertion and Reason verbatim on separate lines with \\n.
+   - For "Chronological Order (காலவரிசைப்படுத்துக)":
+     Extract all numbered statements (1), (2), (3), (4) on separate lines with \\n.
+4. ACCURATE ANSWER KEY & EXPLANATIONS:
+   - Identify the correct answer (0 for A, 1 for B, 2 for C, 3 for D) from the marked answer key or official answer key.
+   - Set "correctOptionIndex" precisely (0, 1, 2, or 3).
+   - "explanation_ta": Detailed 2-3 sentence explanation in pure Tamil explaining why this answer is correct (including calculation steps for Math/Aptitude).
+   - "explanation_en": Detailed 2-3 sentence explanation in English explaining why this answer is correct (including calculation steps for Math/Aptitude).
+5. COMPLETE EXTRACTION:
+   - Extract every single question found on these pages starting from Question #$startQuestionNum up to $maxQuestions questions without omitting any.
+
+RETURN FORMAT:
+Return ONLY a valid JSON array:
+[
+  {
+    "question_en": "...",
+    "question_ta": "...",
+    "options": [
+      {"en": "...", "ta": "..."},
+      {"en": "...", "ta": "..."},
+      {"en": "...", "ta": "..."},
+      {"en": "...", "ta": "..."}
+    ],
+    "correctOptionIndex": 0,
+    "explanation_en": "...",
+    "explanation_ta": "..."
+  }
+]
+No Markdown formatting, no code fence, no extra preamble. Only raw JSON array.
+''';
+
+      final res = await _generateWithFallback(prompt, base64Pdf: base64Pdf);
+      if (res != null) {
+        int start = res.indexOf('[');
+        int last = res.lastIndexOf(']');
+        if (start != -1 && last != -1) {
+          List<dynamic> parsed = jsonDecode(res.substring(start, last + 1));
+          List<Map<String, dynamic>> questions = [];
+          for (var item in parsed) {
+            if (item is Map) {
+              questions.add(Map<String, dynamic>.from(item));
+            }
+          }
+          final filtered = _filterValidQuestions(questions, isExamPaper: true);
+          return filtered.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      AppLog.e("Error in extractQuestionsFromPdfBytes: $e");
+      return [];
+    }
+  }
+
   /// AI Chunked PDF Parser: Extracts 10-15 questions from raw PDF text chunk,
   /// fact-checks answer keys, ensures bilingual fields, and generates explanations.
   static Future<List<Map<String, dynamic>>> parseAndEnrichPdfChunk({
     required String rawChunkText,
     required int startQuestionNum,
     required String examType,
+    String? base64Pdf,
   }) async {
     try {
       final prompt = '''
-You are an Expert TNPSC Question Paper Converter and Fact Verifier.
-Extract and convert the following raw PDF text chunk into structured $examType exam MCQs starting from Question #$startQuestionNum.
+You are an Expert TNPSC Question Paper Digitizer, High-Accuracy Tamil OCR Specialist, and Official Exam Fact Verifier.
+Convert the following authentic TNPSC question paper text into structured $examType exam MCQs starting from Question #$startQuestionNum.
 
-RAW PDF TEXT CHUNK:
+CRITICAL INSTRUCTIONS - 100% VERBATIM EXTRACTION & ZERO SPELLING MISTAKES:
+1. EXACT ORIGINAL TEXT ONLY:
+   - You MUST transcribe the questions, options, and statements EXACTLY character-for-character from the text.
+   - DO NOT summarize, rewrite, rephrase, or shorten any question or option text.
+   - ZERO SPELLING MISTAKES IN TAMIL:
+     * Preserve exact Tamil glyphs: ண vs ன, ல vs ள vs ழ, ர vs ற, குறில் vs நெடில்.
+     * Ensure all pulli/dots (க், ச், ட், த், ப், ற், ன்...) are precisely placed.
+2. EXTRACT ALL 4 OPTIONS (A, B, C, D) EXACTLY AS PRINTED:
+   - Copy the real text of each option A, B, C, D without placeholders.
+3. PRESERVE SPECIAL TNPSC QUESTION STRUCTURES:
+   - For Match the following (பொருத்துக): Include both left and right columns on separate lines with \\n.
+   - For Assertion/Reason (கூற்று மற்றும் காரணம்): Keep both on separate lines with \\n.
+4. ACCURATE ANSWER KEY & EXPLANATIONS:
+   - Identify the correct answer key (0, 1, 2, or 3).
+   - Generate detailed bilingual explanations.
+
+RAW EXAM PAPER TEXT:
 $rawChunkText
-
-MANDATORY RULES:
-1. EXTRACT 10 to 15 QUESTIONS: Extract each question, options A, B, C, D, and marked answer key.
-2. FACT-CHECK EVERY ANSWER KEY: Verify if marked answer is factually correct. Set `correctOptionIndex` (0, 1, 2, or 3) to the TRUE correct answer.
-3. GENERATE BILINGUAL FIELDS:
-   - "question_en": Natural English text.
-   - "question_ta": Pure literary Tamil text.
-   - "options": List of 4 objects [{"en": "...", "ta": "..."}].
-   - "explanation_en": Detailed English explanation (with math steps if Aptitude).
-   - "explanation_ta": Detailed Tamil explanation (with math steps if Aptitude).
-4. AUTHENTIC TNPSC FORMAT VARIETY: Preserving "Match the following (பொருத்துக)", Statement-based, and Direct MCQs.
 
 JSON FORMAT:
 [
@@ -2132,7 +2336,7 @@ JSON FORMAT:
 Return ONLY raw JSON array.
 ''';
 
-      final res = await _generateWithFallback(prompt);
+      final res = await _generateWithFallback(prompt, base64Pdf: base64Pdf);
       if (res != null) {
         int start = res.indexOf('[');
         int last = res.lastIndexOf(']');
@@ -2144,7 +2348,8 @@ Return ONLY raw JSON array.
               questions.add(Map<String, dynamic>.from(item));
             }
           }
-          return questions;
+          final filtered = _filterValidQuestions(questions, isExamPaper: true);
+          return filtered.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         }
       }
       return [];

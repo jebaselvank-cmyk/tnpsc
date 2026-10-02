@@ -2307,6 +2307,7 @@ class FirestoreService {
     required String title,
     required List<Map<String, dynamic>> questions,
     String? rawText,
+    String? pdfPath,
     int? totalQuestions,
     int? processedCount,
     bool? isCompleted,
@@ -2323,6 +2324,7 @@ class FirestoreService {
         'isCompleted': isCompleted ?? (questions.isNotEmpty && (totalQuestions == null || questions.length >= totalQuestions)),
         'questions': questions,
         if (rawText != null) 'rawText': rawText,
+        if (pdfPath != null) 'pdfPath': pdfPath,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
