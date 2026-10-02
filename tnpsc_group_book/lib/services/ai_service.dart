@@ -472,10 +472,91 @@ class AiService {
         return false;
       }
 
+      // Check Match the following questions: Both Left and Right data must be present!
+      if (!_validateMatchQuestion(qEn, qTa, options)) {
+        return false;
+      }
+
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  /// Strictly validates that "Match the Following" (பொருத்துக) questions contain
+  /// BOTH the Left Column (a, b, c, d) AND the Right Column (1, 2, 3, 4) with descriptive text.
+  static bool _validateMatchQuestion(String qEn, String qTa, List<dynamic> options) {
+    final lowerEn = qEn.toLowerCase();
+    final lowerTa = qTa.toLowerCase();
+
+    // 1. Detect if this is a Match-the-following question
+    final matchOptRegex = RegExp(r'\(?[a-d]\)?\s*[-–—:]\s*[1-4]', caseSensitive: false);
+    int matchOptionCount = 0;
+    for (var opt in options) {
+      if (opt is Map) {
+        final en = opt['en']?.toString() ?? '';
+        final ta = opt['ta']?.toString() ?? '';
+        if (matchOptRegex.hasMatch(en) || matchOptRegex.hasMatch(ta)) {
+          matchOptionCount++;
+        }
+      }
+    }
+
+    final isMatchByTitle = lowerTa.contains('பொருத்துக') ||
+        lowerTa.contains('பொருத்து') ||
+        lowerEn.contains('match the following') ||
+        lowerEn.contains('match list') ||
+        lowerEn.contains('match column');
+
+    final hasLettersInQuestion = (qTa.contains('(a)') || qTa.contains('(அ)') || qEn.contains('(a)')) &&
+        (qTa.contains('(b)') || qTa.contains('(ஆ)') || qEn.contains('(b)'));
+
+    final isMatch = isMatchByTitle || matchOptionCount >= 2 || (hasLettersInQuestion && matchOptionCount >= 1);
+    if (!isMatch) return true; // Normal MCQ, not a match question
+
+    // It IS a Match Question: strictly enforce BOTH Left (a,b,c,d) and Right (1,2,3,4) presence!
+    final hasTaA = qTa.contains('(a)') || qTa.contains('(A)') || qTa.contains('a)') || qTa.contains('A)') || qTa.contains('(அ)') || qTa.contains('அ)');
+    final hasTaB = qTa.contains('(b)') || qTa.contains('(B)') || qTa.contains('b)') || qTa.contains('B)') || qTa.contains('(ஆ)') || qTa.contains('ஆ)');
+    final hasTaC = qTa.contains('(c)') || qTa.contains('(C)') || qTa.contains('c)') || qTa.contains('C)') || qTa.contains('(இ)') || qTa.contains('இ)');
+    final hasTaD = qTa.contains('(d)') || qTa.contains('(D)') || qTa.contains('d)') || qTa.contains('D)') || qTa.contains('(ஈ)') || qTa.contains('ஈ)');
+
+    final num1Regex = RegExp(r'(?:^|[—\-\s\(\n])1(?:\.|\s*[-–—:]|\))');
+    final num2Regex = RegExp(r'(?:^|[—\-\s\(\n])2(?:\.|\s*[-–—:]|\))');
+    final num3Regex = RegExp(r'(?:^|[—\-\s\(\n])3(?:\.|\s*[-–—:]|\))');
+    final num4Regex = RegExp(r'(?:^|[—\-\s\(\n])4(?:\.|\s*[-–—:]|\))');
+
+    final hasTa1 = num1Regex.hasMatch(qTa);
+    final hasTa2 = num2Regex.hasMatch(qTa);
+    final hasTa3 = num3Regex.hasMatch(qTa);
+    final hasTa4 = num4Regex.hasMatch(qTa);
+
+    if (!hasTaA || !hasTaB || !hasTaC || !hasTaD || !hasTa1 || !hasTa2 || !hasTa3 || !hasTa4) {
+      AppLog.d("AI_DEBUG: Rejected Match Question (Tamil) - Missing left or right items: Letters [a:$hasTaA, b:$hasTaB, c:$hasTaC, d:$hasTaD], Numbers [1:$hasTa1, 2:$hasTa2, 3:$hasTa3, 4:$hasTa4]");
+      return false;
+    }
+
+    final hasEnA = qEn.contains('(a)') || qEn.contains('(A)') || qEn.contains('a)') || qEn.contains('A)');
+    final hasEnB = qEn.contains('(b)') || qEn.contains('(B)') || qEn.contains('b)') || qEn.contains('B)');
+    final hasEnC = qEn.contains('(c)') || qEn.contains('(C)') || qEn.contains('c)') || qEn.contains('C)');
+    final hasEnD = qEn.contains('(d)') || qEn.contains('(D)') || qEn.contains('d)') || qEn.contains('D)');
+
+    final hasEn1 = num1Regex.hasMatch(qEn);
+    final hasEn2 = num2Regex.hasMatch(qEn);
+    final hasEn3 = num3Regex.hasMatch(qEn);
+    final hasEn4 = num4Regex.hasMatch(qEn);
+
+    if (!hasEnA || !hasEnB || !hasEnC || !hasEnD || !hasEn1 || !hasEn2 || !hasEn3 || !hasEn4) {
+      AppLog.d("AI_DEBUG: Rejected Match Question (English) - Missing left or right items: Letters [a:$hasEnA, b:$hasEnB, c:$hasEnC, d:$hasEnD], Numbers [1:$hasEn1, 2:$hasEn2, 3:$hasEn3, 4:$hasEn4]");
+      return false;
+    }
+
+    // Both sides must contain substantial descriptive text
+    if (qTa.trim().length < 40 || qEn.trim().length < 40) {
+      AppLog.d("AI_DEBUG: Rejected Match Question - Text too short for 4 complete pairs.");
+      return false;
+    }
+
+    return true;
   }
 
   static List<dynamic> _filterValidQuestions(List<dynamic> questions) {
@@ -570,13 +651,19 @@ STRICT QUALITY RULES (MUST FOLLOW)
 33. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
     - Must include a rich mix of all 5 authentic TNPSC exam formats:
       a) Standard Direct MCQs (~40%)
-      b) "Match the Following / பொருத்துக" Questions (~25%): List 4 paired items (a, b, c, d vs 1, 2, 3, 4) in question text and matching combination choices in options A, B, C, D (e.g. "(a)-2, (b)-1, (c)-4, (d)-3").
-      c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%).
+      b) "Match the Following / பொருத்துக" Questions (~25%): 
+         CRITICAL REQUIREMENT: BOTH the LEFT COLUMN (a, b, c, d) AND the RIGHT COLUMN (1, 2, 3, 4) MUST BE INCLUDED in the question text. NEVER omit either side! Both left and right items must have actual descriptive text. The 4 options MUST be matching code combinations (e.g. "(a)-2, (b)-1, (c)-4, (d)-3").
+      c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%): Both Assertion (A) and Reason (R) must be present on separate lines.
       d) "Find the Incorrect Pair / Statement (தவறான கூற்று / தவறான இணை எது?)" (~10%): Identify the wrongly matched pair or false statement among options.
-      e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): Arrange historical events, numbers, or facts in chronological/sequence order.
-34. MANDATORY QUESTION FORMATTING INSTRUCTIONS (CRITICAL FOR NEWLINES):
-    - For "Match the following (பொருத்துக)", list items (a), (b), (c), (d) on SEPARATE NEW LINES using \n.
-      Example: "பொருத்துக:\n(a) பரணி — 1. யானைப்படை\n(b) தூது — 2. செய்தி\n(c) உலா — 3. வீதி உலா\n(d) குறவஞ்சி — 4. குறத்தி"
+      e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): Arrange historical events, numbers, or facts in chronological order with all 4 items (1), (2), (3), (4) listed.
+34. MANDATORY QUESTION FORMATTING INSTRUCTIONS (CRITICAL FOR NEWLINES & BOTH SIDES):
+    - For "Match the following (பொருத்துக)", list ALL 4 items (a), (b), (c), (d) on SEPARATE NEW LINES using \n. 
+      EACH LINE MUST CONTAIN BOTH the Left item AND the Right item separated by " — "!
+      DO NOT GENERATE ONLY LEFT OR ONLY RIGHT! BOTH SIDES ARE STRICTLY MANDATORY!
+      Tamil Example:
+      "கீழ்க்காண்பனவற்றைச் சரியாகப் பொருத்துக:\n(a) பரணி — 1. யானைப்படையை வென்றவர் மீது பாடுவது\n(b) தூது — 2. தூது செல்லும் இலக்கியம்\n(c) உலா — 3. வீதியில் உலா வரும் தலைவனைக் கண்டு பாடுவது\n(d) குறவஞ்சி — 4. 96 வகைச் சிற்றிலக்கியங்களில் ஒன்று"
+      English Example:
+      "Match the following correctly:\n(a) Parani — 1. Literature sung on victory over elephants\n(b) Thoothu — 2. Envoy literature\n(c) Ula — 3. Literature on leader's street procession\n(d) Kuravanji — 4. One of the 96 minor literature types"
     - For "Statement & Reason (கூற்று மற்றும் காரணம்)", place Assertion and Reason on SEPARATE NEW LINES using \n.
       Example: "கூற்று (A): சிலப்பதிகாரமும் மணிமேகலையும் இரட்டைக் காப்பியங்கள்.\nகாரணம் (R): இரண்டும் ஒரே காலக்கட்டத்தில் தோன்றியவை."
     - For "Chronological Order (காலவரிசைப்படுத்துக)", place numbered items on SEPARATE NEW LINES using \n.
@@ -798,13 +885,19 @@ STRICT QUALITY RULES (MUST FOLLOW)
 32. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
     - Must include a rich mix of all 5 authentic TNPSC exam formats:
       a) Standard Direct MCQs (~40%)
-      b) "Match the Following / பொருத்துக" Questions (~25%): List 4 paired items (a, b, c, d vs 1, 2, 3, 4) in question text and matching combination choices in options A, B, C, D (e.g. "(a)-2, (b)-1, (c)-4, (d)-3").
-      c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%).
+      b) "Match the Following / பொருத்துக" Questions (~25%): 
+         CRITICAL REQUIREMENT: BOTH the LEFT COLUMN (a, b, c, d) AND the RIGHT COLUMN (1, 2, 3, 4) MUST BE INCLUDED in the question text. NEVER omit either side! Both left and right items must have actual descriptive text. The 4 options MUST be matching code combinations (e.g. "(a)-2, (b)-1, (c)-4, (d)-3").
+      c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%): Both Assertion (A) and Reason (R) must be present on separate lines.
       d) "Find the Incorrect Pair / Statement (தவறான கூற்று / தவறான இணை எது?)" (~10%): Identify the wrongly matched pair or false statement among options.
-      e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): Arrange historical events, numbers, or facts in chronological/sequence order.
-33. MANDATORY QUESTION FORMATTING INSTRUCTIONS (CRITICAL FOR NEWLINES):
-    - For "Match the following (பொருத்துக)", list items (a), (b), (c), (d) on SEPARATE NEW LINES using \n.
-      Example: "பொருத்துக:\n(a) பரணி — 1. யானைப்படை\n(b) தூது — 2. செய்தி\n(c) உலா — 3. வீதி உலா\n(d) குறவஞ்சி — 4. குறத்தி"
+      e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): Arrange historical events, numbers, or facts in chronological order with all 4 items (1), (2), (3), (4) listed.
+33. MANDATORY QUESTION FORMATTING INSTRUCTIONS (CRITICAL FOR NEWLINES & BOTH SIDES):
+    - For "Match the following (பொருத்துக)", list ALL 4 items (a), (b), (c), (d) on SEPARATE NEW LINES using \n. 
+      EACH LINE MUST CONTAIN BOTH the Left item AND the Right item separated by " — "!
+      DO NOT GENERATE ONLY LEFT OR ONLY RIGHT! BOTH SIDES ARE STRICTLY MANDATORY!
+      Tamil Example:
+      "கீழ்க்காண்பனவற்றைச் சரியாகப் பொருத்துக:\n(a) பரணி — 1. யானைப்படையை வென்றவர் மீது பாடுவது\n(b) தூது — 2. தூது செல்லும் இலக்கியம்\n(c) உலா — 3. வீதியில் உலா வரும் தலைவனைக் கண்டு பாடுவது\n(d) குறவஞ்சி — 4. 96 வகைச் சிற்றிலக்கியங்களில் ஒன்று"
+      English Example:
+      "Match the following correctly:\n(a) Parani — 1. Literature sung on victory over elephants\n(b) Thoothu — 2. Envoy literature\n(c) Ula — 3. Literature on leader's street procession\n(d) Kuravanji — 4. One of the 96 minor literature types"
     - For "Statement & Reason (கூற்று மற்றும் காரணம்)", place Assertion and Reason on SEPARATE NEW LINES using \n.
       Example: "கூற்று (A): சிலப்பதிகாரமும் மணிமேகலையும் இரட்டைக் காப்பியங்கள்.\nகாரணம் (R): இரண்டும் ஒரே காலக்கட்டத்தில் தோன்றியவை."
     - For "Chronological Order (காலவரிசைப்படுத்துக)", place numbered items on SEPARATE NEW LINES using \n.
@@ -1049,6 +1142,11 @@ STRICT LANGUAGE REQUIREMENTS (CRITICAL):
         '''
 $specializedPrompt
 $avoidPrompt
+CRITICAL MATCH THE FOLLOWING RULE:
+If generating a Match the following (பொருத்துக) question, BOTH the Left column (a, b, c, d) and Right column (1, 2, 3, 4) MUST BE INCLUDED in every line:
+Example: "பொருத்துக:\n(a) Left 1 — 1. Right 1\n(b) Left 2 — 2. Right 2\n(c) Left 3 — 3. Right 3\n(d) Left 4 — 4. Right 4"
+NEVER omit the right side definitions or the left side items!
+
 Strictly use this BILINGUAL JSON format: 
 [{"question_en": "English question text", 
 "question_ta": "தமிழ் வினா உரை",
@@ -1161,6 +1259,10 @@ STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 5. For Math/Aptitude questions, you MUST solve them step-by-step internally.
 6. The explanation MUST show the formula and clear calculation steps in both languages.
 7. Ensure the calculated result EXACTLY matches the correct option.
+8. CRITICAL MATCH THE FOLLOWING RULE:
+   If generating a Match the following (பொருத்துக) question, BOTH the Left column (a, b, c, d) and Right column (1, 2, 3, 4) MUST BE INCLUDED in every line:
+   Example: "பொருத்துக:\n(a) Left 1 — 1. Right 1\n(b) Left 2 — 2. Right 2\n(c) Left 3 — 3. Right 3\n(d) Left 4 — 4. Right 4"
+   NEVER omit the right side definitions or the left side items!
 Strictly use this BILINGUAL JSON format: 
 [{"question_en": "English question text", 
 "question_ta": "தமிழ் வினா உரை",
@@ -1322,6 +1424,11 @@ STRICT LANGUAGE REQUIREMENTS (CRITICAL):
         '''
 $specializedPrompt
 $avoidPrompt
+CRITICAL MATCH THE FOLLOWING RULE:
+If generating a Match the following (பொருத்துக) question, BOTH the Left column (a, b, c, d) and Right column (1, 2, 3, 4) MUST BE INCLUDED in every line:
+Example: "பொருத்துக:\n(a) Left 1 — 1. Right 1\n(b) Left 2 — 2. Right 2\n(c) Left 3 — 3. Right 3\n(d) Left 4 — 4. Right 4"
+NEVER omit the right side definitions or the left side items!
+
 Strictly use this BILINGUAL JSON format: 
 [{"question_en": "English question text", 
 "question_ta": "தமிழ் வினா உரை",
@@ -1643,10 +1750,11 @@ STRICT QUALITY RULES (MUST FOLLOW):
 7. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
    - Include a rich mix of all 5 authentic TNPSC exam formats:
      a) Direct MCQs (~40%)
-     b) "Match the Following / பொருத்துக" Questions (~25%): List 4 paired items (a, b, c, d vs 1, 2, 3, 4) in question text and matching combination choices in options A, B, C, D (e.g. "(a)-2, (b)-1, (c)-4, (d)-3").
-     c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%).
+     b) "Match the Following / பொருத்துக" Questions (~25%): 
+        CRITICAL: BOTH the Left (a, b, c, d) AND Right (1, 2, 3, 4) items MUST be included in the question text with full descriptions on separate lines using \n (e.g. "(a) Item — 1. Description"). NEVER omit either side! Options MUST be matching combinations like "(a)-2, (b)-1, (c)-4, (d)-3".
+     c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%): Assertion and Reason on separate lines using \n.
      d) "Find the Incorrect Pair / Statement (தவறான கூற்று / தவறான இணை எது?)" (~10%).
-     e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%).
+     e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): (1), (2), (3), (4) on separate lines using \n.
 8. Correct index MUST match the answer.
 9. Explanation must be detailed in both languages with official background context.
 

@@ -113,14 +113,14 @@ class Question {
 
     return Question(
       id: map['id'],
-      question: finalQ,
+      question: formatQuestionText(finalQ),
       options: finalOpts,
       correctOptionIndex: map['correctOptionIndex'] ?? 0,
       explanation: finalEx,
       subject: map['subject'],
       quizType: map['quiz_type'],
-      questionEn: qEn,
-      questionTa: qTa,
+      questionEn: qEn != null ? formatQuestionText(qEn) : null,
+      questionTa: qTa != null ? formatQuestionText(qTa) : null,
       optionsEn: optsEn,
       optionsTa: optsTa,
       explanationEn: eEn,
@@ -136,17 +136,44 @@ class Question {
 
     String text = rawText.replaceAll('\\n', '\n');
 
-    // 1. Add newline before items (a), (b), (c), (d)
-    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(\([a-d]\))', caseSensitive: false), (m) => '\n${m[1]}');
+    // 1. Add newline before items (a), (b), (c), (d) or (அ), (ஆ), (இ), (ஈ) or a), b), etc.
+    text = text.replaceAllMapped(
+      RegExp(r'(?<!\n)\s*(\([a-dA-D]\)|\([அஆஇஈ]\)|\b[a-dA-D]\)|\b[அஆஇஈ]\))'),
+      (m) => '\n${m[1]}',
+    );
 
-    // 2. Add newline before numbered items (1), (2), (3), (4)
-    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(\([1-9]\))'), (m) => '\n${m[1]}');
+    // 2. Add newline before numbered items (1), (2), (3), (4) or (i), (ii), etc.
+    text = text.replaceAllMapped(
+      RegExp(r'(?<!\n)\s*(\([1-9]\)|\([iIvVxX]+\))'),
+      (m) => '\n${m[1]}',
+    );
 
-    // 3. Add newline before Assertion / Reason / கூற்று / காரணம் headers
-    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(காரணம்\s*\([R|r]\)\s*:?)', caseSensitive: false), (m) => '\n${m[1]}');
-    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(Reason\s*\([R|r]\)\s*:?)', caseSensitive: false), (m) => '\n${m[1]}');
-    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(கூற்று\s*\([A|a]\)\s*:?)', caseSensitive: false), (m) => '\n${m[1]}');
-    text = text.replaceAllMapped(RegExp(r'(?<!\n)\s*(Assertion\s*\([A|a]\)\s*:?)', caseSensitive: false), (m) => '\n${m[1]}');
+    // 3. Add newline before List I, List II / பட்டியல் I, பட்டியல் II
+    text = text.replaceAllMapped(
+      RegExp(r'(?<!\n)\s*(பட்டியல்\s*(?:I|II|1|2)|List\s*(?:I|II|1|2))', caseSensitive: false),
+      (m) => '\n${m[1]}',
+    );
+
+    // 4. Add newline before Assertion / Reason / கூற்று / காரணம் headers
+    text = text.replaceAllMapped(
+      RegExp(r'(?<!\n)\s*(காரணம்\s*\([R|r]\)\s*:?|காரணம்\s*:)', caseSensitive: false),
+      (m) => '\n${m[1]}',
+    );
+    text = text.replaceAllMapped(
+      RegExp(r'(?<!\n)\s*(Reason\s*\([R|r]\)\s*:?|Reason\s*:)', caseSensitive: false),
+      (m) => '\n${m[1]}',
+    );
+    text = text.replaceAllMapped(
+      RegExp(r'(?<!\n)\s*(கூற்று\s*\([A|a]\)\s*:?|கூற்று\s*:)', caseSensitive: false),
+      (m) => '\n${m[1]}',
+    );
+    text = text.replaceAllMapped(
+      RegExp(r'(?<!\n)\s*(Assertion\s*\([A|a]\)\s*:?|Assertion\s*:)', caseSensitive: false),
+      (m) => '\n${m[1]}',
+    );
+
+    // 5. Clean up redundant multiple newlines (max 2 consecutive newlines)
+    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
 
     return text.trim();
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/question.dart';
 import '../utils/app_theme.dart';
 import '../utils/app_language.dart';
 
@@ -40,6 +41,9 @@ class BilingualText extends StatelessWidget {
     // Safety check: if one is empty but the other isn't, use the available one for both to avoid empty lines
     if (displayEn.isEmpty && displayTa.isNotEmpty) displayEn = displayTa;
     if (displayTa.isEmpty && displayEn.isNotEmpty) displayTa = displayEn;
+
+    displayEn = Question.formatQuestionText(displayEn);
+    displayTa = Question.formatQuestionText(displayTa);
 
     // 1. If only one language is requested and available
     if (!showBoth) {
