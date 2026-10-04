@@ -123,6 +123,24 @@
       <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/windows_file_picker/.dart_tool" />
       <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/windows_file_picker/.pub" />
       <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/windows_file_picker/build" />
+      <excludeFolder url="file://$MODULE_DIR$/temp_flutter_app/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/temp_flutter_app/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/temp_flutter_app/build" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/linux/flutter/ephemeral/.plugin_symlinks/file_picker/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/linux/flutter/ephemeral/.plugin_symlinks/file_picker/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/linux/flutter/ephemeral/.plugin_symlinks/file_picker/build" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/linux/flutter/ephemeral/.plugin_symlinks/file_picker/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/linux/flutter/ephemeral/.plugin_symlinks/file_picker/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/linux/flutter/ephemeral/.plugin_symlinks/file_picker/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/file_picker/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/file_picker/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/file_picker/build" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/file_picker/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/file_picker/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/file_picker/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/flutter_secure_storage_windows/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/flutter_secure_storage_windows/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/tnpsc_group_book/windows/flutter/ephemeral/.plugin_symlinks/flutter_secure_storage_windows/example/build" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

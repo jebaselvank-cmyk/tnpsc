@@ -1,3 +1,18 @@
+try {
+    val processEnvironment = Class.forName("java.lang.ProcessEnvironment")
+    val theEnvironmentField = processEnvironment.getDeclaredField("theEnvironment")
+    theEnvironmentField.isAccessible = true
+    val map = theEnvironmentField.get(null) as MutableMap<Any, Any>
+    map.remove("ANDROID_PREFS_ROOT")
+
+    val theCaseInsensitiveEnvironmentField = processEnvironment.getDeclaredField("theCaseInsensitiveEnvironment")
+    theCaseInsensitiveEnvironmentField.isAccessible = true
+    val ciMap = theCaseInsensitiveEnvironmentField.get(null) as MutableMap<Any, Any>
+    ciMap.remove("ANDROID_PREFS_ROOT")
+} catch (e: Exception) {
+    // ignore
+}
+
 pluginManagement {
     val flutterSdkPath =
         run {
@@ -19,7 +34,7 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "9.4.1" apply false
+    id("com.android.application") version "9.0.1" apply false
     // START: FlutterFire Configuration
     id("com.google.gms.google-services") version "4.4.2" apply false
     // END: FlutterFire Configuration

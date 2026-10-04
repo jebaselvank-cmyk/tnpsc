@@ -425,14 +425,19 @@ function renderCalendarUI() {
     `;
 }
 
+function formatOptionText(text) {
+    if (!text) return '';
+    return text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function renderQuestionUI() {
     const q = currentQuiz.questions[currentQuestionIndex];
     const container = document.getElementById('main-content');
     const questionText = currentLang === 'ta' ? (q.q_ta || q.question) : (q.q_en || q.question);
-    const optA = currentLang === 'ta' ? (q.a_ta || q.optiona) : (q.a_en || q.optiona);
-    const optB = currentLang === 'ta' ? (q.b_ta || q.optionb) : (q.b_en || q.optionb);
-    const optC = currentLang === 'ta' ? (q.c_ta || q.optionc) : (q.c_en || q.optionc);
-    const optD = currentLang === 'ta' ? (q.d_ta || q.optiond) : (q.d_en || q.optiond);
+    const optA = formatOptionText(currentLang === 'ta' ? (q.a_ta || q.optiona) : (q.a_en || q.optiona));
+    const optB = formatOptionText(currentLang === 'ta' ? (q.b_ta || q.optionb) : (q.b_en || q.optionb));
+    const optC = formatOptionText(currentLang === 'ta' ? (q.c_ta || q.optionc) : (q.c_en || q.optionc));
+    const optD = formatOptionText(currentLang === 'ta' ? (q.d_ta || q.optiond) : (q.d_en || q.optiond));
     const expText = currentLang === 'ta' ? (q.exp_ta || q.explanation) : (q.exp_en || q.explanation);
 
     container.innerHTML = `

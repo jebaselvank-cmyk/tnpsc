@@ -192,12 +192,13 @@ class Question {
 
   List<String> get displayOptions {
     final lang = AppLanguage.languageNotifier.value;
+    List<String> rawOpts = options;
     if (lang == 'ta') {
-      return optionsTa ?? options;
+      rawOpts = optionsTa ?? options;
     } else if (lang == 'en') {
-      return optionsEn ?? options;
+      rawOpts = optionsEn ?? options;
     }
-    return options; // Default to combined
+    return rawOpts.map((opt) => opt.replaceAll(RegExp(r'[\r\n]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim()).toList();
   }
 
   String get displayExplanation {
@@ -220,9 +221,9 @@ class Question {
 
   List<String> get bilingualOptions {
     if (optionsEn != null && optionsTa != null) {
-      return List.generate(optionsEn!.length, (i) => "${optionsEn![i]} / ${optionsTa![i]}");
+      return List.generate(optionsEn!.length, (i) => "${optionsEn![i]} / ${optionsTa![i]}".replaceAll(RegExp(r'[\r\n]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim());
     }
-    return options;
+    return options.map((opt) => opt.replaceAll(RegExp(r'[\r\n]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim()).toList();
   }
 
   String get bilingualExplanation => (explanationEn != null && explanationTa != null)

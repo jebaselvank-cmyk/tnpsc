@@ -35,6 +35,18 @@ service cloud.firestore {
       allow read: if true;
       allow write, delete: if isAdmin();
     }
+    match /admin_config/{docId} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+    match /current_affairs_points/{docId} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+    match /system/{docId} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
 
     // Room tests – realtime, listener only while active
     match /roomTests/rooms/{roomCode} {

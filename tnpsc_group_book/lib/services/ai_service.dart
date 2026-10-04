@@ -180,7 +180,7 @@ class AiService {
     if (_cachedPreferredModels == null) {
       await _fetchRemoteConfig();
     }
-    
+
     // AI_DEBUG: Whitelist of stable models that are known to work
     const whitelist = [
       'gemini-3.6-flash',
@@ -198,7 +198,7 @@ class AiService {
       List<String> filtered = _cachedPreferredModels!
           .where((m) => whitelist.contains(m.toLowerCase().trim()))
           .toList();
-      
+
       if (filtered.isNotEmpty) return filtered;
     }
 
@@ -222,12 +222,12 @@ class AiService {
       String sKey = sticky['key'] ?? "";
       String sModel = sticky['model'] ?? "";
       String sVersion = sticky['version'] ?? "";
-      
+
       if (sKey.isNotEmpty && sModel.isNotEmpty && sVersion.isNotEmpty) {
         AppLog.d("AI_DEBUG: Using Sticky Config - Model: $sModel, Version: $sVersion");
         final res = await _tryModelRequest(sKey, sModel, sVersion, prompt, base64Pdf: base64Pdf);
         if (res != null) return res;
-        
+
         AppLog.d("AI_DEBUG: Sticky Config failed. Clearing and proceeding to discovery.");
         await HiveService.clearStickyAiConfig();
       }
@@ -309,13 +309,13 @@ class AiService {
   }
 
   static Future<String?> _tryModelRequest(
-    String apiKey,
-    String modelName,
-    String version,
-    String prompt, {
-    String? base64Pdf,
-    Function? onKeyInvalid,
-  }) async {
+      String apiKey,
+      String modelName,
+      String version,
+      String prompt, {
+        String? base64Pdf,
+        Function? onKeyInvalid,
+      }) async {
     int retries = 0;
     const int maxRetries = 2;
 
@@ -339,41 +339,41 @@ class AiService {
 
         final response = await http
             .post(
-              url,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'contents': [
-                  {
-                    'parts': parts,
-                  },
-                ],
-                'safetySettings': [
-                  {
-                    'category': 'HARM_CATEGORY_HARASSMENT',
-                    'threshold': 'BLOCK_NONE',
-                  },
-                  {
-                    'category': 'HARM_CATEGORY_HATE_SPEECH',
-                    'threshold': 'BLOCK_NONE',
-                  },
-                  {
-                    'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-                    'threshold': 'BLOCK_NONE',
-                  },
-                  {
-                    'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
-                    'threshold': 'BLOCK_NONE',
-                  },
-                ],
-                'generationConfig': {
-                  'responseMimeType': 'application/json',
-                  'temperature': 0.2,
-                  'topP': 0.85,
-                  'topK': 20,
-                  'maxOutputTokens': 8192,
-                },
-              }),
-            )
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'contents': [
+              {
+                'parts': parts,
+              },
+            ],
+            'safetySettings': [
+              {
+                'category': 'HARM_CATEGORY_HARASSMENT',
+                'threshold': 'BLOCK_NONE',
+              },
+              {
+                'category': 'HARM_CATEGORY_HATE_SPEECH',
+                'threshold': 'BLOCK_NONE',
+              },
+              {
+                'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                'threshold': 'BLOCK_NONE',
+              },
+              {
+                'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+                'threshold': 'BLOCK_NONE',
+              },
+            ],
+            'generationConfig': {
+              'responseMimeType': 'application/json',
+              'temperature': 0.4,
+              'topP': 0.85,
+              'topK': 20,
+              'maxOutputTokens': 8192,
+            },
+          }),
+        )
             .timeout(const Duration(seconds: 90));
 
         if (response.statusCode == 200) {
@@ -414,7 +414,7 @@ class AiService {
           AppLog.d("AI_DEBUG: Rate limit reached (429). Retrying after backoff...");
           await Future.delayed(Duration(seconds: 2 * (retries + 1)));
           retries++;
-          continue; 
+          continue;
         } else if (response.statusCode == 403) {
           AppLog.d("AI_DEBUG: Key invalid or permission denied (403). Switching key...");
           if (onKeyInvalid != null) onKeyInvalid();
@@ -423,7 +423,7 @@ class AiService {
           AppLog.d("AI_DEBUG: Server error (${response.statusCode}). Retrying...");
           await Future.delayed(Duration(seconds: 1 * (retries + 1)));
           retries++;
-          continue; 
+          continue;
         } else {
           AppLog.d("AI_DEBUG: REST FAIL - Status: ${response.statusCode}");
           return null; // Try next model
@@ -446,7 +446,7 @@ class AiService {
           .orderBy('createdAt', descending: true)
           .limit(20) // Limit to last 20 quizzes to avoid prompt bloat
           .get();
-      
+
       for (var doc in docs.docs) {
         List qs = doc.get('questions') ?? [];
         // Take a few representative questions from each quiz
@@ -462,8 +462,23 @@ class AiService {
     return context;
   }
 
-  static bool _validateQuestion(Map<String, dynamic> q, {bool isExamPaper = false}) {
+  static bool _validateQuestion(Map<String, dynamic> q, {bool isExamPaper = false, DateTime? generationDate}) {
     try {
+      // Validate event_date <= generationDate if present
+      final eventDateStr = q['event_date']?.toString().trim();
+      if (eventDateStr != null && eventDateStr.isNotEmpty && !isExamPaper) {
+        try {
+          DateTime evDate = DateTime.parse(eventDateStr);
+          DateTime genDate = generationDate ?? AppDate.getISTNow();
+          DateTime evDateOnly = DateTime(evDate.year, evDate.month, evDate.day);
+          DateTime genDateOnly = DateTime(genDate.year, genDate.month, genDate.day);
+          if (evDateOnly.isAfter(genDateOnly)) {
+            AppLog.d("AI_DEBUG: Rejected Question - event_date ($eventDateStr) is after generation date ($genDateOnly)");
+            return false;
+          }
+        } catch (_) {}
+      }
+
       final qEn = q['question_en']?.toString().trim() ?? '';
       final qTa = q['question_ta']?.toString().trim() ?? '';
       if (qEn.isEmpty && qTa.isEmpty) return false;
@@ -540,12 +555,43 @@ class AiService {
         if (!_validateCurrentAffairsYear(qEn, qTa)) {
           return false;
         }
+
+        // Check current affairs strict rules (NEP 2020, Vague entities, etc.)
+        if (!_passesCurrentAffairsRules(qEn, qTa, expEn, expTa)) {
+          return false;
+        }
       }
 
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  static bool _passesCurrentAffairsRules(String qEn, String qTa, String expEn, String expTa) {
+    final combined = '$qEn $qTa $expEn $expTa'.toLowerCase();
+
+    // 1. NEP Rule check: Must not have NEP 2026 or National Education Policy 2026
+    if (combined.contains('nep 2026') || combined.contains('national education policy 2026') || combined.contains('கல்விக் கொள்கை 2026')) {
+      return false;
+    }
+
+    // 2. Vague Entities Check: Reject vague phrases without specific names
+    final vaguePhrasesEn = [
+      'a prominent scientist',
+      'a renowned author',
+      'a new wildlife sanctuary',
+      'a prominent indian scientist',
+      'a renowned tamil author',
+      'a prestigious national literary award'
+    ];
+    for (var vp in vaguePhrasesEn) {
+      if (combined.contains(vp)) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /// Ensures that the explanation does NOT contradict the correctOptionIndex.
@@ -731,12 +777,12 @@ class AiService {
     return true;
   }
 
-  static List<dynamic> _filterValidQuestions(List<dynamic> questions, {bool isExamPaper = false}) {
+  static List<dynamic> _filterValidQuestions(List<dynamic> questions, {bool isExamPaper = false, DateTime? generationDate}) {
     List<dynamic> validList = [];
     for (var item in questions) {
       if (item is Map) {
         final map = Map<String, dynamic>.from(item);
-        if (!_validateQuestion(map, isExamPaper: isExamPaper)) continue;
+        if (!_validateQuestion(map, isExamPaper: isExamPaper, generationDate: generationDate)) continue;
 
         // Auto-format question text for newlines on Match, Statement, and Sequence questions
         if (map['question_ta'] != null) {
@@ -755,9 +801,10 @@ class AiService {
   }
 
   static Future<bool> generateAndSaveDailyQuiz(DateTime date) async {
-    // If we're generating for 'today' or 'tomorrow', we should ensure the input date is interpreted correctly.
-    // To be safe, we format the passed date object using en_US.
-    final dateStr = AppDate.format(date);
+    final generationDate = DateTime.now();
+    final generationDateStr = AppDate.format(generationDate);
+    final quizDateStr = AppDate.format(date);
+    final dateStr = quizDateStr;
 
     // Get topics from last 30 days to avoid repeats
     String recentContext = await _getRecentQuizContext('quizzes', 30);
@@ -769,18 +816,37 @@ class AiService {
 
     final avoidPrompt = recentContext.isNotEmpty
         ? """
-STRICTLY DO NOT create questions that are identical, very similar, or based on these recent questions/topics from the last 30 days:
+==================================================
+🚫 PREVIOUSLY USED QUESTIONS / EVENTS / TOPICS
+==================================================
+
+The following questions/topics were already used in recent quizzes:
 $recentContext
 
-Rules:
-- Do NOT repeat the same question.
-- Do NOT repeat the same answer choices with different wording.
-- Do NOT repeat the same concept unless it is from a completely different chapter.
+STRICT DUPLICATE PREVENTION:
+1. NEVER reuse any question from the above list.
+2. NEVER reuse the same underlying EVENT, FACT, NEWS, SCHEME, PERSON, ORGANIZATION, AWARD, SPORTS TOURNAMENT, GOVERNMENT ANNOUNCEMENT, SCIENTIFIC DISCOVERY, or TOPIC.
+3. A question is considered DUPLICATE even if the wording, language, or question format is different (e.g. changing Direct MCQ to Assertion/Reason or Match the Following using the same underlying event is strictly FORBIDDEN).
+4. If a previous question is about a government scheme, sports tournament, policy, or current-affairs event, do not generate another question about that same scheme/tournament/event.
+5. Each generated question MUST represent a genuinely different fact/event/topic identity (`event_id`).
+6. If there are not enough verified NEW topics available, generate fewer questions instead of repeating an old topic. NEVER invent a new event just to reach the count.
+==================================================
 """
         : "";
 
     final commonRules = """
 STRICT QUALITY RULES (MUST FOLLOW)
+
+GENERATION DATE: $generationDateStr
+QUIZ DISPLAY DATE: $quizDateStr
+
+CRITICAL DATE RULE:
+The GENERATION DATE ($generationDateStr) is the ONLY date that determines whether a current-affairs event is eligible.
+A current-affairs event is eligible ONLY if:
+event_date <= GENERATION_DATE
+Never use QUIZ DISPLAY DATE ($quizDateStr) to decide whether an event has happened.
+Never generate an event that occurs after GENERATION DATE.
+If an event is scheduled for a future date, do NOT use it as a completed current-affairs event.
 
 1. Return ONLY valid JSON.
 2. No Markdown.
@@ -859,6 +925,41 @@ STRICT QUALITY RULES (MUST FOLLOW)
     - Example: '2024-ஆம் ஆண்டிற்கான தாதாசாகேப் பால்கே விருதை வென்றவர் யார்? / Who received the Dadasaheb Phalke Award for the year 2024?'
     - Example: '2024 பாரிஸ் ஒலிம்பிக்கில் தங்கம் வென்றவர் யார்? / Who won gold at the 2024 Paris Olympics?'
     - NEVER generate an award, sports, or event question without the year or date. Without the year, questions are ambiguous because awards and sports tournaments occur annually.
+36. STRICTLY NO FUTURE-DATED OR UNVERIFIED EVENTS (CRITICAL):
+    - NEVER generate questions about sports tournaments, awards, elections, summits, or current affairs events whose dates are in the future or have not yet concluded/happened relative to the current generation date.
+    - All current affairs and event-based questions must reference past, completed, and verified events up to the present date.
+    - Never assume, predict, or project winners, outcomes, or future event dates.
+37. TN GOVT SCHEMES & INITIATIVES ACCURACY & NOMENCLATURE (CRITICAL):
+    - Never invent, alter, or confuse Tamil Nadu government scheme/initiative names (e.g. do not confuse official titles like "இளம் தளிர் இல்லம்" with general child welfare or institutional care homes).
+    - Verify exact scheme names, exact target beneficiaries (e.g. adolescent school girls for child marriage prevention vs orphaned children), objectives, and launch details from official Tamil Nadu DIPR press releases or Government Orders.
+    - Zero tolerance for nomenclature or objective hallucination regarding government welfare programs.
+38. SCIENTIFIC & SPACE MISSIONS PRECISION (CRITICAL):
+    - For questions regarding space missions (ISRO, NASA, etc.), orbital parameters, landing sites (e.g. Chandrayaan-4 landing site around 84°–86° South latitude), payload specifications, or scientific terms, ensure absolute geographical and technical precision.
+    - Use exact terms (e.g., "தென் துருவப் பகுதி / South Polar Region" rather than just "தென் துருவம் / South Pole" when referring to specific landing coordinate zones).
+39. ENTITY & POLICY PRECISION (CRITICAL):
+    - Provide exact person, event, scheme, award, and institution names. Avoid vague phrases like "an eminent scientist" or "a new wildlife sanctuary".
+    - For educational policy references, always use "National Education Policy (NEP) 2020", never use speculative years like NEP 2026 unless officially established.
+40. CORRECT OPTION RANDOM DISTRIBUTION (CRITICAL):
+    - Ensure `correctOptionIndex` (0, 1, 2, 3) is randomly and evenly distributed across generated questions. Never make option index 0 the correct answer for every question.
+41. STRICT CURRENT-AFFAIRS & DATE VALIDATION RULES (CRITICAL):
+    - Never generate a future event as a completed event.
+    - event_date MUST be <= quiz_generation_date ($generationDateStr).
+    - If an event is scheduled for a future date, DO NOT create a question describing it as held, launched, won, concluded, announced, inaugurated, awarded, allocated, or completed.
+    - Every current-affairs question MUST be supported by a verifiable official source (PIB, GoI ministries, Tamil Nadu Government, ISRO, CMRL, official sports federations/tournament websites).
+    - Never invent: awards, competitions, schemes, government announcements, funding allocations, winners, summits, projects, appointments.
+    - Avoid vague entities: "an eminent scientist", "a renowned author", "a new wildlife sanctuary", "a major event". Use exact names: person_name, event_name, award_name, organization_name, location, event_date.
+    - National Education Policy must be referred to as "National Education Policy 2020 (NEP 2020)" unless an official source explicitly establishes otherwise. Never generate "NEP 2026".
+    - If the fact cannot be verified, REMOVE the question. Never guess or fill missing details.
+42. OPTION UNIQUENESS & SAME-QUIZ DEDUPLICATION (CRITICAL):
+    - Options must represent four genuinely different entities or values. Do NOT treat spelling variations, abbreviations, initials, punctuation differences, or alternate names of the SAME entity as different options (e.g., "P. V. Sindhu" and "PV Sindhu" are identical and forbidden).
+    - SAME-QUIZ EVENT DEDUPLICATION: Do not reuse the same underlying event, scheme, tournament, or topic across questions in the same quiz.
+    - Every question MUST include:
+      * "event_id": "unique_snake_case_id"
+      * "topic_key": "category_key"
+      * "event_name": "exact name"
+      * "event_date": "YYYY-MM-DD"
+      * "source_name": "PIB / TN Gov / ISRO / etc."
+      * "source_url": "https://..."
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?
@@ -883,7 +984,13 @@ Output Format:
     ],
     "correctOptionIndex":0,
     "explanation_en":"...",
-    "explanation_ta":"..."
+    "explanation_ta":"...",
+    "event_id":"...",
+    "topic_key":"...",
+    "event_name":"...",
+    "event_date":"YYYY-MM-DD",
+    "source_name":"...",
+    "source_url":"..."
   }
 ]
 
@@ -892,7 +999,7 @@ Return ONLY the final verified JSON array.
 
     // Prompt definitions ------------------------------------------------
     final promptTamil = """
-Generate exactly 10 UNIQUE TNPSC General Language MCQs. 
+Generate up to 10 UNIQUE TNPSC General Language MCQs (Target: 10. Quality and uniqueness are more important than count. If fewer genuinely new and verified questions are available, return fewer. NEVER repeat an old question/event/topic merely to reach the target).
 Focus primarily on these 3 categories for today:
 $focusTopics
 
@@ -906,7 +1013,7 @@ $commonRules
 """;
 
     final promptGS = """
-Generate exactly 6 UNIQUE TNPSC General Studies MCQs.
+Generate up to 6 UNIQUE TNPSC General Studies MCQs (Target: 6. Quality and uniqueness are more important than count. If fewer genuinely new and verified questions are available, return fewer. NEVER repeat an old question/event/topic merely to reach the target).
 Focus primarily on these categories for today:
 $focusGS
 
@@ -921,7 +1028,7 @@ $commonRules
 """;
 
     final promptAptitude = """
-Generate exactly 4 UNIQUE TNPSC Aptitude & Mental Ability MCQs.
+Generate up to 4 UNIQUE TNPSC Aptitude & Mental Ability MCQs (Target: 4. Quality and uniqueness are more important than count. If fewer genuinely new questions are available, return fewer. NEVER repeat an old question or calculation pattern).
 Focus primarily on these categories for today:
 $focusAptitude
 
@@ -943,16 +1050,16 @@ $commonRules
 
     // Helper to fetch questions and tag them with a quiz_type
     Future<void> fetchAndTag(
-      String prompt,
-      String quizType,
-      int expectedCount,
-    ) async {
+        String prompt,
+        String quizType,
+        int expectedCount,
+        ) async {
       final res = await _generateWithFallback(prompt);
       if (res != null) {
         try {
           // Note: _generateWithFallback already trims and handles code blocks
           List q = jsonDecode(res);
-          List<dynamic> validQ = _filterValidQuestions(q);
+          List<dynamic> validQ = _filterValidQuestions(q, generationDate: generationDate);
 
           // Validation: Trim if more, fail if less
           if (validQ.length > expectedCount) validQ = validQ.sublist(0, expectedCount);
@@ -1111,6 +1218,16 @@ STRICT QUALITY RULES (MUST FOLLOW)
     - Example: '2024-ஆம் ஆண்டிற்கான தாதாசாகேப் பால்கே விருதை வென்றவர் யார்? / Who received the Dadasaheb Phalke Award for the year 2024?'
     - Example: '2024 பாரிஸ் ஒலிம்பிக்கில் தங்கம் வென்றவர் யார்? / Who won gold at the 2024 Paris Olympics?'
     - NEVER generate an award, sports, or event question without the year or date.
+35. STRICTLY NO FUTURE-DATED OR UNVERIFIED EVENTS (CRITICAL):
+    - NEVER generate questions about sports tournaments, awards, elections, summits, or current affairs events whose dates are in the future or have not yet concluded/happened relative to the current generation date.
+    - All current affairs and event-based questions must reference past, completed, and verified events up to the present date.
+    - Never assume, predict, or project winners, outcomes, or future event dates.
+37. TN GOVT SCHEMES & INITIATIVES ACCURACY (CRITICAL):
+    - Never invent, alter, or confuse Tamil Nadu government scheme names (e.g. do not confuse official schemes like "நம்ம ஊரு சூப்பரு" with unverified or fabricated names like "நம்ம ஊரு பசுமை").
+    - Verify exact scheme names, objectives, and launch details from official Tamil Nadu DIPR press releases or Government Orders.
+37. TN GOVT SCHEMES & INITIATIVES ACCURACY (CRITICAL):
+    - Never invent, alter, or confuse Tamil Nadu government scheme names (e.g. do not confuse official schemes like "நம்ம ஊரு சூப்பரு" with unverified or fabricated names like "நம்ம ஊரு பசுமை").
+    - Verify exact scheme names, objectives, and launch details from official Tamil Nadu DIPR press releases or Government Orders.
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?
@@ -1233,7 +1350,7 @@ $commonRules
     if (allQuestions.length == 50) {
       // Shuffle the final list to mix Tamil, GS, and Aptitude
       allQuestions.shuffle();
-      
+
       // Final check for 50 questions total
       final querySnapshot = await FirebaseFirestore.instance
           .collection('mock_tests')
@@ -1327,15 +1444,13 @@ CRITICAL INSTRUCTIONS:
 5. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 ''';
     } else if (subject == 'current_affairs') {
-      specializedPrompt = '''
-Generate 20 UNIQUE TNPSC Current Affairs (நடப்பு நிகழ்வுகள்) MCQs. 
-Focus on important events from the last 6 months, including Government Schemes, Awards, Sports, and Books.
-
-STRICT LANGUAGE REQUIREMENTS (CRITICAL):
-1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
-3. Ensure there are NO spelling mistakes.
-''';
+      // Current affairs MUST use the source-only pipeline.
+      // Never let this generic subject generator invent news.
+      AppLog.d(
+        "AI_DEBUG: Current affairs is disabled in generic subject generation. "
+            "Use generateAndSaveCurrentAffairsQuiz() with verified sources.",
+      );
+      return false;
     } else {
       specializedPrompt = '''
 Create 20 UNIQUE TNPSC MCQs for '$subject' (Bilingual). 
@@ -1348,7 +1463,7 @@ STRICT LANGUAGE REQUIREMENTS (CRITICAL):
     }
 
     final prompt =
-        '''
+    '''
 $specializedPrompt
 $avoidPrompt
 CRITICAL MATCH THE FOLLOWING RULE:
@@ -1391,17 +1506,17 @@ Only return the raw JSON array, no other text or markdown formatting.
 
           // 2. Prepare new questions
           List<dynamic> sanitizedNewQs = validQuestions.map((q) => {
-            ...q, 
+            ...q,
             'quiz_type': subject,
             'subject': subject,
             'createdAt': AppDate.getISTNow().toIso8601String(), // Changed from serverTimestamp to fix Array error
           }).toList();
-          
+
           // 3. Maintenance: Combine (Prepend new) and trim to latest 500
           // AI_DEBUG: Reduced pool size to 500 to stay under 1MB Firestore limit
           const int maxPoolSize = 500;
           List<dynamic> combinedQs = [...sanitizedNewQs, ...existingQs];
-          
+
           if (combinedQs.length > maxPoolSize) {
             combinedQs = combinedQs.sublist(0, maxPoolSize);
             AppLog.d("AI_DEBUG: Pool Size Management for $subject. Kept latest 500 questions.");
@@ -1425,11 +1540,11 @@ Only return the raw JSON array, no other text or markdown formatting.
   }
 
   static Future<bool> generateScheduledQuiz(
-    DateTime date,
-    String quizType, {
-    int count = 20,
-    int? setIndex,
-  }) async {
+      DateTime date,
+      String quizType, {
+        int count = 20,
+        int? setIndex,
+      }) async {
     final dateStr = AppDate.format(date);
     String subjectTitle = "";
     String syllabusPrompt = "";
@@ -1439,26 +1554,26 @@ Only return the raw JSON array, no other text or markdown formatting.
       String focusTopics = _getLanguageTopicsForDate(date, 4);
 
       subjectTitle =
-          "General Language (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
+      "General Language (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
       syllabusPrompt =
-          "Focus Categories for today:\n$focusTopics\n\nGeneral Grammar, Vocabulary, Literature, and Authors.";
+      "Focus Categories for today:\n$focusTopics\n\nGeneral Grammar, Vocabulary, Literature, and Authors.";
     } else if (quizType == 'general_studies') {
       subjectTitle =
-          "General Studies (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
+      "General Studies (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
       syllabusPrompt =
-          "General Science, Current Events, Geography, History and Culture of India, Indian Polity, Indian Economy, and Indian National Movement.";
+      "General Science, Current Events, Geography, History and Culture of India, Indian Polity, Indian Economy, and Indian National Movement.";
     } else {
       // Get Focus Topics for the scheduled quiz (Select 4 categories)
       String focusAptitude = _getAptitudeTopicsForDate(date, 4);
 
       subjectTitle =
-          "Aptitude & Mental Ability Test (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
+      "Aptitude & Mental Ability Test (SSLC Standard)${setIndex != null ? ' - Set $setIndex' : ''}";
       syllabusPrompt =
-          "Focus Categories for today:\n$focusAptitude\n\nSimplification, Percentage, HCF & LCM, Ratio, Interest, Time and Work, and Logical Reasoning.";
+      "Focus Categories for today:\n$focusAptitude\n\nSimplification, Percentage, HCF & LCM, Ratio, Interest, Time and Work, and Logical Reasoning.";
     }
 
     final prompt =
-        '''
+    '''
 Generate EXACTLY $count TNPSC MCQs for the subject '$subjectTitle' based on the syllabus: $syllabusPrompt.
 STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
@@ -1545,9 +1660,9 @@ Return only the raw JSON array of EXACTLY $count items.
   }
 
   static Future<bool> generateSubjectQuestions(
-    String subject, {
-    String? category,
-  }) async {
+      String subject, {
+        String? category,
+      }) async {
     String specializedPrompt = "";
 
     // Get topics from last 90 days to avoid repeats
@@ -1609,15 +1724,13 @@ CRITICAL INSTRUCTIONS:
 5. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
 ''';
     } else if (subject == 'current_affairs') {
-      specializedPrompt = '''
-Generate 20 UNIQUE TNPSC Current Affairs (நடப்பு நிகழ்வுகள்) MCQs. 
-Focus on important events from the last 6 months, including Government Schemes, Awards, Sports, and Books.
-
-STRICT LANGUAGE REQUIREMENTS (CRITICAL):
-1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE.
-2. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages.
-3. Ensure there are NO spelling mistakes.
-''';
+      // Current affairs MUST use the source-only pipeline.
+      // Never let this generic subject generator invent news.
+      AppLog.d(
+        "AI_DEBUG: Current affairs is disabled in generic subject generation. "
+            "Use generateAndSaveCurrentAffairsQuiz() with verified sources.",
+      );
+      return false;
     } else {
       specializedPrompt = '''
 Create 25 UNIQUE TNPSC MCQs for '$subject' (Bilingual). 
@@ -1630,7 +1743,7 @@ STRICT LANGUAGE REQUIREMENTS (CRITICAL):
     }
 
     final prompt =
-        '''
+    '''
 $specializedPrompt
 $avoidPrompt
 CRITICAL MATCH THE FOLLOWING RULE:
@@ -1700,9 +1813,9 @@ Only return the raw JSON array, no other text or markdown formatting.
   }
 
   static Future<bool> generateStudyMaterial(
-    String subject, {
-    String? category,
-  }) async {
+      String subject, {
+        String? category,
+      }) async {
     final prompt =
         "Create 25 structured TNPSC study points for '$subject'. STRICT LANGUAGE REQUIREMENTS: 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. 2. NO OTHER LANGUAGES (Hindi, etc.). 3. NO spelling mistakes. Use this BILINGUAL JSON format: [{\"id\": 1, \"ta\": \"...\", \"en\": \"...\"}]. Only return the JSON array.";
     final res = await _generateWithFallback(prompt);
@@ -1755,9 +1868,9 @@ Only return the raw JSON array, no other text or markdown formatting.
 
   // Simple chat helpers ------------------------------------------------
   static Future<String?> chatWithAppContext(
-    String message,
-    String context,
-  ) async {
+      String message,
+      String context,
+      ) async {
     final prompt = '''
 TNPSC Tutor context search: $context. Question: $message. 
 STRICT LANGUAGE REQUIREMENTS (CRITICAL):
@@ -1775,10 +1888,10 @@ STRICT LANGUAGE REQUIREMENTS (CRITICAL):
   }
 
   static Future<String> explainQuestion(
-    String question,
-    List<String> options,
-    String correctAnswer,
-  ) async {
+      String question,
+      List<String> options,
+      String correctAnswer,
+      ) async {
     final prompt =
         "Explain TNPSC question: $question. Answer: $correctAnswer. STRICT LANGUAGE REQUIREMENTS: 1. USE ONLY Pure Tamil and Pure English. NO MIXED LANGUAGE. 2. NO OTHER LANGUAGES (Hindi, etc.). 3. NO spelling mistakes. Provide bilingual explanation.";
     final res = await _generateWithFallback(prompt);
@@ -1800,7 +1913,7 @@ STRICT LANGUAGE REQUIREMENTS (CRITICAL):
 
   static Future<List<dynamic>> generateCustomQuiz(String topic) async {
     final prompt =
-        '''
+    '''
 Generate 20 TNPSC MCQs for '$topic' in both Pure Tamil and Pure English (Bilingual). 
 CRITICAL INSTRUCTIONS:
 1. Ensure the 'correctOptionIndex' (0-3) EXACTLY points to the correct answer in the 'options' list. 
@@ -1833,217 +1946,516 @@ Only return the raw JSON array, no other text or markdown formatting.
     return [];
   }
 
-  static Future<bool> generateAndSaveDailyNews(DateTime date) async {
-    final dateStr = AppDate.format(date);
-    
-    final prompt = '''
-Generate 10 important Current Affairs news items for TNPSC exams for the date $dateStr.
-Focus on Tamil Nadu events, National news, Awards, and Sports.
-
-STRICT LANGUAGE REQUIREMENTS (CRITICAL):
-1. USE ONLY Pure Tamil and Pure English.
-2. NO MIXED LANGUAGE: Do not mix English and Tamil in the same sentence.
-3. NO OTHER LANGUAGES: Strictly DO NOT include Hindi, Sanskrit, or any other languages. No Hindi words in brackets.
-4. Ensure there are NO spelling mistakes in Tamil or English.
-5. MANDATORY DATES AND YEARS: Every news item about an award, sports event, scheme, summit, or milestone MUST clearly mention the exact Date, Month, or Year when it occurred.
-
-Strictly use this BILINGUAL JSON format:
-[
-  {
-    "titleEn": "English Title",
-    "titleTa": "தமிழ் தலைப்பு",
-    "contentEn": "Detailed news content in English (2-30 concise bullet points)",
-    "contentTa": "செய்தியின் விரிவான விளக்கம் தமிழில் (2-30 முக்கியமான குறிப்புகள் - point by point)",
-    "category": "Tamil Nadu / National / International / Sports"
+  /// IMPORTANT:
+  /// Current-affairs data must come from VERIFIED Firestore source records.
+  /// This client must NOT ask the model to invent/search for news.
+  ///
+  /// Required VERIFIED source document fields in `current_affairs_points`:
+  /// verified=true, source_id, source_name, source_url, published_at,
+  /// event_date, event_id, topic_key, event_name, titleEn, titleTa,
+  /// contentEn, contentTa.
+  ///
+  /// `event_id` and `topic_key` are source-owned identities. The model is
+  /// never allowed to invent them.
+  ///
+  /// If verified source records do not exist, generation MUST fail.
+  /// Fewer questions are safer than hallucinated filler.
+  static DateTime? _parseCurrentAffairsSourceDate(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return DateTime.tryParse(value.toString());
   }
-]
-Only return the raw JSON array. No preamble, no markdown, no explanation.
-''';
 
-    final res = await _generateWithFallback(prompt);
-    if (res != null) {
-      try {
-        int start = res.indexOf('[');
-        int end = res.lastIndexOf(']');
-        if (start != -1 && end != -1) {
-          List<dynamic> newsItems = jsonDecode(res.substring(start, end + 1));
-          final db = FirebaseFirestore.instance;
-          
-          for (var item in newsItems) {
-            await db.collection('current_affairs_points').add({
-              ...item,
-              'date': dateStr,
-              'timestamp': FieldValue.serverTimestamp(),
-            });
-          }
-          return true;
+  static Future<List<Map<String, dynamic>>> _getVerifiedCurrentAffairsSources(
+      DateTime currentDate,
+      ) async {
+    final db = FirebaseFirestore.instance;
+    final currentDateStr = AppDate.format(currentDate);
+    final cutoffDate = currentDate.subtract(const Duration(days: 30));
+
+    try {
+      final snap = await db
+          .collection('current_affairs_points')
+          .limit(200)
+          .get();
+
+      final sources = <Map<String, dynamic>>[];
+
+      for (final doc in snap.docs) {
+        final d = Map<String, dynamic>.from(doc.data());
+
+        final sourceId = (d['source_id'] ?? doc.id).toString().trim();
+        final sourceName = (d['source_name'] ?? '').toString().trim();
+        final sourceUrl = (d['source_url'] ?? '').toString().trim();
+        final eventDateRaw = d['event_date'];
+        final publishedAtRaw = d['published_at'];
+        final eventName = (d['event_name'] ?? '').toString().trim();
+        final sourceEventId = (d['event_id'] ?? '').toString().trim();
+        final sourceTopicKey = (d['topic_key'] ?? '').toString().trim();
+        final titleEn = (d['titleEn'] ?? '').toString().trim();
+        final titleTa = (d['titleTa'] ?? '').toString().trim();
+        final contentEn = (d['contentEn'] ?? '').toString().trim();
+        final contentTa = (d['contentTa'] ?? '').toString().trim();
+        final isVerified = d['verified'] == true;
+
+        if (sourceId.isEmpty ||
+            sourceName.isEmpty ||
+            sourceUrl.isEmpty ||
+            eventName.isEmpty ||
+            sourceEventId.isEmpty ||
+            sourceTopicKey.isEmpty ||
+            titleEn.isEmpty ||
+            titleTa.isEmpty ||
+            contentEn.isEmpty ||
+            contentTa.isEmpty ||
+            !isVerified) {
+          continue;
         }
-      } catch (e) {
-        AppLog.d("AI_DEBUG: News Generation Parse Error: $e");
+
+        final eventDt = _parseCurrentAffairsSourceDate(eventDateRaw);
+        final publishedDt = _parseCurrentAffairsSourceDate(publishedAtRaw);
+
+        if (eventDt == null || publishedDt == null) {
+          continue;
+        }
+
+        final eventDay = DateTime(
+          eventDt.year,
+          eventDt.month,
+          eventDt.day,
+        );
+        final currentDay = DateTime(
+          currentDate.year,
+          currentDate.month,
+          currentDate.day,
+        );
+
+        if (eventDay.isAfter(currentDay) || publishedDt.isAfter(currentDate)) {
+          continue;
+        }
+
+        if (eventDay.isBefore(
+          DateTime(cutoffDate.year, cutoffDate.month, cutoffDate.day),
+        )) {
+          continue;
+        }
+
+        // Canonicalize dates/identity from Firestore. The model must never invent these.
+        d['source_id'] = sourceId;
+        d['source_name'] = sourceName;
+        d['source_url'] = sourceUrl;
+        d['event_id'] = sourceEventId;
+        d['topic_key'] = sourceTopicKey;
+        d['event_date'] = AppDate.format(eventDay);
+        d['published_at'] = publishedDt.toIso8601String();
+        d['event_name'] = eventName;
+        d['verified'] = true;
+        sources.add(d);
       }
+
+      sources.sort((a, b) {
+        final aDate =
+            DateTime.tryParse(a['event_date'].toString()) ?? DateTime(1970);
+        final bDate =
+            DateTime.tryParse(b['event_date'].toString()) ?? DateTime(1970);
+        return bDate.compareTo(aDate);
+      });
+
+      AppLog.d(
+        "AI_DEBUG: Verified CA source pool: ${sources.length} "
+            "(cutoff=${AppDate.format(cutoffDate)}, current=$currentDateStr)",
+      );
+
+      return sources;
+    } catch (e) {
+      AppLog.e("AI_DEBUG: Error loading verified CA sources", e);
+      return [];
     }
+  }
+
+  static Future<bool> generateAndSaveDailyNews(DateTime date) async {
+    // DO NOT let the model manufacture news.
+    //
+    // Populate `current_affairs_points` from a trusted source collector/admin
+    // process with the mandatory provenance fields documented above.
+    AppLog.d(
+      "AI_DEBUG: generateAndSaveDailyNews skipped. "
+          "Current affairs requires verified source records.",
+    );
     return false;
+  }
+
+  static bool _validateVerifiedCurrentAffairsQuestion(
+      Map<String, dynamic> q,
+      Map<String, Map<String, dynamic>> sourceMap,
+      Set<String> usedEventIds,
+      Set<String> usedSourceIds,
+      Set<String> usedQuestionKeys,
+      DateTime currentDate,
+      ) {
+    final sourceId = q['source_id']?.toString().trim() ?? '';
+    final eventId = q['event_id']?.toString().trim() ?? '';
+    final eventName = q['event_name']?.toString().trim() ?? '';
+    final eventDate = q['event_date']?.toString().trim() ?? '';
+    final sourceName = q['source_name']?.toString().trim() ?? '';
+    final sourceUrl = q['source_url']?.toString().trim() ?? '';
+
+    final source = sourceMap[sourceId];
+    if (source == null) return false;
+
+    // All provenance identity must exactly match the verified Firestore record.
+    if (eventId != source['event_id'].toString() ||
+        eventName != source['event_name'].toString() ||
+        eventDate != source['event_date'].toString() ||
+        sourceName != source['source_name'].toString() ||
+        sourceUrl != source['source_url'].toString()) {
+      return false;
+    }
+
+    if (usedEventIds.contains(eventId) || usedSourceIds.contains(sourceId)) {
+      return false;
+    }
+
+    final normalizedQuestion = (q['question_en']?.toString() ?? '')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim();
+    if (normalizedQuestion.isEmpty || usedQuestionKeys.contains(normalizedQuestion)) {
+      return false;
+    }
+
+    DateTime parsedEventDate;
+    try {
+      parsedEventDate = DateTime.parse(eventDate);
+    } catch (_) {
+      return false;
+    }
+
+    final eventDay = DateTime(
+      parsedEventDate.year,
+      parsedEventDate.month,
+      parsedEventDate.day,
+    );
+    final currentDay = DateTime(
+      currentDate.year,
+      currentDate.month,
+      currentDate.day,
+    );
+
+    if (eventDay.isAfter(currentDay)) return false;
+
+    usedQuestionKeys.add(normalizedQuestion);
+    return true;
   }
 
   static Future<bool> generateAndSaveCurrentAffairsQuiz(DateTime date) async {
-    final dateStr = AppDate.format(date);
-    final db = FirebaseFirestore.instance;
+    final quizDateStr = AppDate.format(date);
 
-    // Calculate 30-day lookback window
-    DateTime thirtyDaysAgo = date.subtract(const Duration(days: 30));
-    String cutoffDateStr = AppDate.format(thirtyDaysAgo);
+    // CURRENT_DATE is the only knowledge cutoff.
+    // Use IST because this app is TNPSC/Tamil Nadu focused.
+    final currentDate = AppDate.getISTNow();
+    final currentDateStr = AppDate.format(currentDate);
 
-    // 1. Check if daily news points exist for this date. If not, generate them first.
-    final todayNewsSnap = await db.collection('current_affairs_points')
-        .where('date', isEqualTo: dateStr)
-        .limit(1)
-        .get();
+    // QUIZ_DATE may be tomorrow/future. It is display metadata only.
+    final verifiedSources =
+    await _getVerifiedCurrentAffairsSources(currentDate);
 
-    if (todayNewsSnap.docs.isEmpty) {
-      AppLog.d("AI_DEBUG: Generating news points first for date: $dateStr");
-      await generateAndSaveDailyNews(date);
+    if (verifiedSources.length < 15) {
+      AppLog.d(
+        "AI_DEBUG: CA generation stopped. Need at least 15 verified "
+            "source records; found ${verifiedSources.length}. "
+            "No hallucinated filler will be generated.",
+      );
+      return false;
     }
 
-    // 2. Fetch news items from the last 30 days (up to target date) to provide rich, comprehensive context
-    final recentNewsSnap = await db.collection('current_affairs_points')
-        .where('date', isGreaterThanOrEqualTo: cutoffDateStr)
-        .where('date', isLessThanOrEqualTo: dateStr)
-        .orderBy('date', descending: true)
-        .limit(30)
-        .get();
+    final sourceMap = <String, Map<String, dynamic>>{
+      for (final s in verifiedSources) s['source_id'].toString(): s,
+    };
 
-    String newsContext = "";
-    if (recentNewsSnap.docs.isNotEmpty) {
-      newsContext = "OFFICIAL NEWS DATA FROM LAST 30 DAYS (Up to $dateStr):\n" + recentNewsSnap.docs.map((doc) {
-        final d = doc.data();
-        return "- [${d['date'] ?? ''}] ${d['titleEn'] ?? ''} (${d['titleTa'] ?? ''}): ${d['contentEn'] ?? ''} | ${d['contentTa'] ?? ''}";
-      }).join("\n");
+    final sourceContext = verifiedSources.map((s) {
+      return '''
+SOURCE_ID: ${s['source_id']}
+SOURCE_NAME: ${s['source_name']}
+SOURCE_URL: ${s['source_url']}
+PUBLISHED_AT: ${s['published_at']}
+EVENT_DATE: ${s['event_date']}
+EVENT_NAME: ${s['event_name']}
+TITLE_EN: ${s['titleEn']}
+TITLE_TA: ${s['titleTa']}
+CONTENT_EN: ${s['contentEn']}
+CONTENT_TA: ${s['contentTa']}
+''';
+    }).join('\n---------------- SOURCE ----------------\n');
+
+    final previousEventIds = <String>{};
+    final previousSourceIds = <String>{};
+    final previousTopicKeys = <String>{};
+    final previousQuestions = <String>[];
+
+    try {
+      final previousSnap = await FirebaseFirestore.instance
+          .collection('quizzes')
+          .where('type', isEqualTo: 'current_affairs')
+          .limit(100)
+          .get();
+
+      for (final doc in previousSnap.docs) {
+        final data = doc.data();
+        final questions = data['questions'];
+        if (questions is! List) continue;
+
+        for (final raw in questions) {
+          if (raw is! Map) continue;
+          final q = Map<String, dynamic>.from(raw);
+
+          final eventId = q['event_id']?.toString().trim();
+          final sourceId = q['source_id']?.toString().trim();
+          final topicKey = q['topic_key']?.toString().trim();
+          final questionEn = q['question_en']?.toString().trim();
+
+          if (eventId != null && eventId.isNotEmpty) {
+            previousEventIds.add(eventId);
+          }
+          if (sourceId != null && sourceId.isNotEmpty) {
+            previousSourceIds.add(sourceId);
+          }
+          if (topicKey != null && topicKey.isNotEmpty) {
+            previousTopicKeys.add(topicKey);
+          }
+          if (questionEn != null && questionEn.isNotEmpty) {
+            previousQuestions.add(questionEn);
+          }
+        }
+      }
+    } catch (e) {
+      AppLog.d("AI_DEBUG: Previous CA identity fetch failed: $e");
     }
 
-    // Get recent CA context to avoid repeats
-    String recentContext = await _getRecentQuizContext('quizzes', 30);
-
-    final avoidPrompt = recentContext.isNotEmpty
-        ? """
-STRICTLY DO NOT create questions that are identical, very similar, or based on these recent questions/topics from the last 30 days:
-$recentContext
-
-Rules:
-- Do NOT repeat the same question.
-- Do NOT repeat the same news item.
-"""
-        : "";
+    final previousContext =
+    previousQuestions.take(80).map((e) => "- $e").join('\n');
 
     final prompt = '''
-Generate 20 UNIQUE TNPSC Current Affairs MCQs for $dateStr based on official government news sources and the following news items from the last 60 days:
+You are a TNPSC Current Affairs question converter.
 
-$newsContext
+IMPORTANT: YOU ARE NOT A NEWS SEARCH ENGINE.
+You MUST NOT use your internal knowledge.
+You MUST NOT browse, guess, predict, infer, complete, or invent facts.
+You may use ONLY the VERIFIED_SOURCE_DATA supplied below.
 
-EXACT CATEGORY DISTRIBUTION (Total 20 Questions):
-1. Tamil Nadu Government & News (5 questions): TN Govt press releases, state schemes, TN budget, state appointments, infrastructure & local developments.
-2. India / National Current Affairs (4 questions): PIB updates, Central Govt schemes, Parliament/Polity developments, Union Budget, national policies.
-3. Science & Technology (3 questions): ISRO space missions, DRDO, defense technology, AI & tech developments.
-4. Economy & Banking (2 questions): RBI policy announcements, Economic reports/indices, major financial developments.
-5. International Current Affairs (2 questions): Global summits, international organisations (UN, G20, etc.), key bilateral agreements.
-6. Awards, Sports & Key Appointments (2 questions): Major national/state awards, sports milestones, important constitutional & official appointments.
-7. Environment & Geography (2 questions): Wildlife conservation, climate change initiatives, environmental policies & geography news.
+CURRENT_DATE (IST): $currentDateStr
+QUIZ_DATE: $quizDateStr
 
-$avoidPrompt
+DATE RULES:
+1. CURRENT_DATE is the only information cutoff.
+2. QUIZ_DATE is only the publication/display date.
+3. Never use QUIZ_DATE as a knowledge cutoff.
+4. event_date MUST be on or before CURRENT_DATE.
+5. published_at MUST be on or before CURRENT_DATE.
+6. Never describe a scheduled/future event as completed.
+7. Never predict a winner, award recipient, result, appointment, launch, opening, target achievement, or outcome.
+8. If a fact is not explicitly present in a supplied source, DO NOT use it.
+9. If there are not enough eligible facts, return fewer questions. NEVER invent filler.
 
-STRICT QUALITY RULES (MUST FOLLOW):
-1. Return ONLY valid JSON array.
-2. NO Markdown or extra text.
-3. Every field MUST BE BILINGUAL (English and Tamil).
-4. NO MIXED LANGUAGE in any sentence.
-5. NO OTHER LANGUAGES (Hindi, etc.).
-6. SSLC / Degree Standard aligned directly with TNPSC Group I/II/IIA/IV syllabus.
-7. ALL AUTHENTIC TNPSC QUESTION FORMATS (MANDATORY VARIETY):
-   - Include a rich mix of all 5 authentic TNPSC exam formats:
-     a) Direct MCQs (~40%)
-     b) "Match the Following / பொருத்துக" Questions (~25%): 
-        CRITICAL: BOTH the Left (a, b, c, d) AND Right (1, 2, 3, 4) items MUST be included in the question text with full descriptions on separate lines using \n (e.g. "(a) Item — 1. Description"). NEVER omit either side! Options MUST be matching combinations like "(a)-2, (b)-1, (c)-4, (d)-3".
-     c) "Statement & Reason / Assertion Questions (கூற்று மற்றும் காரணம் / சரியானது எது?)" (~15%): Assertion and Reason on separate lines using \n.
-     d) "Find the Incorrect Pair / Statement (தவறான கூற்று / தவறான இணை எது?)" (~10%).
-     e) "Chronological Order / Sequence (காலவரிசைப்படி முறைப்படுத்துக / ஏறுவரிசை)" (~10%): (1), (2), (3), (4) on separate lines using \n.
-8. Correct index MUST match the answer.
-9. Explanation must be detailed in both languages with official background context.
-10. MANDATORY YEAR/DATE SPECIFICATION (AWARDS, SPORTS, SCHEMES, SUMMITS, EVENTS):
-    - For EVERY question about Awards, Sports Tournaments, Summits, Government Schemes, or Appointments, you MUST EXPLICITLY specify the YEAR (e.g. 2024, 2025) or DATE / MONTH & YEAR (e.g. '2024-ஆம் ஆண்டிற்கான...', 'செப்டம்பர் 2024-ல்...') in BOTH question_en and question_ta!
-    - Example: '2024-ஆம் ஆண்டிற்கான தாதாசாகேப் பால்கே விருதை வென்றவர் யார்? / Who received the Dadasaheb Phalke Award for the year 2024?'
-    - Example: '2024 பாரிஸ் ஒலிம்பிக்கில் ஆடவர் ஈட்டி எறிதலில் தங்கம் வென்றவர் யார்? / Who won gold in men\'s javelin throw at the 2024 Paris Olympics?'
-    - Example: 'செப்டம்பர் 2024-ல் தொடங்கப்பட்ட தமிழ்நாடு அரசின் திட்டம் எது? / Which Tamil Nadu government scheme was launched in September 2024?'
-    - The explanation MUST also clearly state the exact date or month/year, venue/edition, and official background.
+SOURCE RULES:
+- Every question MUST use exactly one SOURCE_ID from VERIFIED_SOURCE_DATA.
+- source_id MUST be copied exactly.
+- event_name, event_date, source_name and source_url MUST correspond to that source.
+- Do not create or modify source URLs.
+- Do not create a source ID.
+- Do not combine unrelated sources into one question.
+- The question and explanation must be answerable using ONLY the selected source.
+- Do not add background knowledge unless that fact is explicitly contained in the selected source.
 
-JSON Format:
-[
-  {
-    "question_en":"...",
-    "question_ta":"...",
-    "options":[
-      {"en": "...", "ta": "..."},
-      {"en": "...", "ta": "..."},
-      {"en": "...", "ta": "..."},
-      {"en": "...", "ta": "..."}
-    ],
-    "correctOptionIndex":0,
-    "explanation_en":"...",
-    "explanation_ta":"..."
-  }
-]
+DUPLICATE RULES:
+- Do not reuse an event_id from PREVIOUS_EVENT_IDS.
+- Do not reuse a source_id from PREVIOUS_SOURCE_IDS.
+- Do not reuse a topic_key from PREVIOUS_TOPIC_KEYS.
+- Do not ask the same underlying fact in different wording.
+- Do not create multiple questions from the same source/event in this batch.
+- If a source was already used in a previous quiz, skip it.
+
+QUESTION RULES:
+- Generate UP TO 20 questions.
+- Quality is more important than count.
+- Exactly 4 options per question.
+- Exactly one option is correct.
+- correctOptionIndex must point to that exact correct option.
+- All four options must be distinct.
+- No "All of the above" or "None of the above".
+- Do not make ambiguous questions.
+- Avoid chronology/sequence questions unless the source explicitly provides different dates/times for all items.
+- If a source does not contain enough information to create four plausible options, skip it.
+
+BILINGUAL RULES:
+- question_en = natural English.
+- question_ta = natural Tamil.
+- options must contain separate English and Tamil values.
+- explanation_en = source-grounded English explanation.
+- explanation_ta = source-grounded Tamil explanation.
+- Do not mix Tamil and English within a language field except unavoidable official proper nouns.
+
+PROVENANCE FIELDS ARE MANDATORY:
+{
+  "event_id": "stable_unique_id_for_this_fact",
+  "topic_key": "short_category_key",
+  "event_name": "exact source event name",
+  "event_date": "YYYY-MM-DD",
+  "source_id": "EXACT_SOURCE_ID_FROM_INPUT",
+  "source_name": "EXACT_SOURCE_NAME_FROM_INPUT",
+  "source_url": "EXACT_SOURCE_URL_FROM_INPUT"
+}
+
+PREVIOUS_EVENT_IDS:
+${previousEventIds.join(', ')}
+
+PREVIOUS_SOURCE_IDS:
+${previousSourceIds.join(', ')}
+
+PREVIOUS_TOPIC_KEYS:
+${previousTopicKeys.join(', ')}
+
+PREVIOUS_QUESTION_TEXT:
+$previousContext
+
+VERIFIED_SOURCE_DATA:
+$sourceContext
+
+FINAL SELF-CHECK:
+- Can every answer be proven from exactly one supplied source?
+- Is source_id present in VERIFIED_SOURCE_DATA?
+- Is event_date <= CURRENT_DATE?
+- Is published_at <= CURRENT_DATE?
+- Is this source/event unused in previous quizzes?
+- Is this source/event unused elsewhere in this batch?
+- Is exactly one option correct?
+- Does correctOptionIndex point to that option?
+- Did you add any fact not present in the selected source? If yes, DELETE the question.
+
+Return ONLY a valid JSON array. No Markdown. No commentary.
 ''';
 
     final res = await _generateWithFallback(prompt);
-    if (res != null) {
-      try {
-        int start = res.indexOf('[');
-        int end = res.lastIndexOf(']');
-        if (start != -1 && end != -1) {
-          List q = jsonDecode(res.substring(start, end + 1));
-          List<dynamic> validQ = _filterValidQuestions(q);
-          if (validQ.length < 15) return false; // Fail if too few valid questions
+    if (res == null) return false;
 
-          final allQuestions = validQ.map((item) => {...item, 'quiz_type': 'current_affairs'}).toList();
+    try {
+      final start = res.indexOf('[');
+      final end = res.lastIndexOf(']');
 
-          final quizData = {
-            'date': dateStr,
-            'title': "Current Affairs Quiz / நடப்பு நிகழ்வுகள்",
-            'quizType': 'current_affairs',
-            'questions': allQuestions,
-            'type': 'current_affairs',
-            'createdAt': FieldValue.serverTimestamp(),
-          };
+      if (start == -1 || end == -1 || end <= start) return false;
 
-          final db = FirebaseFirestore.instance;
-          final query = await db.collection('quizzes')
-              .where('date', isEqualTo: dateStr)
-              .where('type', isEqualTo: 'current_affairs')
-              .get();
+      final decoded = jsonDecode(res.substring(start, end + 1));
+      if (decoded is! List) return false;
 
-          if (query.docs.isNotEmpty) {
-            await query.docs.first.reference.set(quizData, SetOptions(merge: true));
-          } else {
-            await db.collection('quizzes').add(quizData);
-          }
-          return true;
+      final validQuestions = <Map<String, dynamic>>[];
+      final usedEventIds = <String>{...previousEventIds};
+      final usedSourceIds = <String>{...previousSourceIds};
+
+      final usedQuestionKeys = <String>{};
+
+      for (final raw in decoded) {
+        if (raw is! Map) continue;
+
+        final q = Map<String, dynamic>.from(raw);
+
+        if (!_validateQuestion(q, generationDate: currentDate)) continue;
+
+        if (!_validateVerifiedCurrentAffairsQuestion(
+          q,
+          sourceMap,
+          usedEventIds,
+          usedSourceIds,
+          usedQuestionKeys,
+          currentDate,
+        )) {
+          continue;
         }
-      } catch (e) {
-        AppLog.e("AI_DEBUG: CA Quiz Parse Error: $e");
+
+        final source = sourceMap[q['source_id'].toString()];
+        if (source == null) continue;
+
+        // Canonical provenance: never trust a model-generated URL/name/date.
+        q['source_id'] = source['source_id'];
+        q['source_name'] = source['source_name'];
+        q['source_url'] = source['source_url'];
+        q['event_id'] = source['event_id'];
+        q['topic_key'] = source['topic_key'];
+        q['event_name'] = source['event_name'];
+        q['event_date'] = source['event_date'];
+        q['source_name'] = source['source_name'];
+        q['source_url'] = source['source_url'];
+
+        usedEventIds.add(q['event_id'].toString());
+        usedSourceIds.add(q['source_id'].toString());
+
+        validQuestions.add(q);
       }
+
+      if (validQuestions.length < 15) {
+        AppLog.d(
+          "AI_DEBUG: CA validation left only ${validQuestions.length} "
+              "questions. Refusing to save hallucinated filler.",
+        );
+        return false;
+      }
+
+      final allQuestions = validQuestions
+          .map((q) => {
+        ...q,
+        'quiz_type': 'current_affairs',
+      })
+          .toList();
+
+      final quizData = {
+        'date': quizDateStr,
+        'title': "Current Affairs Quiz / நடப்பு நிகழ்வுகள்",
+        'quizType': 'current_affairs',
+        'questions': allQuestions,
+        'type': 'current_affairs',
+        'knowledgeCutoffDate': currentDateStr,
+        'sourceOnly': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      final db = FirebaseFirestore.instance;
+      final query = await db
+          .collection('quizzes')
+          .where('date', isEqualTo: quizDateStr)
+          .where('type', isEqualTo: 'current_affairs')
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        await query.docs.first.reference.set(
+          quizData,
+          SetOptions(merge: true),
+        );
+      } else {
+        await db.collection('quizzes').add(quizData);
+      }
+
+      AppLog.d(
+        "AI_DEBUG: Saved ${allQuestions.length} verified CA questions. "
+            "knowledgeCutoff=$currentDateStr quizDate=$quizDateStr",
+      );
+      return true;
+    } catch (e) {
+      AppLog.e("AI_DEBUG: CA Quiz Parse/Validation Error", e);
+      return false;
     }
-    return false;
   }
 
   static Future<void> checkAndAutoGenerateCurrentAffairsQuiz() async {
     try {
       final todayStr = AppDate.getTodayString();
       final db = FirebaseFirestore.instance;
-      
+
       final query = await db.collection('quizzes')
           .where('date', isEqualTo: todayStr)
           .where('type', isEqualTo: 'current_affairs')
           .limit(1)
           .get();
-          
+
       if (query.docs.isEmpty) {
         AppLog.d("AI_DEBUG: No CA quiz found for today ($todayStr). Generating...");
         await generateAndSaveCurrentAffairsQuiz(AppDate.getISTNow());
@@ -2057,13 +2469,13 @@ JSON Format:
     try {
       final todayStr = AppDate.getTodayString();
       final db = FirebaseFirestore.instance;
-      
+
       // Check if news for today already exists
       final query = await db.collection('current_affairs_points')
           .where('date', isEqualTo: todayStr)
           .limit(1)
           .get();
-          
+
       if (query.docs.isEmpty) {
         AppLog.d("AI_DEBUG: No news found for today ($todayStr). Triggering auto-generation...");
         await generateAndSaveDailyNews(AppDate.getISTNow());
@@ -2077,8 +2489,8 @@ JSON Format:
 
   /// AI Answer Key Verifier & Bilingual Explanation Generator for Exam Papers / PDFs
   static Future<List<Map<String, dynamic>>> verifyAndEnrichExamPaperQuestions(
-    List<Map<String, dynamic>> questions,
-  ) async {
+      List<Map<String, dynamic>> questions,
+      ) async {
     try {
       List<Map<String, dynamic>> verifiedQuestions = [];
 

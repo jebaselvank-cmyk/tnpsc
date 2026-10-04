@@ -438,7 +438,7 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
                             margin: const EdgeInsets.only(bottom: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                              side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(16),
@@ -477,18 +477,12 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
                                     fontWeight: FontWeight.w600,
                                   ),
                                   const Divider(height: 24),
-                                  ...List.generate(q.options.length, (optIdx) {
+                                  ...List.generate(q.displayOptions.length, (optIdx) {
                                     bool isCorrect = optIdx == q.correctOptionIndex;
-                                    
-                                    String? optEn;
-                                    String? optTa;
-                                    if (q.optionsEn != null && optIdx < q.optionsEn!.length) {
-                                      optEn = q.optionsEn![optIdx];
-                                      optTa = q.optionsTa![optIdx];
-                                    }
+                                    String optText = q.displayOptions[optIdx];
 
                                     return Padding(
-                                      padding: const EdgeInsets.only(bottom: 4),
+                                      padding: const EdgeInsets.only(bottom: 6),
                                       child: Row(
                                         children: [
                                           AppIcon(
@@ -498,13 +492,13 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
                                           ),
                                           const SizedBox(width: 8),
                                           Expanded(
-                                            child: BilingualText(
-                                              en: optEn,
-                                              ta: optTa,
-                                              legacy: q.options[optIdx],
-                                              fontSize: 14,
-                                              color: isCorrect ? Colors.green : null,
-                                              fontWeight: isCorrect ? FontWeight.bold : FontWeight.normal,
+                                            child: Text(
+                                              optText,
+                                              style: AppTheme.getStyle(
+                                                fontSize: 14,
+                                                color: isCorrect ? Colors.green : (isDark ? Colors.white : AppTheme.textMainColor),
+                                                fontWeight: isCorrect ? FontWeight.bold : FontWeight.normal,
+                                              ),
                                             ),
                                           ),
                                         ],

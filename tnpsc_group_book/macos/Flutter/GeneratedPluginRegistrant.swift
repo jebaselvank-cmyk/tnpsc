@@ -7,7 +7,7 @@ import Foundation
 
 import cloud_firestore
 import cloud_functions
-import file_picker_darwin
+import file_picker
 import firebase_analytics
 import firebase_auth
 import firebase_core

@@ -834,6 +834,30 @@ class FirestoreService {
       await _db.collection('users').doc(uid).set({
         'totalScore': FieldValue.increment(points),
       }, SetOptions(merge: true));
+      
+      int newTotalScore = userBox.get('totalScore', defaultValue: 0) as int;
+      String userName = AppLanguage.getString('user_fallback');
+      String? photoURL;
+      String? gender = HiveService.getGender();
+      String? avatar = HiveService.getAvatar();
+      var cachedData = HiveService.getCachedUserData();
+      if (cachedData != null) {
+        userName = cachedData['name'] ?? userName;
+        photoURL = avatar ?? cachedData['avatar'] ?? cachedData['photoURL'] ?? _auth.currentUser?.photoURL;
+        gender ??= cachedData['gender'];
+      } else {
+        photoURL = avatar ?? _auth.currentUser?.photoURL;
+      }
+
+      await _db.collection('leaderboards').doc('global_scores').collection('scores').doc(uid).set({
+        'userId': uid,
+        'userName': userName,
+        'photoURL': photoURL,
+        'gender': gender,
+        'score': newTotalScore,
+        'timestamp': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
       AppLog.d("AI_DEBUG: User points incremented in Firestore by $points");
 
       // Refresh user data in background
@@ -1506,20 +1530,20 @@ class FirestoreService {
       });
       
       // 3. Update Leaderboard ONLY if it's a new best score (Saves huge amount of Writes)
-      if (score > 0 && (isDaily || isMock || isCa) && isNewBest) {
-        String userName = AppLanguage.getString('user_fallback');
-        String? photoURL;
-        String? gender = HiveService.getGender();
-        String? avatar = HiveService.getAvatar();
-        var cachedData = HiveService.getCachedUserData();
-        if (cachedData != null) {
-          userName = cachedData['name'] ?? userName;
-          photoURL = avatar ?? cachedData['avatar'] ?? cachedData['photoURL'] ?? _auth.currentUser?.photoURL;
-          gender ??= cachedData['gender'];
-        } else {
-          photoURL = avatar ?? _auth.currentUser?.photoURL;
-        }
+      String userName = AppLanguage.getString('user_fallback');
+      String? photoURL;
+      String? gender = HiveService.getGender();
+      String? avatar = HiveService.getAvatar();
+      var cachedData = HiveService.getCachedUserData();
+      if (cachedData != null) {
+        userName = cachedData['name'] ?? userName;
+        photoURL = avatar ?? cachedData['avatar'] ?? cachedData['photoURL'] ?? _auth.currentUser?.photoURL;
+        gender ??= cachedData['gender'];
+      } else {
+        photoURL = avatar ?? _auth.currentUser?.photoURL;
+      }
 
+      if (score > 0 && (isDaily || isMock || isCa) && isNewBest) {
         String docId = isDaily ? 'daily_$today' : (isCa ? 'ca_$today' : _getMockLeaderboardDocId());
         
         // --- REAL TREND LOGIC ---
@@ -1577,6 +1601,16 @@ class FirestoreService {
         'quizzesCompleted': FieldValue.increment(1),
         if (isDaily) 'completedDailyQuizzes': today,
         if (isMock) 'completedMockQuizzes': today,
+      }, SetOptions(merge: true));
+
+      int updatedTotalScore = userBox.get('totalScore', defaultValue: 0) as int;
+      batch.set(_db.collection('leaderboards').doc('global_scores').collection('scores').doc(uid), {
+        'userId': uid,
+        'userName': userName,
+        'photoURL': photoURL,
+        'gender': gender,
+        'score': updatedTotalScore,
+        'timestamp': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       
       await batch.commit();
@@ -1697,10 +1731,12 @@ class FirestoreService {
         return cached['rank'] ?? 0;
       }
 
-      // FIRESTORE_OPT: Use count() aggregation instead of fetching all docs (CHEAP & FAST)
+      // FIRESTORE_OPT: Use count() aggregation on leaderboards/global_scores/scores instead of users collection
       AppLog.d("FIRESTORE_OPT: Calculating global rank using count()...");
-      AggregateQuerySnapshot snapshot = await _db.collection('users')
-          .where('totalScore', isGreaterThan: myScore)
+      AggregateQuerySnapshot snapshot = await _db.collection('leaderboards')
+          .doc('global_scores')
+          .collection('scores')
+          .where('score', isGreaterThan: myScore)
           .count()
           .get();
       

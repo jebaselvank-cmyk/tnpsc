@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/question.dart';
 import '../data/seed_papers_2025.dart';
@@ -84,10 +84,11 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
             content: Text("Please select the PDF file to resume extraction."),
           ));
         }
-        List<PlatformFile> files = await FilePickerPlatform.instance.pickFiles(
+        FilePickerResult? result = await FilePicker.platform.pickFiles(
           type: FileType.custom,
           allowedExtensions: ['pdf'],
         );
+        List<PlatformFile> files = result?.files ?? [];
         if (files.isNotEmpty && files.first.path != null) {
           pdfBytes = await File(files.first.path!).readAsBytes();
           _selectedPdfBytes = pdfBytes;
@@ -201,10 +202,11 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
     StateSetter? setDialogState,
   ]) async {
     try {
-      List<PlatformFile> files = await FilePickerPlatform.instance.pickFiles(
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'txt', 'json'],
       );
+      List<PlatformFile> files = result?.files ?? [];
 
       if (files.isNotEmpty) {
         PlatformFile file = files.first;
@@ -537,10 +539,11 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
               content: Text("Please select the PDF file to extract questions."),
             ));
           }
-          List<PlatformFile> files = await FilePickerPlatform.instance.pickFiles(
+          FilePickerResult? result = await FilePicker.platform.pickFiles(
             type: FileType.custom,
             allowedExtensions: ['pdf'],
           );
+          List<PlatformFile> files = result?.files ?? [];
           if (files.isNotEmpty && files.first.path != null) {
             pdfBytes = await File(files.first.path!).readAsBytes();
             _selectedPdfBytes = pdfBytes;
@@ -1028,12 +1031,13 @@ class _AnswerKeyQuestionCardState extends State<_AnswerKeyQuestionCard> {
             Column(
               children: List.generate(displayOpts.length, (optIdx) {
                 bool isSelected = (_selectedCorrectIndex == optIdx);
+                String optText = displayOpts[optIdx].replaceAll(RegExp(r'[\r\n]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
                 return RadioListTile<int>(
                   value: optIdx,
                   groupValue: _selectedCorrectIndex,
                   activeColor: Colors.green,
                   title: Text(
-                    "${String.fromCharCode(65 + optIdx)}) ${displayOpts[optIdx]}",
+                    "${String.fromCharCode(65 + optIdx)}) $optText",
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,

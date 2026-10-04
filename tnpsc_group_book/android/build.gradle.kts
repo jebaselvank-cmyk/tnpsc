@@ -39,8 +39,9 @@ subprojects {
 }
 
 subprojects {
-    plugins.withId("com.android.library") {
+    val action = Action<Project> {
         (extensions.findByName("android") as? com.android.build.gradle.BaseExtension)?.apply {
+            compileSdkVersion(36)
             ndkVersion = "28.2.13676358"
             defaultConfig {
                 externalNativeBuild {
@@ -53,6 +54,11 @@ subprojects {
                 }
             }
         }
+    }
+    if (state.executed) {
+        action.execute(this)
+    } else {
+        afterEvaluate(action)
     }
 }
 

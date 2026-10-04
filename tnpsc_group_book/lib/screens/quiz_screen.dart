@@ -367,11 +367,6 @@ class _QuizScreenState extends State<QuizScreen> {
     return AppLanguage.formatBilingual(raw);
   }
 
-  // Returns the option string localized based on current app language.
-  String _localizedOption(String raw) {
-    return _formatBilingual(raw);
-  }
-
   // Returns shuffled option indices for a given question index.
   List<int> _shuffledIndicesFor(int questionIndex) {
     if (!_shuffledOptionIndices.containsKey(questionIndex)) {
@@ -767,7 +762,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Text(
-                                        _localizedOption(q.options[optIndex]),
+                                        q.displayOptions[optIndex],
                                         style: AppTheme.getStyle(
                                           fontSize: 15,
                                           color: isCorrect ? Colors.green.shade700 : (isDark ? Colors.white : AppTheme.textMainColor),
