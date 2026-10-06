@@ -104,8 +104,13 @@ class FirestoreService {
             .where('type', isEqualTo: 'daily_quiz')
             .limit(1)
             .get();
-        if (dailySnap.docs.isEmpty) {
-          AppLog.d("AI_DEBUG: Daily quiz missing for $dateStr. Generating...");
+        bool dailyMissing = dailySnap.docs.isEmpty;
+        if (!dailyMissing) {
+          final qs = dailySnap.docs.first.data()['questions'];
+          if (qs is List && qs.length < 20) dailyMissing = true;
+        }
+        if (dailyMissing) {
+          AppLog.d("AI_DEBUG: Daily quiz missing or incomplete for $dateStr. Generating...");
           await AiService.generateAndSaveDailyQuiz(targetDate);
           await Future.delayed(const Duration(seconds: 3));
         }
@@ -116,8 +121,13 @@ class FirestoreService {
             .where('type', isEqualTo: 'current_affairs')
             .limit(1)
             .get();
-        if (caSnap.docs.isEmpty) {
-          AppLog.d("AI_DEBUG: CA quiz missing for $dateStr. Generating...");
+        bool caMissing = caSnap.docs.isEmpty;
+        if (!caMissing) {
+          final qs = caSnap.docs.first.data()['questions'];
+          if (qs is List && qs.length < 20) caMissing = true;
+        }
+        if (caMissing) {
+          AppLog.d("AI_DEBUG: CA quiz missing or incomplete for $dateStr. Generating...");
           await AiService.generateAndSaveCurrentAffairsQuiz(targetDate);
           await Future.delayed(const Duration(seconds: 3));
         }
@@ -134,8 +144,13 @@ class FirestoreService {
               .where('quizType', isEqualTo: 'daily_50_quiz')
               .limit(1)
               .get();
-          if (mockSnap.docs.isEmpty) {
-            AppLog.d("AI_DEBUG: Mock quiz missing for $dateStr. Generating...");
+          bool mockMissing = mockSnap.docs.isEmpty;
+          if (!mockMissing) {
+            final qs = mockSnap.docs.first.data()['questions'];
+            if (qs is List && qs.length < 50) mockMissing = true;
+          }
+          if (mockMissing) {
+            AppLog.d("AI_DEBUG: Mock quiz missing or incomplete for $dateStr. Generating...");
             await AiService.generateAndSaveMockQuiz(targetDate);
             await Future.delayed(const Duration(seconds: 3));
           }

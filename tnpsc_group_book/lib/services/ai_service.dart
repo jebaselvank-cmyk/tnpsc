@@ -2047,6 +2047,9 @@ RULES:
 - Generate EXACTLY $ask MCQs. Each question from a DIFFERENT fact.
 - Exactly 4 distinct options, exactly one correct. correctOptionIndex = 0-3.
 - Put the year/month of the event inside the question text.
+- If asking about UPSC, explicitly state "UPSC Civil Services" (யூபிஎஸ்சி குடிமைப்பணி) to avoid confusion with TNPSC.
+- Explanations must directly cover and justify the specific technical facts or terms mentioned in the question.
+- Use accurate Tamil terminology (e.g. "குழுக் கலம்" for crew module, proper transliterations without mixed scripts).
 - English and Tamil must not be mixed in one field.
 - Explanations: 1 short sentence each.
 - Output ONLY a JSON array. No source, no id, no url fields.
@@ -2073,7 +2076,7 @@ $ctx
       ) async {
     final db = FirebaseFirestore.instance;
     final currentDateStr = AppDate.format(currentDate);
-    final cutoffDate = currentDate.subtract(const Duration(days: 730));
+    final cutoffDate = currentDate.subtract(const Duration(days: 1095));
 
     try {
       final snap = await db
@@ -2188,6 +2191,48 @@ $ctx
     return false;
   }
 
+  static Future<Map<String, dynamic>?> _verifyQuestionWithAi(
+      Map<String, dynamic> q,
+      Map<String, dynamic> source,
+      ) async {
+    final sourceText = "EN: ${source['contentEn']}\nTA: ${source['contentTa']}";
+    final qEn = q['question_en'];
+    final qTa = q['question_ta'];
+    final options = q['options'];
+
+    final prompt = '''
+You are a strict QA Verifier for TNPSC exam questions.
+Analyze the SOURCE TEXT and the QUESTION with 4 OPTIONS below.
+Do NOT know which option is correct beforehand. Solve the question objectively based ONLY on the source text.
+Also extract an exact verbatim sentence quote from the SOURCE TEXT that directly supports the correct answer.
+
+SOURCE TEXT:
+$sourceText
+
+QUESTION (EN): $qEn
+QUESTION (TA): $qTa
+OPTIONS:
+${jsonEncode(options)}
+
+Return ONLY a JSON object with this exact structure:
+{
+  "blindSolveIndex": 0, 
+  "supportingQuote": "exact verbatim sentence from source text"
+}
+''';
+
+    final res = await _generateWithFallback(prompt);
+    if (res == null) return null;
+    try {
+      int start = res.indexOf('{');
+      int end = res.lastIndexOf('}');
+      if (start == -1 || end <= start) return null;
+      return jsonDecode(res.substring(start, end + 1));
+    } catch (_) {
+      return null;
+    }
+  }
+
   static bool _validateVerifiedCurrentAffairsQuestion(
       Map<String, dynamic> q,
       Map<String, Map<String, dynamic>> sourceMap,
@@ -2253,9 +2298,9 @@ $ctx
 
   static Future<bool> generateAndSaveCurrentAffairsQuiz(DateTime date) async {
     const target = 20;
-    const maxAttempts = 5;
-    const batchQuestions = 5;
-    const batchSources = 8;
+    const maxAttempts = 12;
+    const batchQuestions = 20;
+    const batchSources = 15;
 
     final db = FirebaseFirestore.instance;
     final quizDateStr = AppDate.format(date);
@@ -2419,6 +2464,28 @@ $ctx
             q['correctOptionIndex'] = ni;
           }
 
+          // AI #2: Verifier Check (Blind solve & Quote verification)
+          final verificationResult = await _verifyQuestionWithAi(q, source);
+          if (verificationResult == null) {
+            AppLog.d("AI_DEBUG: [CA] REJECT verifier timeout/error");
+            continue;
+          }
+
+          final int blindIndex = int.tryParse(verificationResult['blindSolveIndex'].toString()) ?? -1;
+          final String quote = verificationResult['supportingQuote']?.toString().trim() ?? '';
+
+          if (blindIndex != q['correctOptionIndex']) {
+            AppLog.d("AI_DEBUG: [CA] REJECT verifier mismatch -> blind($blindIndex) vs assigned(${q['correctOptionIndex']})");
+            continue;
+          }
+
+          final sourceContentCombined = "${source['contentEn']} ${source['contentTa']}".toLowerCase();
+          final normalizedQuote = quote.toLowerCase();
+          if (quote.length < 10 || !sourceContentCombined.contains(normalizedQuote.substring(0, quote.length > 30 ? 30 : quote.length))) {
+            AppLog.d("AI_DEBUG: [CA] REJECT verifier quote not found in source text");
+            continue;
+          }
+
           q['quiz_type'] = 'current_affairs';
           draft.add(q);
           markUsed(q);
@@ -2441,13 +2508,19 @@ $ctx
       await Future.delayed(const Duration(seconds: 4));
     }
 
-    if (draft.length < 10) {
-      AppLog.d("AI_DEBUG: [CA] partial ${draft.length}/$target saved in draft. Next run continues.");
+    if (draft.length < target) {
+      AppLog.d("AI_DEBUG: [CA] partial ${draft.length}/$target saved in draft. Firestore quizzes untouched.");
       return false;
     }
 
     final finalQs = (List<Map<String, dynamic>>.from(draft)..shuffle())
         .take(target).toList();
+
+    if (finalQs.length != target) {
+      AppLog.d("AI_DEBUG: [CA] Final validation failed. Expected $target verified questions, got ${finalQs.length}. Firestore untouched.");
+      return false;
+    }
+
     await db.collection('quizzes').add({
       'date': quizDateStr,
       'title': "Current Affairs Quiz / நடப்பு நிகழ்வுகள்",
@@ -2459,7 +2532,7 @@ $ctx
       'createdAt': FieldValue.serverTimestamp(),
     });
     await draftRef.delete();
-    AppLog.d("AI_DEBUG: [CA] FINAL SAVE SUCCESS - ${finalQs.length} questions");
+    AppLog.d("AI_DEBUG: [CA] FINAL SAVE SUCCESS - ${finalQs.length} 100% verified questions");
     return true;
   }
 
