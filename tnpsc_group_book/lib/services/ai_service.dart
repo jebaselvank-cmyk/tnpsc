@@ -526,6 +526,20 @@ class AiService {
       final idx = (correctIdx as num).toInt();
       if (idx < 0 || idx > 3) return false;
 
+      // Check for foreign scripts (like Malayalam letters in Tamil fields)
+      for (var opt in options) {
+        if (opt is Map) {
+          if (_hasForeignScripts(opt['ta']?.toString() ?? '')) return false;
+        }
+      }
+      if (_hasForeignScripts(qTa)) return false;
+
+      // Check for answer leak
+      if (_isAnswerLeaked(qEn, qTa, options, idx)) {
+        AppLog.d("AI_DEBUG: Rejected Question - Answer leaked in question text.");
+        return false;
+      }
+
       final expEn = q['explanation_en']?.toString().trim() ?? '';
       final expTa = q['explanation_ta']?.toString().trim() ?? '';
 
@@ -577,6 +591,26 @@ class AiService {
     } catch (e) {
       return false;
     }
+  }
+
+  static bool _hasForeignScripts(String text) {
+    // Malayalam Unicode range: \u0D00-\u0D7F
+    final malayalamRegex = RegExp(r'[\u0D00-\u0D7F]');
+    return malayalamRegex.hasMatch(text);
+  }
+
+  static bool _isAnswerLeaked(String qEn, String qTa, List<dynamic> options, int correctIdx) {
+    if (correctIdx < 0 || correctIdx >= options.length) return false;
+    final correctOpt = options[correctIdx];
+    if (correctOpt is! Map) return false;
+    
+    final optEn = correctOpt['en']?.toString().trim().toLowerCase() ?? '';
+    final optTa = correctOpt['ta']?.toString().trim().toLowerCase() ?? '';
+
+    if (optEn.length > 4 && qEn.toLowerCase().contains(optEn)) return true;
+    if (optTa.length > 4 && qTa.toLowerCase().contains(optTa)) return true;
+
+    return false;
   }
 
   static bool _passesCurrentAffairsRules(String qEn, String qTa, String expEn, String expTa) {
@@ -964,13 +998,6 @@ If an event is scheduled for a future date, do NOT use it as a completed current
 42. OPTION UNIQUENESS & SAME-QUIZ DEDUPLICATION (CRITICAL):
     - Options must represent four genuinely different entities or values. Do NOT treat spelling variations, abbreviations, initials, punctuation differences, or alternate names of the SAME entity as different options (e.g., "P. V. Sindhu" and "PV Sindhu" are identical and forbidden).
     - SAME-QUIZ EVENT DEDUPLICATION: Do not reuse the same underlying event, scheme, tournament, or topic across questions in the same quiz.
-    - Every question MUST include:
-      * "event_id": "unique_snake_case_id"
-      * "topic_key": "category_key"
-      * "event_name": "exact name"
-      * "event_date": "YYYY-MM-DD"
-      * "source_name": "PIB / TN Gov / ISRO / etc."
-      * "source_url": "https://..."
 
 Before generating the JSON, internally verify:
 - APTITUDE ACCURACY: Perform step-by-step calculation. Does the result match the option?
@@ -995,13 +1022,7 @@ Output Format:
     ],
     "correctOptionIndex":0,
     "explanation_en":"...",
-    "explanation_ta":"...",
-    "event_id":"...",
-    "topic_key":"...",
-    "event_name":"...",
-    "event_date":"YYYY-MM-DD",
-    "source_name":"...",
-    "source_url":"..."
+    "explanation_ta":"..."
   }
 ]
 
@@ -1081,8 +1102,28 @@ $commonRules
             return;
           }
 
+          int index = 0;
           allQuestions.addAll(
-            validQ.map((item) => {...item, 'quiz_type': quizType}),
+            validQ.map((item) {
+              index++;
+              String topicKey = quizType == 'general_tamil' ? 'Culture' : (quizType == 'general_studies' ? 'National Affairs' : 'Economy');
+              String eventName = quizType == 'general_tamil' ? 'TNPSC General Tamil & Literature' : (quizType == 'general_studies' ? 'TNPSC General Studies Assessment' : 'TNPSC Quantitative Aptitude');
+              String sourceName = quizType == 'general_tamil' ? 'Tamil Nadu Textbooks (Samacheer Kalvi)' : 'Press Information Bureau (PIB)';
+              String sourceUrl = quizType == 'general_tamil' ? 'https://www.tntextbooks.in' : 'https://pib.gov.in';
+
+              return {
+                ...item,
+                'quiz_type': quizType,
+                'topic_key': topicKey,
+                'event_name': eventName,
+                'event_date': dateStr,
+                'published_at': DateTime.now().toIso8601String(),
+                'source_name': sourceName,
+                'source_url': sourceUrl,
+                'source_id': "${quizType}_${dateStr}_$index",
+                'event_id': "${quizType}_event_${dateStr}_$index",
+              };
+            }),
           );
         } catch (e) {
           AppLog.d("AI_DEBUG: JSON Decode Error in fetchAndTag ($quizType): $e");
