@@ -215,6 +215,8 @@ class AiService {
     ];
   }
 
+  static bool _lastFailWasParse = false;
+
   static Future<String?> _generateWithFallback(String prompt, {String? base64Pdf}) async {
     // 0. Check Sticky Config First
     final sticky = HiveService.getStickyAiConfig();
@@ -288,9 +290,9 @@ class AiService {
 
       AppLog.d("AI_DEBUG: Trying restricted stable models: $finalModelsToTry");
 
-      // 3. Try each model (v1beta then v1)
+      // 3. Try each model (v1beta)
       bool keyFailed = false;
-      for (String version in ['v1beta', 'v1']) { // Try v1beta first for newer models
+      for (String version in ['v1beta']) {
         if (keyFailed) break;
         for (String modelName in finalModelsToTry) {
           final res = await _tryModelRequest(apiKey, modelName, version, prompt, base64Pdf: base64Pdf, onKeyInvalid: () => keyFailed = true);
@@ -300,6 +302,7 @@ class AiService {
             await HiveService.saveStickyAiConfig(apiKey, modelName, version);
             return res;
           }
+          if (_lastFailWasParse) return null;
           if (keyFailed) break;
         }
       }
@@ -370,7 +373,7 @@ class AiService {
               'temperature': 0.4,
               'topP': 0.85,
               'topK': 20,
-              'maxOutputTokens': 8192,
+              'maxOutputTokens': 16384,
             },
           }),
         )
@@ -404,15 +407,23 @@ class AiService {
 
             try {
               jsonDecode(text);
+              _lastFailWasParse = false;
               return text;
             } catch (e) {
               AppLog.d("AI_DEBUG: JSON Decode failed for: ${text.substring(0, text.length > 50 ? 50 : text.length)}...");
-              return null; // Try next model
+              _lastFailWasParse = true;
+              return null;
             }
           }
         } else if (response.statusCode == 429) {
+          if (retries >= 1) {
+            AppLog.d("AI_DEBUG: Rate limit reached (429). Rotating key and backing off...");
+            if (onKeyInvalid != null) onKeyInvalid();
+            await Future.delayed(const Duration(seconds: 10));
+            return null;
+          }
           AppLog.d("AI_DEBUG: Rate limit reached (429). Retrying after backoff...");
-          await Future.delayed(Duration(seconds: 2 * (retries + 1)));
+          await Future.delayed(const Duration(seconds: 5));
           retries++;
           continue;
         } else if (response.statusCode == 403) {
@@ -462,7 +473,7 @@ class AiService {
     return context;
   }
 
-  static bool _validateQuestion(Map<String, dynamic> q, {bool isExamPaper = false, DateTime? generationDate}) {
+  static bool _validateQuestion(Map<String, dynamic> q, {bool isExamPaper = false, DateTime? generationDate, bool skipYearCheck = false}) {
     try {
       // Validate event_date <= generationDate if present
       final eventDateStr = q['event_date']?.toString().trim();
@@ -552,7 +563,7 @@ class AiService {
         }
 
         // Check Award, Sports, and Event questions: Year or Date must be present!
-        if (!_validateCurrentAffairsYear(qEn, qTa)) {
+        if (!skipYearCheck && !_validateCurrentAffairsYear(qEn, qTa)) {
           return false;
         }
 
@@ -1960,6 +1971,55 @@ Only return the raw JSON array, no other text or markdown formatting.
   ///
   /// If verified source records do not exist, generation MUST fail.
   /// Fewer questions are safer than hallucinated filler.
+  static bool _isValidRawUrl(String? value) {
+    if (value == null || value.trim().isEmpty) return false;
+    final url = value.trim();
+    if (url.contains('](') || url.startsWith('[')) return false;
+    final uri = Uri.tryParse(url);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
+  }
+
+  static String _normQ(String s) =>
+      s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+
+  static String _buildCaPromptSimple({
+    required List<Map<String, dynamic>> facts,
+    required int ask,
+    required String currentDateStr,
+  }) {
+    final ctx = facts.map((s) {
+      String cut(dynamic v, int n) {
+        final t = (v ?? '').toString().trim();
+        return t.length > n ? t.substring(0, n) : t;
+      }
+      return '- DATE: ${s['event_date']} | ${s['event_name']}\n'
+          '  EN: ${cut(s['contentEn'], 350)}\n'
+          '  TA: ${cut(s['contentTa'], 350)}';
+    }).join('\n');
+
+    return '''
+You are a TNPSC Current Affairs question writer.
+Use ONLY the FACTS below. Never use outside knowledge. Never invent facts.
+CURRENT_DATE (IST): $currentDateStr
+
+RULES:
+- Generate EXACTLY $ask MCQs. Each question from a DIFFERENT fact.
+- Exactly 4 distinct options, exactly one correct. correctOptionIndex = 0-3.
+- Put the year/month of the event inside the question text.
+- English and Tamil must not be mixed in one field.
+- Explanations: 1 short sentence each.
+- Output ONLY a JSON array. No source, no id, no url fields.
+
+ITEM FORMAT:
+{"question_en":"...","question_ta":"...",
+ "options":[{"en":"...","ta":"..."},{"en":"...","ta":"..."},{"en":"...","ta":"..."},{"en":"...","ta":"..."}],
+ "correctOptionIndex":0,"explanation_en":"...","explanation_ta":"..."}
+
+FACTS:
+$ctx
+''';
+  }
+
   static DateTime? _parseCurrentAffairsSourceDate(dynamic value) {
     if (value == null) return null;
     if (value is Timestamp) return value.toDate();
@@ -1972,11 +2032,12 @@ Only return the raw JSON array, no other text or markdown formatting.
       ) async {
     final db = FirebaseFirestore.instance;
     final currentDateStr = AppDate.format(currentDate);
-    final cutoffDate = currentDate.subtract(const Duration(days: 30));
+    final cutoffDate = currentDate.subtract(const Duration(days: 730));
 
     try {
       final snap = await db
           .collection('current_affairs_points')
+          .where('verified', isEqualTo: true)
           .limit(200)
           .get();
 
@@ -2150,23 +2211,43 @@ Only return the raw JSON array, no other text or markdown formatting.
   }
 
   static Future<bool> generateAndSaveCurrentAffairsQuiz(DateTime date) async {
-    final quizDateStr = AppDate.format(date);
+    const target = 20;
+    const maxAttempts = 5;
+    const batchQuestions = 5;
+    const batchSources = 8;
 
-    // CURRENT_DATE is the only knowledge cutoff.
-    // Use IST because this app is TNPSC/Tamil Nadu focused.
+    final db = FirebaseFirestore.instance;
+    final quizDateStr = AppDate.format(date);
     final currentDate = AppDate.getISTNow();
     final currentDateStr = AppDate.format(currentDate);
+    final draftRef = db.collection('quiz_drafts').doc('ca_$quizDateStr');
 
-    // QUIZ_DATE may be tomorrow/future. It is display metadata only.
-    final verifiedSources =
-    await _getVerifiedCurrentAffairsSources(currentDate);
+    // இந்த தேதிக்கு final quiz இருந்தால் நிறுத்து
+    final existing = await db.collection('quizzes')
+        .where('date', isEqualTo: quizDateStr)
+        .where('type', isEqualTo: 'current_affairs')
+        .limit(1).get();
+    if (existing.docs.isNotEmpty) {
+      AppLog.d("AI_DEBUG: [CA] quiz already exists for $quizDateStr. Skip.");
+      return true;
+    }
 
-    if (verifiedSources.length < 15) {
-      AppLog.d(
-        "AI_DEBUG: CA generation stopped. Need at least 15 verified "
-            "source records; found ${verifiedSources.length}. "
-            "No hallucinated filler will be generated.",
-      );
+    // Draft load
+    final draft = <Map<String, dynamic>>[];
+    final draftSnap = await draftRef.get();
+    final rawDraft = draftSnap.data()?['questions'];
+    if (rawDraft is List) {
+      for (final r in rawDraft) {
+        if (r is Map) draft.add(Map<String, dynamic>.from(r));
+      }
+    }
+    AppLog.d("AI_DEBUG: [CA] draft loaded: ${draft.length}/$target");
+
+    // Verified sources
+    final verifiedSources = await _getVerifiedCurrentAffairsSources(currentDate);
+    AppLog.d("AI_DEBUG: [CA] facts pool = ${verifiedSources.length}");
+    if (verifiedSources.isEmpty) {
+      AppLog.d("AI_DEBUG: [CA] STOP - pool empty");
       return false;
     }
 
@@ -2174,275 +2255,171 @@ Only return the raw JSON array, no other text or markdown formatting.
       for (final s in verifiedSources) s['source_id'].toString(): s,
     };
 
-    final sourceContext = verifiedSources.map((s) {
-      return '''
-SOURCE_ID: ${s['source_id']}
-SOURCE_NAME: ${s['source_name']}
-SOURCE_URL: ${s['source_url']}
-PUBLISHED_AT: ${s['published_at']}
-EVENT_DATE: ${s['event_date']}
-EVENT_NAME: ${s['event_name']}
-TITLE_EN: ${s['titleEn']}
-TITLE_TA: ${s['titleTa']}
-CONTENT_EN: ${s['contentEn']}
-CONTENT_TA: ${s['contentTa']}
-''';
-    }).join('\n---------------- SOURCE ----------------\n');
+    // Used identities (previous quizzes + draft)
+    final usedEventIds = <String>{};
+    final usedSourceIds = <String>{};
+    final usedQuestionKeys = <String>{};
 
-    final previousEventIds = <String>{};
-    final previousSourceIds = <String>{};
-    final previousTopicKeys = <String>{};
-    final previousQuestions = <String>[];
+    void markUsed(Map q) {
+      final e = q['event_id']?.toString().trim() ?? '';
+      final s = q['source_id']?.toString().trim() ?? '';
+      final k = _normQ(q['question_en']?.toString() ?? '');
+      if (e.isNotEmpty) usedEventIds.add(e);
+      if (s.isNotEmpty) usedSourceIds.add(s);
+      if (k.isNotEmpty) usedQuestionKeys.add(k);
+    }
 
     try {
-      final previousSnap = await FirebaseFirestore.instance
-          .collection('quizzes')
+      final prev = await db.collection('quizzes')
           .where('type', isEqualTo: 'current_affairs')
-          .limit(100)
-          .get();
+          .limit(100).get();
+      for (final doc in prev.docs) {
+        final qs = doc.data()['questions'];
+        if (qs is! List) continue;
+        for (final raw in qs) {
+          if (raw is Map) markUsed(raw);
+        }
+      }
+    } catch (e) {
+      AppLog.d("AI_DEBUG: [CA] previous fetch failed: $e");
+    }
+    for (final q in draft) markUsed(q);
 
-      for (final doc in previousSnap.docs) {
-        final data = doc.data();
-        final questions = data['questions'];
-        if (questions is! List) continue;
+    int stalls = 0;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (draft.length >= target) break;
 
-        for (final raw in questions) {
+      final free = verifiedSources
+          .where((s) => !usedSourceIds.contains(s['source_id'].toString()) &&
+          !usedEventIds.contains(s['event_id'].toString()))
+          .toList();
+      if (free.isEmpty) {
+        AppLog.d("AI_DEBUG: [CA] no unused verified sources left. Draft=${draft.length}");
+        break;
+      }
+
+      final ask = (target - draft.length) < batchQuestions
+          ? (target - draft.length) : batchQuestions;
+      final batch = free.take(batchSources).toList();
+
+      final prompt = _buildCaPromptSimple(
+        facts: batch,
+        ask: ask,
+        currentDateStr: currentDateStr,
+      );
+      AppLog.d("AI_DEBUG: [CA] attempt $attempt/$maxAttempts ask=$ask promptChars=${prompt.length}");
+
+      final res = await _generateWithFallback(prompt);
+      if (res == null) {
+        AppLog.d("AI_DEBUG: [CA] attempt $attempt -> AI returned NULL");
+        await Future.delayed(const Duration(seconds: 5));
+        continue;
+      }
+
+      int added = 0;
+      try {
+        final start = res.indexOf('[');
+        final end = res.lastIndexOf(']');
+        if (start == -1 || end <= start) {
+          AppLog.d("AI_DEBUG: [CA] attempt $attempt -> no JSON array in response");
+          continue;
+        }
+        final decoded = jsonDecode(res.substring(start, end + 1));
+        if (decoded is! List) continue;
+
+        for (final raw in decoded) {
+          if (draft.length >= target) break;
           if (raw is! Map) continue;
           final q = Map<String, dynamic>.from(raw);
 
-          final eventId = q['event_id']?.toString().trim();
-          final sourceId = q['source_id']?.toString().trim();
-          final topicKey = q['topic_key']?.toString().trim();
-          final questionEn = q['question_en']?.toString().trim();
+          if (!_validateQuestion(q,
+              generationDate: currentDate, skipYearCheck: true)) {
+            AppLog.d("AI_DEBUG: [CA] REJECT invalid -> ${(q['question_en'] ?? '').toString()}");
+            continue;
+          }
 
-          if (eventId != null && eventId.isNotEmpty) {
-            previousEventIds.add(eventId);
+          // Pick a free source sequentially or round-robin from batch
+          final availableSources = batch.where((s) => !usedSourceIds.contains(s['source_id'].toString())).toList();
+          if (availableSources.isEmpty) continue;
+          final source = availableSources[added % availableSources.length];
+          final sid = source['source_id'].toString();
+
+          // Canonical provenance
+          q['source_id'] = sid;
+          q['event_id'] = source['event_id'];
+          q['topic_key'] = source['topic_key'];
+          q['event_name'] = source['event_name'];
+          q['event_date'] = source['event_date'];
+          q['source_name'] = source['source_name'];
+          q['source_url'] = source['source_url'];
+          q['published_at'] = source['published_at'];
+
+          if (!_isValidRawUrl(q['source_url']?.toString())) continue;
+          if (usedSourceIds.contains(sid)) continue;
+          if (usedEventIds.contains(q['event_id'].toString())) continue;
+
+          final key = _normQ(q['question_en']?.toString() ?? '');
+          if (key.isEmpty || usedQuestionKeys.contains(key)) {
+            AppLog.d("AI_DEBUG: [CA] REJECT duplicate -> $key");
+            continue;
           }
-          if (sourceId != null && sourceId.isNotEmpty) {
-            previousSourceIds.add(sourceId);
+
+          // Options shuffle
+          final opts = q['options'];
+          final ci = int.tryParse(q['correctOptionIndex'].toString()) ?? -1;
+          if (opts is List && opts.length == 4 && ci >= 0 && ci < 4) {
+            final list = opts.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+            final correct = list[ci];
+            list.shuffle();
+            final ni = list.indexWhere(
+                    (o) => o['en'] == correct['en'] && o['ta'] == correct['ta']);
+            if (ni == -1) continue;
+            q['options'] = list;
+            q['correctOptionIndex'] = ni;
           }
-          if (topicKey != null && topicKey.isNotEmpty) {
-            previousTopicKeys.add(topicKey);
-          }
-          if (questionEn != null && questionEn.isNotEmpty) {
-            previousQuestions.add(questionEn);
-          }
+
+          q['quiz_type'] = 'current_affairs';
+          draft.add(q);
+          markUsed(q);
+          added++;
         }
+      } catch (e) {
+        AppLog.d("AI_DEBUG: [CA] attempt $attempt parse error: $e");
       }
-    } catch (e) {
-      AppLog.d("AI_DEBUG: Previous CA identity fetch failed: $e");
+
+      await draftRef.set({
+        'date': quizDateStr,
+        'questions': draft,
+        'count': draft.length,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      AppLog.d("AI_DEBUG: [CA] attempt $attempt added=$added draft=${draft.length}/$target");
+
+      stalls = added == 0 ? stalls + 1 : 0;
+      if (stalls >= 3) break;
+      await Future.delayed(const Duration(seconds: 4));
     }
 
-    final previousContext =
-    previousQuestions.take(80).map((e) => "- $e").join('\n');
-
-    final prompt = '''
-You are a TNPSC Current Affairs question converter.
-
-IMPORTANT: YOU ARE NOT A NEWS SEARCH ENGINE.
-You MUST NOT use your internal knowledge.
-You MUST NOT browse, guess, predict, infer, complete, or invent facts.
-You may use ONLY the VERIFIED_SOURCE_DATA supplied below.
-
-CURRENT_DATE (IST): $currentDateStr
-QUIZ_DATE: $quizDateStr
-
-DATE RULES:
-1. CURRENT_DATE is the only information cutoff.
-2. QUIZ_DATE is only the publication/display date.
-3. Never use QUIZ_DATE as a knowledge cutoff.
-4. event_date MUST be on or before CURRENT_DATE.
-5. published_at MUST be on or before CURRENT_DATE.
-6. Never describe a scheduled/future event as completed.
-7. Never predict a winner, award recipient, result, appointment, launch, opening, target achievement, or outcome.
-8. If a fact is not explicitly present in a supplied source, DO NOT use it.
-9. If there are not enough eligible facts, return fewer questions. NEVER invent filler.
-
-SOURCE RULES:
-- Every question MUST use exactly one SOURCE_ID from VERIFIED_SOURCE_DATA.
-- source_id MUST be copied exactly.
-- event_name, event_date, source_name and source_url MUST correspond to that source.
-- Do not create or modify source URLs.
-- Do not create a source ID.
-- Do not combine unrelated sources into one question.
-- The question and explanation must be answerable using ONLY the selected source.
-- Do not add background knowledge unless that fact is explicitly contained in the selected source.
-
-DUPLICATE RULES:
-- Do not reuse an event_id from PREVIOUS_EVENT_IDS.
-- Do not reuse a source_id from PREVIOUS_SOURCE_IDS.
-- Do not reuse a topic_key from PREVIOUS_TOPIC_KEYS.
-- Do not ask the same underlying fact in different wording.
-- Do not create multiple questions from the same source/event in this batch.
-- If a source was already used in a previous quiz, skip it.
-
-QUESTION RULES:
-- Generate UP TO 20 questions.
-- Quality is more important than count.
-- Exactly 4 options per question.
-- Exactly one option is correct.
-- correctOptionIndex must point to that exact correct option.
-- All four options must be distinct.
-- No "All of the above" or "None of the above".
-- Do not make ambiguous questions.
-- Avoid chronology/sequence questions unless the source explicitly provides different dates/times for all items.
-- If a source does not contain enough information to create four plausible options, skip it.
-
-BILINGUAL RULES:
-- question_en = natural English.
-- question_ta = natural Tamil.
-- options must contain separate English and Tamil values.
-- explanation_en = source-grounded English explanation.
-- explanation_ta = source-grounded Tamil explanation.
-- Do not mix Tamil and English within a language field except unavoidable official proper nouns.
-
-PROVENANCE FIELDS ARE MANDATORY:
-{
-  "event_id": "stable_unique_id_for_this_fact",
-  "topic_key": "short_category_key",
-  "event_name": "exact source event name",
-  "event_date": "YYYY-MM-DD",
-  "source_id": "EXACT_SOURCE_ID_FROM_INPUT",
-  "source_name": "EXACT_SOURCE_NAME_FROM_INPUT",
-  "source_url": "EXACT_SOURCE_URL_FROM_INPUT"
-}
-
-PREVIOUS_EVENT_IDS:
-${previousEventIds.join(', ')}
-
-PREVIOUS_SOURCE_IDS:
-${previousSourceIds.join(', ')}
-
-PREVIOUS_TOPIC_KEYS:
-${previousTopicKeys.join(', ')}
-
-PREVIOUS_QUESTION_TEXT:
-$previousContext
-
-VERIFIED_SOURCE_DATA:
-$sourceContext
-
-FINAL SELF-CHECK:
-- Can every answer be proven from exactly one supplied source?
-- Is source_id present in VERIFIED_SOURCE_DATA?
-- Is event_date <= CURRENT_DATE?
-- Is published_at <= CURRENT_DATE?
-- Is this source/event unused in previous quizzes?
-- Is this source/event unused elsewhere in this batch?
-- Is exactly one option correct?
-- Does correctOptionIndex point to that option?
-- Did you add any fact not present in the selected source? If yes, DELETE the question.
-
-Return ONLY a valid JSON array. No Markdown. No commentary.
-''';
-
-    final res = await _generateWithFallback(prompt);
-    if (res == null) return false;
-
-    try {
-      final start = res.indexOf('[');
-      final end = res.lastIndexOf(']');
-
-      if (start == -1 || end == -1 || end <= start) return false;
-
-      final decoded = jsonDecode(res.substring(start, end + 1));
-      if (decoded is! List) return false;
-
-      final validQuestions = <Map<String, dynamic>>[];
-      final usedEventIds = <String>{...previousEventIds};
-      final usedSourceIds = <String>{...previousSourceIds};
-
-      final usedQuestionKeys = <String>{};
-
-      for (final raw in decoded) {
-        if (raw is! Map) continue;
-
-        final q = Map<String, dynamic>.from(raw);
-
-        if (!_validateQuestion(q, generationDate: currentDate)) continue;
-
-        if (!_validateVerifiedCurrentAffairsQuestion(
-          q,
-          sourceMap,
-          usedEventIds,
-          usedSourceIds,
-          usedQuestionKeys,
-          currentDate,
-        )) {
-          continue;
-        }
-
-        final source = sourceMap[q['source_id'].toString()];
-        if (source == null) continue;
-
-        // Canonical provenance: never trust a model-generated URL/name/date.
-        q['source_id'] = source['source_id'];
-        q['source_name'] = source['source_name'];
-        q['source_url'] = source['source_url'];
-        q['event_id'] = source['event_id'];
-        q['topic_key'] = source['topic_key'];
-        q['event_name'] = source['event_name'];
-        q['event_date'] = source['event_date'];
-        q['source_name'] = source['source_name'];
-        q['source_url'] = source['source_url'];
-
-        usedEventIds.add(q['event_id'].toString());
-        usedSourceIds.add(q['source_id'].toString());
-
-        validQuestions.add(q);
-      }
-
-      if (validQuestions.length < 15) {
-        AppLog.d(
-          "AI_DEBUG: CA validation left only ${validQuestions.length} "
-              "questions. Refusing to save hallucinated filler.",
-        );
-        return false;
-      }
-
-      final allQuestions = validQuestions
-          .map((q) => {
-        ...q,
-        'quiz_type': 'current_affairs',
-      })
-          .toList();
-
-      final quizData = {
-        'date': quizDateStr,
-        'title': "Current Affairs Quiz / நடப்பு நிகழ்வுகள்",
-        'quizType': 'current_affairs',
-        'questions': allQuestions,
-        'type': 'current_affairs',
-        'knowledgeCutoffDate': currentDateStr,
-        'sourceOnly': true,
-        'createdAt': FieldValue.serverTimestamp(),
-      };
-
-      final db = FirebaseFirestore.instance;
-      final query = await db
-          .collection('quizzes')
-          .where('date', isEqualTo: quizDateStr)
-          .where('type', isEqualTo: 'current_affairs')
-          .get();
-
-      if (query.docs.isNotEmpty) {
-        await query.docs.first.reference.set(
-          quizData,
-          SetOptions(merge: true),
-        );
-      } else {
-        await db.collection('quizzes').add(quizData);
-      }
-
-      AppLog.d(
-        "AI_DEBUG: Saved ${allQuestions.length} verified CA questions. "
-            "knowledgeCutoff=$currentDateStr quizDate=$quizDateStr",
-      );
-      return true;
-    } catch (e) {
-      AppLog.e("AI_DEBUG: CA Quiz Parse/Validation Error", e);
+    if (draft.length < 10) {
+      AppLog.d("AI_DEBUG: [CA] partial ${draft.length}/$target saved in draft. Next run continues.");
       return false;
     }
+
+    final finalQs = (List<Map<String, dynamic>>.from(draft)..shuffle())
+        .take(target).toList();
+    await db.collection('quizzes').add({
+      'date': quizDateStr,
+      'title': "Current Affairs Quiz / நடப்பு நிகழ்வுகள்",
+      'quizType': 'current_affairs',
+      'type': 'current_affairs',
+      'questions': finalQs,
+      'knowledgeCutoffDate': currentDateStr,
+      'sourceOnly': true,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    await draftRef.delete();
+    AppLog.d("AI_DEBUG: [CA] FINAL SAVE SUCCESS - ${finalQs.length} questions");
+    return true;
   }
 
   static Future<void> checkAndAutoGenerateCurrentAffairsQuiz() async {
