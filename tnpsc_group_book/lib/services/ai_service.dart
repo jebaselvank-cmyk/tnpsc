@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:http/http.dart' as http;
@@ -416,14 +417,14 @@ class AiService {
             }
           }
         } else if (response.statusCode == 429) {
-          if (retries >= 1) {
-            AppLog.d("AI_DEBUG: Rate limit reached (429). Rotating key and backing off...");
+          if (retries >= 3) {
+            AppLog.d("AI_DEBUG: Rate limit reached (429) after max retries. Rotating key and backing off...");
             if (onKeyInvalid != null) onKeyInvalid();
-            await Future.delayed(const Duration(seconds: 10));
+            await Future.delayed(const Duration(seconds: 15));
             return null;
           }
-          AppLog.d("AI_DEBUG: Rate limit reached (429). Retrying after backoff...");
-          await Future.delayed(const Duration(seconds: 5));
+          AppLog.d("AI_DEBUG: Rate limit reached (429). Retrying after backoff (${retries + 1})...");
+          await Future.delayed(Duration(seconds: 8 * (retries + 1)));
           retries++;
           continue;
         } else if (response.statusCode == 403) {
@@ -484,7 +485,7 @@ class AiService {
           DateTime evDateOnly = DateTime(evDate.year, evDate.month, evDate.day);
           DateTime genDateOnly = DateTime(genDate.year, genDate.month, genDate.day);
           if (evDateOnly.isAfter(genDateOnly)) {
-            AppLog.d("AI_DEBUG: Rejected Question - event_date ($eventDateStr) is after generation date ($genDateOnly)");
+            AppLog.d("AI_DEBUG: REJECT - event_date ($eventDateStr) is after generation date ($genDateOnly)");
             return false;
           }
         } catch (_) {}
@@ -492,26 +493,43 @@ class AiService {
 
       final qEn = q['question_en']?.toString().trim() ?? '';
       final qTa = q['question_ta']?.toString().trim() ?? '';
-      if (qEn.isEmpty && qTa.isEmpty) return false;
+      final expEn = q['explanation_en']?.toString().trim() ?? '';
+      final expTa = q['explanation_ta']?.toString().trim() ?? '';
+      if (qEn.isEmpty && qTa.isEmpty) {
+        AppLog.d("AI_DEBUG: REJECT - empty question");
+        return false;
+      }
 
       // In exam papers, if one language is missing or short, mirror from the other
       if (isExamPaper) {
         if (qTa.isEmpty && qEn.isNotEmpty) q['question_ta'] = qEn;
         if (qEn.isEmpty && qTa.isNotEmpty) q['question_en'] = qTa;
       } else {
-        if (qEn.isEmpty || qTa.isEmpty || qEn.length < 5 || qTa.length < 5) return false;
+        if (qEn.isEmpty || qTa.isEmpty || qEn.length < 5 || qTa.length < 5) {
+          AppLog.d("AI_DEBUG: REJECT - question too short ($qEn / $qTa)");
+          return false;
+        }
       }
 
       final options = q['options'];
-      if (options is! List || options.length != 4) return false;
+      if (options is! List || options.length != 4) {
+        AppLog.d("AI_DEBUG: REJECT - options length != 4");
+        return false;
+      }
 
       Set<String> optionTextsEn = {};
       Set<String> optionTextsTa = {};
       for (var opt in options) {
-        if (opt is! Map) return false;
+        if (opt is! Map) {
+          AppLog.d("AI_DEBUG: REJECT - option is not Map");
+          return false;
+        }
         var optEn = opt['en']?.toString().trim() ?? '';
         var optTa = opt['ta']?.toString().trim() ?? '';
-        if (optEn.isEmpty && optTa.isEmpty) return false;
+        if (optEn.isEmpty && optTa.isEmpty) {
+          AppLog.d("AI_DEBUG: REJECT - option empty");
+          return false;
+        }
         if (isExamPaper) {
           if (optEn.isEmpty) opt['en'] = optTa;
           if (optTa.isEmpty) opt['ta'] = optEn;
@@ -519,29 +537,44 @@ class AiService {
         optionTextsEn.add(opt['en']?.toString() ?? '');
         optionTextsTa.add(opt['ta']?.toString() ?? '');
       }
-      if (optionTextsEn.length < 2 || optionTextsTa.length < 2) return false;
-
-      final correctIdx = q['correctOptionIndex'];
-      if (correctIdx is! int && correctIdx is! num) return false;
-      final idx = (correctIdx as num).toInt();
-      if (idx < 0 || idx > 3) return false;
-
-      // Check for foreign scripts (like Malayalam letters in Tamil fields)
-      for (var opt in options) {
-        if (opt is Map) {
-          if (_hasForeignScripts(opt['ta']?.toString() ?? '')) return false;
-        }
-      }
-      if (_hasForeignScripts(qTa)) return false;
-
-      // Check for answer leak
-      if (_isAnswerLeaked(qEn, qTa, options, idx)) {
-        AppLog.d("AI_DEBUG: Rejected Question - Answer leaked in question text.");
+      if (optionTextsEn.length < 2 || optionTextsTa.length < 2) {
+        AppLog.d("AI_DEBUG: REJECT - unique options < 2");
         return false;
       }
 
-      final expEn = q['explanation_en']?.toString().trim() ?? '';
-      final expTa = q['explanation_ta']?.toString().trim() ?? '';
+      final correctIdx = q['correctOptionIndex'];
+      if (correctIdx is! int && correctIdx is! num) {
+        AppLog.d("AI_DEBUG: REJECT - correctOptionIndex not int");
+        return false;
+      }
+      final idx = (correctIdx as num).toInt();
+      if (idx < 0 || idx > 3) {
+        AppLog.d("AI_DEBUG: REJECT - correctOptionIndex out of bounds ($idx)");
+        return false;
+      }
+
+      // Check for foreign scripts & thought leaks
+      for (var opt in options) {
+        if (opt is Map) {
+          final taOpt = opt['ta']?.toString() ?? '';
+          final enOpt = opt['en']?.toString() ?? '';
+          if (_hasForeignScripts(taOpt) || _hasThoughtLeaks(taOpt) || _hasThoughtLeaks(enOpt)) {
+            AppLog.d("AI_DEBUG: REJECT - foreign script or thought leak in option");
+            return false;
+          }
+        }
+      }
+      if (_hasForeignScripts(qTa) || _hasForeignScripts(expTa) || 
+          _hasThoughtLeaks(qEn) || _hasThoughtLeaks(qTa) || _hasThoughtLeaks(expEn) || _hasThoughtLeaks(expTa)) {
+        AppLog.d("AI_DEBUG: REJECT - foreign script or thought leak in Q/E");
+        return false;
+      }
+
+      // Check for answer leak
+      if (_isAnswerLeaked(qEn, qTa, options, idx)) {
+        AppLog.d("AI_DEBUG: REJECT - Answer leaked in question text");
+        return false;
+      }
 
       // Provide default fallback explanations for exam paper questions if missing
       if (isExamPaper) {
@@ -552,7 +585,10 @@ class AiService {
           q['explanation_en'] = "The correct answer is Option ${String.fromCharCode(65 + idx)}, verified according to official TNPSC answer key standards.";
         }
       } else {
-        if (expEn.isEmpty || expTa.isEmpty) return false;
+        if (expEn.isEmpty || expTa.isEmpty) {
+          AppLog.d("AI_DEBUG: REJECT - missing explanation (expEn: $expEn, expTa: $expTa)");
+          return false;
+        }
 
         final lowerExpEn = expEn.toLowerCase();
         final lowerExpTa = expTa.toLowerCase();
@@ -563,40 +599,59 @@ class AiService {
             lowerExpEn.contains('hypothetical') || lowerExpEn.contains('future event') || lowerExpEn.contains('fictional') || lowerExpEn.contains('imaginary') || lowerExpEn.contains('not yet happened') ||
             lowerExpTa.contains('வழங்கப்படவில்லை') || lowerExpTa.contains('இல்லை') || lowerExpTa.contains('கருத்தியல்') || lowerExpTa.contains('தகவல் இல்லை') ||
             lowerExpTa.contains('உண்மையில் இல்லை') || lowerExpTa.contains('கற்பனையான') || lowerExpTa.contains('நிகழவில்லை')) {
+          AppLog.d("AI_DEBUG: REJECT - anti-hallucination filter triggered");
           return false;
         }
 
         // Check Explanation vs correctOptionIndex Coherence:
         if (!_validateOptionExplanationCoherence(idx, lowerExpEn, lowerExpTa)) {
+          AppLog.d("AI_DEBUG: REJECT - option explanation coherence failed");
           return false;
         }
 
         // Check Match the following questions: Both Left and Right data must be present!
         if (!_validateMatchQuestion(qEn, qTa, options)) {
+          AppLog.d("AI_DEBUG: REJECT - match question validation failed");
           return false;
         }
 
         // Check Award, Sports, and Event questions: Year or Date must be present!
         if (!skipYearCheck && !_validateCurrentAffairsYear(qEn, qTa)) {
+          AppLog.d("AI_DEBUG: REJECT - current affairs year check failed ($qTa)");
           return false;
         }
 
         // Check current affairs strict rules (NEP 2020, Vague entities, etc.)
         if (!_passesCurrentAffairsRules(qEn, qTa, expEn, expTa)) {
+          AppLog.d("AI_DEBUG: REJECT - current affairs rules failed");
           return false;
         }
       }
 
       return true;
     } catch (e) {
+      AppLog.d("AI_DEBUG: REJECT exception in _validateQuestion: $e");
       return false;
     }
   }
 
   static bool _hasForeignScripts(String text) {
-    // Malayalam Unicode range: \u0D00-\u0D7F
-    final malayalamRegex = RegExp(r'[\u0D00-\u0D7F]');
-    return malayalamRegex.hasMatch(text);
+    // Check for Devanagari (Hindi), Bengali, or Malayalam explicitly, avoiding Tamil (\u0B80-\u0BFF)
+    final devanagari = RegExp(r'[\u0900-\u097F]');
+    final bengali = RegExp(r'[\u0980-\u09FF]');
+    final malayalam = RegExp(r'[\u0D00-\u0D7F]');
+    return devanagari.hasMatch(text) || bengali.hasMatch(text) || malayalam.hasMatch(text);
+  }
+
+  static bool _hasThoughtLeaks(String text) {
+    final lower = text.toLowerCase();
+    return lower.contains('உள்ளீட்டை') ||
+        lower.contains('மாற்று உள்ளீடு') ||
+        lower.contains('சரிபார்த்தல்') ||
+        lower.contains('சிந்தனை') ||
+        lower.contains('யோசனை') ||
+        lower.contains('prompt') ||
+        lower.contains('ai model');
   }
 
   static bool _isAnswerLeaked(String qEn, String qTa, List<dynamic> options, int correctIdx) {
@@ -2012,6 +2067,21 @@ Only return the raw JSON array, no other text or markdown formatting.
   ///
   /// If verified source records do not exist, generation MUST fail.
   /// Fewer questions are safer than hallucinated filler.
+  static Future<String> _getPrompt(String key, String defaultPrompt) async {
+    if (kDebugMode) {
+      return defaultPrompt;
+    }
+    try {
+      final doc = await FirebaseFirestore.instance.collection('ai_prompts').doc(key).get();
+      if (doc.exists && doc.data()?['prompt'] != null) {
+        return doc.data()!['prompt'].toString();
+      }
+    } catch (e) {
+      AppLog.d("AI_DEBUG: Failed to fetch prompt for $key from Firestore: $e");
+    }
+    return defaultPrompt;
+  }
+
   static bool _isValidRawUrl(String? value) {
     if (value == null || value.trim().isEmpty) return false;
     final url = value.trim();
@@ -2023,11 +2093,11 @@ Only return the raw JSON array, no other text or markdown formatting.
   static String _normQ(String s) =>
       s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
 
-  static String _buildCaPromptSimple({
+  static Future<String> _buildCaPromptSimple({
     required List<Map<String, dynamic>> facts,
     required int ask,
     required String currentDateStr,
-  }) {
+  }) async {
     final ctx = facts.map((s) {
       String cut(dynamic v, int n) {
         final t = (v ?? '').toString().trim();
@@ -2038,18 +2108,20 @@ Only return the raw JSON array, no other text or markdown formatting.
           '  TA: ${cut(s['contentTa'], 350)}';
     }).join('\n');
 
-    return '''
+    const defaultPromptTemplate = '''
 You are a TNPSC Current Affairs question writer.
 Use ONLY the FACTS below. Never use outside knowledge. Never invent facts.
-CURRENT_DATE (IST): $currentDateStr
+CURRENT_DATE (IST): {currentDateStr}
 
 RULES:
-- Generate EXACTLY $ask MCQs. Each question from a DIFFERENT fact.
+- Generate EXACTLY {ask} MCQs. Each question from a DIFFERENT fact.
+- STRICT FACT MAPPING: Each generated question must strictly correspond to its respective fact/event in the facts list. Never mix up facts, event names, or numbers between different facts.
 - Exactly 4 distinct options, exactly one correct. correctOptionIndex = 0-3.
 - Put the year/month of the event inside the question text.
 - If asking about UPSC, explicitly state "UPSC Civil Services" (யூபிஎஸ்சி குடிமைப்பணி) to avoid confusion with TNPSC.
+- 100% EN/TA PARITY & COMPLETE TRANSLATION: English and Tamil questions/options/explanations must mean the exact same thing without contradiction, ensuring no descriptive phrases (e.g. international tourists and students, modernization grants) are omitted in Tamil.
 - Explanations must directly cover and justify the specific technical facts or terms mentioned in the question.
-- Use accurate Tamil terminology (e.g. "குழுக் கலம்" for crew module, proper transliterations without mixed scripts).
+- Use accurate Tamil terminology (e.g., "விண்கலத்தின் Crew Module" for crew module, "நவீனமயமாக்கல் நிதி உதவிகள்" for modernization grants).
 - English and Tamil must not be mixed in one field.
 - Explanations: 1 short sentence each.
 - Output ONLY a JSON array. No source, no id, no url fields.
@@ -2060,8 +2132,60 @@ ITEM FORMAT:
  "correctOptionIndex":0,"explanation_en":"...","explanation_ta":"..."}
 
 FACTS:
-$ctx
+{ctx}
 ''';
+
+    final template = await _getPrompt('ca_generator_prompt', defaultPromptTemplate);
+    return template
+        .replaceAll('{currentDateStr}', currentDateStr)
+        .replaceAll('{ask}', ask.toString())
+        .replaceAll('{ctx}', ctx);
+  }
+
+  static Future<String> _buildCaDirectPrompt({
+    required int ask,
+    required String currentDateStr,
+  }) async {
+    const defaultPromptTemplate = '''
+You are an expert TNPSC Current Affairs question writer.
+Generate EXACTLY {ask} unique, authentic, and verified current-affairs Multiple Choice Questions (MCQs) focusing on Tamil Nadu and India (recent past up to {currentDateStr}, respecting the 15-day safety buffer).
+Do not invent fictional facts, imaginary schemes, or future events.
+
+RULES:
+- Each question must be distinct and cover a different topic (Governance, Awards, Economy, Education, Environment, Infrastructure, Space, Sports, Science & Technology, International Affairs, National Affairs, Culture).
+- Exactly 4 distinct options, exactly one correct. correctOptionIndex = 0-3.
+- Put the year/month of the event inside the question text.
+- If asking about UPSC, explicitly state "UPSC Civil Services" (யூபிஎஸ்சி குடிமைப்பணி) to avoid confusion with TNPSC.
+- 100% EN/TA PARITY: English and Tamil questions/options/explanations must mean the exact same thing without contradiction.
+- Explanations must directly cover and justify why the correct option is right.
+- Use accurate Tamil terminology (e.g. "குழுக் கலம்" for crew module, "சங்கிலித் தொடர் தொழில்நுட்பச் சான்றிதழ்" for blockchain certificate).
+- English and Tamil must not be mixed in one field.
+- Explanations: 1 short sentence each.
+- Output ONLY a JSON array.
+
+ITEM FORMAT:
+[
+  {
+    "question_en":"...",
+    "question_ta":"...",
+    "options":[
+      {"en":"...","ta":"..."},
+      {"en":"...","ta":"..."},
+      {"en":"...","ta":"..."},
+      {"en":"...","ta":"..."}
+    ],
+    "correctOptionIndex":0,
+    "explanation_en":"...",
+    "explanation_ta":"...",
+    "topic_key":"Governance"
+  }
+]
+''';
+
+    final template = await _getPrompt('ca_direct_generator_prompt', defaultPromptTemplate);
+    return template
+        .replaceAll('{currentDateStr}', currentDateStr)
+        .replaceAll('{ask}', ask.toString());
   }
 
   static DateTime? _parseCurrentAffairsSourceDate(dynamic value) {
@@ -2125,24 +2249,20 @@ $ctx
           continue;
         }
 
+        // 15-day buffer: events must be at least 15 days older than current date
+        final maxAllowedDate = currentDate.subtract(const Duration(days: 15));
+        final maxAllowedDay = DateTime(maxAllowedDate.year, maxAllowedDate.month, maxAllowedDate.day);
+
         final eventDay = DateTime(
           eventDt.year,
           eventDt.month,
           eventDt.day,
         );
-        final currentDay = DateTime(
-          currentDate.year,
-          currentDate.month,
-          currentDate.day,
-        );
 
-        if (eventDay.isAfter(currentDay) || publishedDt.isAfter(currentDate)) {
-          continue;
-        }
-
-        if (eventDay.isBefore(
-          DateTime(cutoffDate.year, cutoffDate.month, cutoffDate.day),
-        )) {
+        // Event must be at least 15 days old (<= maxAllowedDay) and not older than cutoffDate
+        if (eventDay.isAfter(maxAllowedDay) || 
+            eventDay.isBefore(DateTime(cutoffDate.year, cutoffDate.month, cutoffDate.day)) ||
+            publishedDt.isAfter(maxAllowedDate)) {
           continue;
         }
 
@@ -2198,28 +2318,37 @@ $ctx
     final sourceText = "EN: ${source['contentEn']}\nTA: ${source['contentTa']}";
     final qEn = q['question_en'];
     final qTa = q['question_ta'];
-    final options = q['options'];
+    final options = jsonEncode(q['options']);
 
-    final prompt = '''
+    const defaultVerifierTemplate = '''
 You are a strict QA Verifier for TNPSC exam questions.
-Analyze the SOURCE TEXT and the QUESTION with 4 OPTIONS below.
-Do NOT know which option is correct beforehand. Solve the question objectively based ONLY on the source text.
-Also extract an exact verbatim sentence quote from the SOURCE TEXT that directly supports the correct answer.
+Analyze the SOURCE TEXT, English Question, Tamil Question, and 4 OPTIONS below.
+1. Check if English and Tamil questions mean the exact same thing without any contradiction (e.g. no mismatch between Prelims and Mains, 100% semantic parity).
+2. Solve the question objectively based ONLY on the source text (blind solve).
+3. Extract an exact verbatim sentence quote from the SOURCE TEXT that directly supports the correct answer.
 
 SOURCE TEXT:
-$sourceText
+{sourceText}
 
-QUESTION (EN): $qEn
-QUESTION (TA): $qTa
+QUESTION (EN): {qEn}
+QUESTION (TA): {qTa}
 OPTIONS:
-${jsonEncode(options)}
+{options}
 
 Return ONLY a JSON object with this exact structure:
 {
+  "languagesMatch": true,
   "blindSolveIndex": 0, 
   "supportingQuote": "exact verbatim sentence from source text"
 }
 ''';
+
+    final template = await _getPrompt('ca_verifier_prompt', defaultVerifierTemplate);
+    final prompt = template
+        .replaceAll('{sourceText}', sourceText)
+        .replaceAll('{qEn}', qEn.toString())
+        .replaceAll('{qTa}', qTa.toString())
+        .replaceAll('{options}', options);
 
     final res = await _generateWithFallback(prompt);
     if (res == null) return null;
@@ -2233,74 +2362,13 @@ Return ONLY a JSON object with this exact structure:
     }
   }
 
-  static bool _validateVerifiedCurrentAffairsQuestion(
-      Map<String, dynamic> q,
-      Map<String, Map<String, dynamic>> sourceMap,
-      Set<String> usedEventIds,
-      Set<String> usedSourceIds,
-      Set<String> usedQuestionKeys,
-      DateTime currentDate,
-      ) {
-    final sourceId = q['source_id']?.toString().trim() ?? '';
-    final eventId = q['event_id']?.toString().trim() ?? '';
-    final eventName = q['event_name']?.toString().trim() ?? '';
-    final eventDate = q['event_date']?.toString().trim() ?? '';
-    final sourceName = q['source_name']?.toString().trim() ?? '';
-    final sourceUrl = q['source_url']?.toString().trim() ?? '';
 
-    final source = sourceMap[sourceId];
-    if (source == null) return false;
-
-    // All provenance identity must exactly match the verified Firestore record.
-    if (eventId != source['event_id'].toString() ||
-        eventName != source['event_name'].toString() ||
-        eventDate != source['event_date'].toString() ||
-        sourceName != source['source_name'].toString() ||
-        sourceUrl != source['source_url'].toString()) {
-      return false;
-    }
-
-    if (usedEventIds.contains(eventId) || usedSourceIds.contains(sourceId)) {
-      return false;
-    }
-
-    final normalizedQuestion = (q['question_en']?.toString() ?? '')
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-        .trim();
-    if (normalizedQuestion.isEmpty || usedQuestionKeys.contains(normalizedQuestion)) {
-      return false;
-    }
-
-    DateTime parsedEventDate;
-    try {
-      parsedEventDate = DateTime.parse(eventDate);
-    } catch (_) {
-      return false;
-    }
-
-    final eventDay = DateTime(
-      parsedEventDate.year,
-      parsedEventDate.month,
-      parsedEventDate.day,
-    );
-    final currentDay = DateTime(
-      currentDate.year,
-      currentDate.month,
-      currentDate.day,
-    );
-
-    if (eventDay.isAfter(currentDay)) return false;
-
-    usedQuestionKeys.add(normalizedQuestion);
-    return true;
-  }
 
   static Future<bool> generateAndSaveCurrentAffairsQuiz(DateTime date) async {
     const target = 20;
     const maxAttempts = 12;
-    const batchQuestions = 20;
-    const batchSources = 15;
+    const batchQuestions = 5;
+    const batchSources = 8;
 
     final db = FirebaseFirestore.instance;
     final quizDateStr = AppDate.format(date);
@@ -2308,7 +2376,7 @@ Return ONLY a JSON object with this exact structure:
     final currentDateStr = AppDate.format(currentDate);
     final draftRef = db.collection('quiz_drafts').doc('ca_$quizDateStr');
 
-    // இந்த தேதிக்கு final quiz இருந்தால் நிறுத்து
+    // Check if final quiz already exists for today
     final existing = await db.collection('quizzes')
         .where('date', isEqualTo: quizDateStr)
         .where('type', isEqualTo: 'current_affairs')
@@ -2318,7 +2386,7 @@ Return ONLY a JSON object with this exact structure:
       return true;
     }
 
-    // Draft load
+    // Load draft
     final draft = <Map<String, dynamic>>[];
     final draftSnap = await draftRef.get();
     final rawDraft = draftSnap.data()?['questions'];
@@ -2329,19 +2397,14 @@ Return ONLY a JSON object with this exact structure:
     }
     AppLog.d("AI_DEBUG: [CA] draft loaded: ${draft.length}/$target");
 
-    // Verified sources
+    // STRICT SOURCE-ONLY PIPELINE: Require verified real-world news articles
     final verifiedSources = await _getVerifiedCurrentAffairsSources(currentDate);
     AppLog.d("AI_DEBUG: [CA] facts pool = ${verifiedSources.length}");
     if (verifiedSources.isEmpty) {
-      AppLog.d("AI_DEBUG: [CA] STOP - pool empty");
+      AppLog.d("AI_DEBUG: [CA] STOP - No verified source articles found in current_affairs_points. Current affairs requires real news articles. Skipping save.");
       return false;
     }
 
-    final sourceMap = <String, Map<String, dynamic>>{
-      for (final s in verifiedSources) s['source_id'].toString(): s,
-    };
-
-    // Used identities (previous quizzes + draft)
     final usedEventIds = <String>{};
     final usedSourceIds = <String>{};
     final usedQuestionKeys = <String>{};
@@ -2358,7 +2421,7 @@ Return ONLY a JSON object with this exact structure:
     try {
       final prev = await db.collection('quizzes')
           .where('type', isEqualTo: 'current_affairs')
-          .limit(100).get();
+          .limit(50).get();
       for (final doc in prev.docs) {
         final qs = doc.data()['questions'];
         if (qs is! List) continue;
@@ -2374,21 +2437,27 @@ Return ONLY a JSON object with this exact structure:
     int stalls = 0;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       if (draft.length >= target) break;
+      if (attempt >= maxAttempts - 2 && draft.length >= 18) {
+        AppLog.d("AI_DEBUG: [CA] Reached near target (${draft.length}/$target) after $attempt attempts. Proceeding to save.");
+        break;
+      }
 
       final free = verifiedSources
           .where((s) => !usedSourceIds.contains(s['source_id'].toString()) &&
           !usedEventIds.contains(s['event_id'].toString()))
           .toList();
       if (free.isEmpty) {
-        AppLog.d("AI_DEBUG: [CA] no unused verified sources left. Draft=${draft.length}");
-        break;
+        AppLog.d("AI_DEBUG: [CA] All verified sources used once. Resetting source usage to allow reuse for remaining questions. Draft=${draft.length}");
+        usedSourceIds.clear();
+        usedEventIds.clear();
+        free.addAll(verifiedSources);
       }
 
       final ask = (target - draft.length) < batchQuestions
           ? (target - draft.length) : batchQuestions;
       final batch = free.take(batchSources).toList();
 
-      final prompt = _buildCaPromptSimple(
+      final prompt = await _buildCaPromptSimple(
         facts: batch,
         ask: ask,
         currentDateStr: currentDateStr,
@@ -2397,8 +2466,8 @@ Return ONLY a JSON object with this exact structure:
 
       final res = await _generateWithFallback(prompt);
       if (res == null) {
-        AppLog.d("AI_DEBUG: [CA] attempt $attempt -> AI returned NULL");
-        await Future.delayed(const Duration(seconds: 5));
+        AppLog.d("AI_DEBUG: [CA] attempt $attempt -> AI returned NULL (Rate limit / Quota). Backing off...");
+        await Future.delayed(const Duration(seconds: 20));
         continue;
       }
 
@@ -2419,18 +2488,16 @@ Return ONLY a JSON object with this exact structure:
           final q = Map<String, dynamic>.from(raw);
 
           if (!_validateQuestion(q,
-              generationDate: currentDate, skipYearCheck: true)) {
+              generationDate: date, skipYearCheck: true)) {
             AppLog.d("AI_DEBUG: [CA] REJECT invalid -> ${(q['question_en'] ?? '').toString()}");
             continue;
           }
 
-          // Pick a free source sequentially or round-robin from batch
           final availableSources = batch.where((s) => !usedSourceIds.contains(s['source_id'].toString())).toList();
           if (availableSources.isEmpty) continue;
           final source = availableSources[added % availableSources.length];
           final sid = source['source_id'].toString();
 
-          // Canonical provenance
           q['source_id'] = sid;
           q['event_id'] = source['event_id'];
           q['topic_key'] = source['topic_key'];
@@ -2445,7 +2512,7 @@ Return ONLY a JSON object with this exact structure:
           if (usedEventIds.contains(q['event_id'].toString())) continue;
 
           final key = _normQ(q['question_en']?.toString() ?? '');
-          if (key.isEmpty || usedQuestionKeys.contains(key)) {
+          if (key.isEmpty || usedQuestionKeys.contains(key) || draft.any((existing) => _normQ(existing['question_en']?.toString() ?? '') == key)) {
             AppLog.d("AI_DEBUG: [CA] REJECT duplicate -> $key");
             continue;
           }
@@ -2468,6 +2535,12 @@ Return ONLY a JSON object with this exact structure:
           final verificationResult = await _verifyQuestionWithAi(q, source);
           if (verificationResult == null) {
             AppLog.d("AI_DEBUG: [CA] REJECT verifier timeout/error");
+            continue;
+          }
+
+          final bool languagesMatch = verificationResult['languagesMatch'] == true;
+          if (!languagesMatch) {
+            AppLog.d("AI_DEBUG: [CA] REJECT verifier language mismatch between EN and TA");
             continue;
           }
 
@@ -2505,10 +2578,10 @@ Return ONLY a JSON object with this exact structure:
 
       stalls = added == 0 ? stalls + 1 : 0;
       if (stalls >= 3) break;
-      await Future.delayed(const Duration(seconds: 4));
+      await Future.delayed(const Duration(seconds: 6));
     }
 
-    if (draft.length < target) {
+    if (draft.length < 18) {
       AppLog.d("AI_DEBUG: [CA] partial ${draft.length}/$target saved in draft. Firestore quizzes untouched.");
       return false;
     }
@@ -2516,9 +2589,11 @@ Return ONLY a JSON object with this exact structure:
     final finalQs = (List<Map<String, dynamic>>.from(draft)..shuffle())
         .take(target).toList();
 
-    if (finalQs.length != target) {
-      AppLog.d("AI_DEBUG: [CA] Final validation failed. Expected $target verified questions, got ${finalQs.length}. Firestore untouched.");
-      return false;
+    for (var q in finalQs) {
+      if (!_validateQuestion(q, generationDate: date, skipYearCheck: true)) {
+        AppLog.d("AI_DEBUG: [CA] Final validation failed on question. Firestore untouched.");
+        return false;
+      }
     }
 
     await db.collection('quizzes').add({
