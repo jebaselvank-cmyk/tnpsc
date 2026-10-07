@@ -312,6 +312,61 @@ class AiService {
     return null;
   }
 
+  static List<dynamic> _extractQuestionsFromText(String text) {
+    List<dynamic> questions = [];
+    int startIndex = 0;
+    while (true) {
+      int openBrace = text.indexOf('{', startIndex);
+      if (openBrace == -1) break;
+
+      int braceCount = 0;
+      int closeBrace = -1;
+      for (int i = openBrace; i < text.length; i++) {
+        if (text[i] == '{') {
+          braceCount++;
+        } else if (text[i] == '}') {
+          braceCount--;
+          if (braceCount == 0) {
+            closeBrace = i;
+            break;
+          }
+        }
+      }
+
+      if (closeBrace != -1) {
+        String objStr = text.substring(openBrace, closeBrace + 1);
+        try {
+          final decoded = jsonDecode(objStr);
+          if (decoded is Map) {
+            questions.add(Map<String, dynamic>.from(decoded));
+          }
+        } catch (_) {}
+        startIndex = closeBrace + 1;
+      } else {
+        break;
+      }
+    }
+    return questions;
+  }
+
+  static List<dynamic> _parseQuestions(String res) {
+    try {
+      int start = res.indexOf('[');
+      int end = res.lastIndexOf(']');
+      if (start != -1 && end != -1 && end > start) {
+        String jsonPart = res.substring(start, end + 1);
+        try {
+          final decoded = jsonDecode(jsonPart);
+          if (decoded is List) {
+            return List<dynamic>.from(decoded);
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    return _extractQuestionsFromText(res);
+  }
+
   static Future<String?> _tryModelRequest(
       String apiKey,
       String modelName,
@@ -901,10 +956,27 @@ class AiService {
   }
 
   static Future<bool> generateAndSaveDailyQuiz(DateTime date) async {
+    final dateStr = AppDate.format(date);
+
+    // 1. Check if quiz already exists and has 20 questions
+    try {
+      final existingSnap = await FirebaseFirestore.instance
+          .collection('quizzes')
+          .where('date', isEqualTo: dateStr)
+          .where('type', isEqualTo: 'daily_quiz')
+          .get();
+      if (existingSnap.docs.isNotEmpty) {
+        List existingQs = existingSnap.docs.first.get('questions') ?? [];
+        if (existingQs.length >= 20) {
+          AppLog.d("AI_DEBUG: Daily quiz for $dateStr already has ${existingQs.length} questions. Skipping generation.");
+          return true;
+        }
+      }
+    } catch (_) {}
+
     final generationDate = DateTime.now();
     final generationDateStr = AppDate.format(generationDate);
-    final quizDateStr = AppDate.format(date);
-    final dateStr = quizDateStr;
+    final quizDateStr = dateStr;
 
     // Get topics from last 30 days to avoid repeats
     String recentContext = await _getRecentQuizContext('quizzes', 30);
@@ -1132,69 +1204,71 @@ $commonRules
 """;
 
     // --------------------------------------------------------------------
-    // Daily quiz generation with quiz_type tagging
-    List<dynamic> allQuestions = [];
+    // Daily quiz generation with draft accumulator loop
+    List<dynamic> draftQuestions = [];
+    Set<String> seenTexts = {};
 
-    // Helper to fetch questions and tag them with a quiz_type
-    Future<void> fetchAndTag(
-        String prompt,
-        String quizType,
-        int expectedCount,
-        ) async {
-      final res = await _generateWithFallback(prompt);
+    Future<void> accumulateDaily(String promptText, String quizType) async {
+      if (draftQuestions.length >= 20) return;
+      final res = await _generateWithFallback(promptText);
       if (res != null) {
-        try {
-          // Note: _generateWithFallback already trims and handles code blocks
-          List q = jsonDecode(res);
-          List<dynamic> validQ = _filterValidQuestions(q, generationDate: generationDate);
+        List<dynamic> parsed = _parseQuestions(res);
+        List<dynamic> validQ = _filterValidQuestions(parsed, generationDate: generationDate);
+        int rejected = parsed.length - validQ.length;
+        AppLog.d("AI_DEBUG: [Daily Quiz - $quizType] Generated: ${parsed.length}, Added: ${validQ.length}, Rejected: $rejected");
+        for (var item in validQ) {
+          String textTa = (item['question_ta'] ?? '').toString().trim();
+          if (textTa.isNotEmpty && !seenTexts.contains(textTa)) {
+            seenTexts.add(textTa);
+            int index = draftQuestions.length + 1;
+            String topicKey = quizType == 'general_tamil' ? 'Culture' : (quizType == 'general_studies' ? 'National Affairs' : 'Economy');
+            String eventName = quizType == 'general_tamil' ? 'TNPSC General Tamil & Literature' : (quizType == 'general_studies' ? 'TNPSC General Studies Assessment' : 'TNPSC Quantitative Aptitude');
+            String sourceName = quizType == 'general_tamil' ? 'Tamil Nadu Textbooks (Samacheer Kalvi)' : 'Press Information Bureau (PIB)';
+            String sourceUrl = quizType == 'general_tamil' ? 'https://www.tntextbooks.in' : 'https://pib.gov.in';
 
-          // Validation: Trim if more, fail if less
-          if (validQ.length > expectedCount) validQ = validQ.sublist(0, expectedCount);
-          if (validQ.length < expectedCount) {
-            AppLog.d(
-              "AI_DEBUG: Count/Validation mismatch for $quizType. Got valid ${validQ.length}, expected $expectedCount",
-            );
-            return;
+            draftQuestions.add({
+              ...item,
+              'quiz_type': quizType,
+              'topic_key': topicKey,
+              'event_name': eventName,
+              'event_date': dateStr,
+              'published_at': DateTime.now().toIso8601String(),
+              'source_name': sourceName,
+              'source_url': sourceUrl,
+              'source_id': "${quizType}_${dateStr}_$index",
+              'event_id': "${quizType}_event_${dateStr}_$index",
+            });
+            if (draftQuestions.length >= 20) break;
           }
-
-          int index = 0;
-          allQuestions.addAll(
-            validQ.map((item) {
-              index++;
-              String topicKey = quizType == 'general_tamil' ? 'Culture' : (quizType == 'general_studies' ? 'National Affairs' : 'Economy');
-              String eventName = quizType == 'general_tamil' ? 'TNPSC General Tamil & Literature' : (quizType == 'general_studies' ? 'TNPSC General Studies Assessment' : 'TNPSC Quantitative Aptitude');
-              String sourceName = quizType == 'general_tamil' ? 'Tamil Nadu Textbooks (Samacheer Kalvi)' : 'Press Information Bureau (PIB)';
-              String sourceUrl = quizType == 'general_tamil' ? 'https://www.tntextbooks.in' : 'https://pib.gov.in';
-
-              return {
-                ...item,
-                'quiz_type': quizType,
-                'topic_key': topicKey,
-                'event_name': eventName,
-                'event_date': dateStr,
-                'published_at': DateTime.now().toIso8601String(),
-                'source_name': sourceName,
-                'source_url': sourceUrl,
-                'source_id': "${quizType}_${dateStr}_$index",
-                'event_id': "${quizType}_event_${dateStr}_$index",
-              };
-            }),
-          );
-        } catch (e) {
-          AppLog.d("AI_DEBUG: JSON Decode Error in fetchAndTag ($quizType): $e");
         }
+        AppLog.d("AI_DEBUG: [Daily Quiz Progress] Total accumulated: ${draftQuestions.length}/20");
       }
     }
 
-    // Fetch each category and tag appropriately
-    await fetchAndTag(promptTamil, 'general_tamil', 10);
-    await fetchAndTag(promptGS, 'general_studies', 6);
-    await fetchAndTag(promptAptitude, 'aptitude', 4);
+    await accumulateDaily(promptTamil, 'general_tamil');
+    if (draftQuestions.length < 20) await accumulateDaily(promptGS, 'general_studies');
+    if (draftQuestions.length < 20) await accumulateDaily(promptAptitude, 'aptitude');
 
-    if (allQuestions.length != 20) return false; // Ensure exactly 20 total
+    // Auto-top-up loop until 20 reached (max 3 attempts)
+    int topUpTries = 0;
+    while (draftQuestions.length < 20 && topUpTries < 3) {
+      topUpTries++;
+      int needed = 20 - draftQuestions.length;
+      String topUpPrompt = "Generate $needed UNIQUE TNPSC General MCQs (Bilingual). $commonRules";
+      await accumulateDaily(topUpPrompt, 'general_studies');
+    }
 
-    // Shuffle the final list to mix Tamil, GS, and Aptitude
-    allQuestions.shuffle();
+    if (draftQuestions.length < 20) {
+      AppLog.d("AI_DEBUG: [FAILED] Daily Quiz generation for $dateStr fell short at ${draftQuestions.length}/20");
+      return false;
+    }
+
+    if (draftQuestions.length > 20) {
+      draftQuestions = draftQuestions.sublist(0, 20);
+    }
+    draftQuestions.shuffle();
+    List<dynamic> allQuestions = draftQuestions;
+    AppLog.d("AI_DEBUG: [SUCCESS] Daily Quiz generated for $dateStr. Total questions added: ${allQuestions.length}");
 
     // Store / update in Firestore
     final querySnapshot = await FirebaseFirestore.instance
@@ -1225,6 +1299,23 @@ $commonRules
 
   static Future<bool> generateAndSaveMockQuiz(DateTime date) async {
     final dateStr = AppDate.format(date);
+
+    // 1. Check if quiz already exists and has 50 questions
+    try {
+      final existingSnap = await FirebaseFirestore.instance
+          .collection('mock_tests')
+          .where('date', isEqualTo: dateStr)
+          .where('type', isEqualTo: 'daily_quiz')
+          .where('quizType', isEqualTo: 'daily_50_quiz')
+          .get();
+      if (existingSnap.docs.isNotEmpty) {
+        List existingQs = existingSnap.docs.first.get('questions') ?? [];
+        if (existingQs.length >= 50) {
+          AppLog.d("AI_DEBUG: 50-Mock quiz for $dateStr already has ${existingQs.length} questions. Skipping generation.");
+          return true;
+        }
+      }
+    } catch (_) {}
 
     // Get topics from last 30 days to avoid repeats in mock tests
     String recentContext = await _getRecentQuizContext('mock_tests', 30);
@@ -1414,49 +1505,60 @@ $commonRules
 """;
 
     // --------------------------------------------------------------------
-    List<dynamic> allQuestions = [];
+    List<dynamic> draftQuestions = [];
+    Set<String> seenTexts = {};
 
-    // Helper for batched generation
-    Future<bool> fetchBatch(String prompt, String quizType, int expectedCount) async {
-      AppLog.d("AI_DEBUG: Generating $expectedCount $quizType Questions...");
-      final res = await _generateWithFallback(prompt);
+    Future<void> accumulateMock(String promptText, String quizType) async {
+      if (draftQuestions.length >= 50) return;
+      final res = await _generateWithFallback(promptText);
       if (res != null) {
-        try {
-          List<dynamic> batch = jsonDecode(res);
-          List<dynamic> validBatch = _filterValidQuestions(batch);
-          if (validBatch.length > expectedCount) validBatch = validBatch.sublist(0, expectedCount);
-          if (validBatch.length == expectedCount) {
-            allQuestions.addAll(
-              validBatch.map((q) => {...q, 'quiz_type': quizType}),
-            );
-            return true;
-          } else {
-            AppLog.d("AI_DEBUG: $quizType batch count/validation mismatch. Got valid ${validBatch.length}, expected $expectedCount");
+        List<dynamic> parsed = _parseQuestions(res);
+        List<dynamic> validBatch = _filterValidQuestions(parsed);
+        int rejected = parsed.length - validBatch.length;
+        AppLog.d("AI_DEBUG: [Mock Quiz - $quizType] Generated: ${parsed.length}, Added: ${validBatch.length}, Rejected: $rejected");
+        for (var q in validBatch) {
+          String textTa = (q['question_ta'] ?? '').toString().trim();
+          if (textTa.isNotEmpty && !seenTexts.contains(textTa)) {
+            seenTexts.add(textTa);
+            draftQuestions.add({...q, 'quiz_type': quizType});
+            if (draftQuestions.length >= 50) break;
           }
-        } catch (e) {
-          AppLog.d("AI_DEBUG: $quizType JSON Parse Error: $e");
         }
+        AppLog.d("AI_DEBUG: [Mock Quiz Progress] Total accumulated: ${draftQuestions.length}/50");
       }
-      return false;
     }
 
-    // 1️⃣ Tamil questions - Split into 2 batches to prevent timeout
+    // 1️⃣ Tamil batches
     final promptTamil1 = promptTamil.replaceFirst("exactly 25", "exactly 13");
     final promptTamil2 = promptTamil.replaceFirst("exactly 25", "exactly 12");
 
-    if (!await fetchBatch(promptTamil1, 'general_tamil', 13)) return false;
-    if (!await fetchBatch(promptTamil2, 'general_tamil', 12)) return false;
+    await accumulateMock(promptTamil1, 'general_tamil');
+    if (draftQuestions.length < 25) await accumulateMock(promptTamil2, 'general_tamil');
 
-    // 2️⃣ General Studies - 1 batch
-    if (!await fetchBatch(promptGS, 'general_studies', 15)) return false;
+    // 2️⃣ GS batch
+    if (draftQuestions.length < 40) await accumulateMock(promptGS, 'general_studies');
 
-    // 3️⃣ Aptitude - 1 batch
-    if (!await fetchBatch(promptAptitude, 'aptitude', 10)) return false;
+    // 3️⃣ Aptitude batch
+    if (draftQuestions.length < 50) await accumulateMock(promptAptitude, 'aptitude');
+
+    // Auto-top-up loop until 50 reached (max 4 attempts)
+    int topUpTries = 0;
+    while (draftQuestions.length < 50 && topUpTries < 4) {
+      topUpTries++;
+      int needed = 50 - draftQuestions.length;
+      String topUpPrompt = "Generate $needed UNIQUE TNPSC MCQs (Bilingual, Mix of Tamil, GS, Aptitude). $commonRules";
+      await accumulateMock(topUpPrompt, 'general_studies');
+    }
 
     // --------------------------------------------------------------------
-    if (allQuestions.length == 50) {
+    if (draftQuestions.length >= 50) {
       // Shuffle the final list to mix Tamil, GS, and Aptitude
-      allQuestions.shuffle();
+      draftQuestions.shuffle();
+      if (draftQuestions.length > 50) {
+        draftQuestions = draftQuestions.sublist(0, 50);
+      }
+      List<dynamic> allQuestions = draftQuestions;
+      AppLog.d("AI_DEBUG: [SUCCESS] 50-Mock Quiz generated for $dateStr. Total questions added: ${allQuestions.length}");
 
       // Final check for 50 questions total
       final querySnapshot = await FirebaseFirestore.instance
@@ -1715,16 +1817,15 @@ Return only the raw JSON array of EXACTLY $count items.
           );
           allQuestions = _filterValidQuestions(allQuestions);
 
-          // STRICT VALIDATION: Ensure exactly 'count' questions
-          if (allQuestions.length != count) {
+          // VALIDATION: Ensure at least 70% of requested questions
+          if (allQuestions.length < (count * 0.7)) {
             AppLog.d(
-              "AI_DEBUG: Count/Validation mismatch. Got valid ${allQuestions.length}, expected $count. Retrying logic...",
+              "AI_DEBUG: Count/Validation mismatch. Got valid ${allQuestions.length}, expected at least ${count * 0.7}.",
             );
-            if (allQuestions.length > count) {
-              allQuestions = allQuestions.sublist(0, count);
-            } else {
-              return false;
-            }
+            return false;
+          }
+          if (allQuestions.length > count) {
+            allQuestions = allQuestions.sublist(0, count);
           }
 
           final querySnapshot = await FirebaseFirestore.instance
