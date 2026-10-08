@@ -82,11 +82,6 @@ class _ResultScreenState extends State<ResultScreen> {
     
     if (!isDailyQuiz) return;
 
-    // Reset all categories to zero first so that only the CURRENT quiz numbers are displayed on home screen!
-    HiveService.updateCategoryPerformance('general_tamil', 0, 0);
-    HiveService.updateCategoryPerformance('general_studies', 0, 0);
-    HiveService.updateCategoryPerformance('aptitude', 0, 0);
-
     // Dynamic totals based on quiz data
     int tamilTotal = 0;
     int tamilCorrect = 0;

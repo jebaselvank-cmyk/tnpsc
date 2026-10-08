@@ -808,6 +808,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final gsPerf = HiveService.getCategoryPerformance('general_studies');
     final aptitudePerf = HiveService.getCategoryPerformance('aptitude');
 
+    AppLog.d("AI_DEBUG_STATS: Tamil: ${tamilPerf['correct'].toString()}/${tamilPerf['total']}, GS: ${gsPerf['correct']}/${gsPerf['total']}, Aptitude: ${aptitudePerf['correct']}/${aptitudePerf['total']}");
+
     // Determine weakest area(s)
     List<String> weakestCategories = [];
     double lowestPercent = 101;

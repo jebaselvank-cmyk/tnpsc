@@ -524,8 +524,9 @@ class _RoomSetupScreenState extends State<RoomSetupScreen> {
 
   // Returns the option string localized based on current app language.
   String _localizedOption(String raw) {
-    if (!raw.contains('/')) return raw.trim();
-    final parts = raw.split('/');
+    final cleaned = Question.cleanOptionText(raw);
+    if (!cleaned.contains('/')) return cleaned;
+    final parts = cleaned.split('/');
     final en = parts[0].trim();
     final ta = parts.length > 1 ? parts[1].trim() : en;
     final isTamil = AppLanguage.languageNotifier.value == 'ta';

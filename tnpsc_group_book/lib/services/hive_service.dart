@@ -461,27 +461,21 @@ class HiveService {
   static Future<void> updateCategoryPerformance(
       String categoryKey,
       int correct,
-      int total,
-      ) async {
+      int total, {
+      bool accumulate = true,
+      }) async {
     var box = Hive.box(userBoxName);
 
-    // Overwrite per quiz as requested by user to show the exact current quiz breakdown
-    int wrong = total - correct;
+    int existingCorrect = accumulate ? (box.get('perf_correct_$categoryKey', defaultValue: 0) as int) : 0;
+    int existingTotal = accumulate ? (box.get('perf_total_$categoryKey', defaultValue: 0) as int) : 0;
 
-    await box.put(
-      'perf_correct_$categoryKey',
-      correct,
-    );
+    int newCorrect = existingCorrect + correct;
+    int newTotal = existingTotal + total;
+    int wrong = newTotal - newCorrect;
 
-    await box.put(
-      'perf_total_$categoryKey',
-      total,
-    );
-
-    await box.put(
-      'perf_wrong_$categoryKey',
-      wrong,
-    );
+    await box.put('perf_correct_$categoryKey', newCorrect);
+    await box.put('perf_total_$categoryKey', newTotal);
+    await box.put('perf_wrong_$categoryKey', wrong);
   }
 
   static Map<String, dynamic> getCategoryPerformance(String categoryKey) {

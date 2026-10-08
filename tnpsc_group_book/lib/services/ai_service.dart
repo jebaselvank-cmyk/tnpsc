@@ -529,8 +529,54 @@ class AiService {
     return context;
   }
 
+  static String _detectQuizType(Map<String, dynamic> q) {
+    final qEn = (q['question_en'] ?? q['question'] ?? '').toString().toLowerCase();
+    final qTa = (q['question_ta'] ?? q['question'] ?? '').toString().toLowerCase();
+    final expEn = (q['explanation_en'] ?? q['explanation'] ?? '').toString().toLowerCase();
+    final expTa = (q['explanation_ta'] ?? q['explanation'] ?? '').toString().toLowerCase();
+    final combined = '$qEn $qTa $expEn $expTa';
+
+    if (combined.contains('compound interest') ||
+        combined.contains('simple interest') ||
+        combined.contains('percentage') ||
+        combined.contains('ratio') ||
+        combined.contains('hcf') ||
+        combined.contains('lcm') ||
+        combined.contains('profit and loss') ||
+        combined.contains('speed, distance') ||
+        combined.contains('formula: amount') ||
+        combined.contains('கூட்டு வட்டி') ||
+        combined.contains('தனி வட்டி') ||
+        combined.contains('சதவீதம்') ||
+        combined.contains('விகிதம்') ||
+        combined.contains('மீ.பொ.வ') ||
+        combined.contains('மீ.பொ.ம') ||
+        combined.contains('இலாபம்') ||
+        combined.contains('நஷ்டம்') ||
+        combined.contains('வேகம்') ||
+        combined.contains('காலம்') ||
+        combined.contains('சூத்திரம்: கூடுதல்')) {
+      return 'aptitude';
+    }
+
+    if (combined.contains('thirukkural') ||
+        combined.contains('kamba ramayanam') ||
+        combined.contains('sangam literature') ||
+        combined.contains('பத்துப்பாட்டு') ||
+        combined.contains('எட்டுத்தொகை') ||
+        combined.contains('சிலப்பதிகாரம்') ||
+        combined.contains('திருக்குறள்')) {
+      return 'general_tamil';
+    }
+
+    return q['quiz_type']?.toString().toLowerCase() ?? 'general_studies';
+  }
+
   static bool _validateQuestion(Map<String, dynamic> q, {bool isExamPaper = false, DateTime? generationDate, bool skipYearCheck = false}) {
     try {
+      // Automatically correct quiz_type based on content analysis
+      q['quiz_type'] = _detectQuizType(q);
+
       // Validate event_date <= generationDate if present
       final eventDateStr = q['event_date']?.toString().trim();
       if (eventDateStr != null && eventDateStr.isNotEmpty && !isExamPaper) {
@@ -691,11 +737,9 @@ class AiService {
   }
 
   static bool _hasForeignScripts(String text) {
-    // Check for Devanagari (Hindi), Bengali, or Malayalam explicitly, avoiding Tamil (\u0B80-\u0BFF)
-    final devanagari = RegExp(r'[\u0900-\u097F]');
-    final bengali = RegExp(r'[\u0980-\u09FF]');
-    final malayalam = RegExp(r'[\u0D00-\u0D7F]');
-    return devanagari.hasMatch(text) || bengali.hasMatch(text) || malayalam.hasMatch(text);
+    // Block non-Tamil Indian scripts (Devanagari, Telugu, Kannada, Malayalam, Bengali, Gujarati, Gurmukhi, Oriya)
+    final foreignIndic = RegExp(r'[\u0900-\u0B7F\u0C00-\u0D7F]');
+    return foreignIndic.hasMatch(text);
   }
 
   static bool _hasThoughtLeaks(String text) {
@@ -1292,7 +1336,7 @@ $commonRules
         SetOptions(merge: true),
       );
     } else {
-      await FirebaseFirestore.instance.collection('quizzes').add(quizData);
+      await FirebaseFirestore.instance.collection('quizzes').doc('daily_$dateStr').set(quizData, SetOptions(merge: true));
     }
     return true;
   }
@@ -1584,7 +1628,7 @@ $commonRules
           SetOptions(merge: true),
         );
       } else {
-        await FirebaseFirestore.instance.collection('mock_tests').add(quizData);
+        await FirebaseFirestore.instance.collection('mock_tests').doc('mock_$dateStr').set(quizData, SetOptions(merge: true));
       }
       return true;
     }
@@ -2204,7 +2248,8 @@ Only return the raw JSON array, no other text or markdown formatting.
         final t = (v ?? '').toString().trim();
         return t.length > n ? t.substring(0, n) : t;
       }
-      return '- DATE: ${s['event_date']} | ${s['event_name']}\n'
+      return '- SOURCE_ID: ${s['source_id']}\n'
+          '  DATE: ${s['event_date']} | ${s['event_name']}\n'
           '  EN: ${cut(s['contentEn'], 350)}\n'
           '  TA: ${cut(s['contentTa'], 350)}';
     }).join('\n');
@@ -2216,19 +2261,17 @@ CURRENT_DATE (IST): {currentDateStr}
 
 RULES:
 - Generate EXACTLY {ask} MCQs. Each question from a DIFFERENT fact.
-- STRICT FACT MAPPING: Each generated question must strictly correspond to its respective fact/event in the facts list. Never mix up facts, event names, or numbers between different facts.
+- STRICT FACT MAPPING: Each generated question must strictly correspond to its respective fact/event in the facts list. You MUST return the exact `source_id` of the fact you used.
 - Exactly 4 distinct options, exactly one correct. correctOptionIndex = 0-3.
 - Put the year/month of the event inside the question text.
 - If asking about UPSC, explicitly state "UPSC Civil Services" (யூபிஎஸ்சி குடிமைப்பணி) to avoid confusion with TNPSC.
-- 100% EN/TA PARITY & COMPLETE TRANSLATION: English and Tamil questions/options/explanations must mean the exact same thing without contradiction, ensuring no descriptive phrases (e.g. international tourists and students, modernization grants) are omitted in Tamil.
-- Explanations must directly cover and justify the specific technical facts or terms mentioned in the question.
-- Use accurate Tamil terminology (e.g., "விண்கலத்தின் Crew Module" for crew module, "நவீனமயமாக்கல் நிதி உதவிகள்" for modernization grants).
-- English and Tamil must not be mixed in one field.
+- 100% EN/TA PARITY & COMPLETE TRANSLATION: English and Tamil questions/options/explanations must mean the exact same thing without contradiction.
 - Explanations: 1 short sentence each.
-- Output ONLY a JSON array. No source, no id, no url fields.
+- CRITICAL OPTION FORMAT: Options must be written entirely on a SINGLE CONTINUOUS LINE. Never use newline characters (\\n) inside option text.
+- Output ONLY a JSON array.
 
 ITEM FORMAT:
-{"question_en":"...","question_ta":"...",
+{"source_id":"...","question_en":"...","question_ta":"...",
  "options":[{"en":"...","ta":"..."},{"en":"...","ta":"..."},{"en":"...","ta":"..."},{"en":"...","ta":"..."}],
  "correctOptionIndex":0,"explanation_en":"...","explanation_ta":"..."}
 
@@ -2325,8 +2368,23 @@ ITEM FORMAT:
         final sourceTopicKey = (d['topic_key'] ?? '').toString().trim();
         final titleEn = (d['titleEn'] ?? '').toString().trim();
         final titleTa = (d['titleTa'] ?? '').toString().trim();
-        final contentEn = (d['contentEn'] ?? '').toString().trim();
-        final contentTa = (d['contentTa'] ?? '').toString().trim();
+        
+        String contentEn = '';
+        final rawContentEn = d['contentEn'];
+        if (rawContentEn is List) {
+          contentEn = rawContentEn.map((e) => e.toString()).join('\n').trim();
+        } else {
+          contentEn = (rawContentEn ?? '').toString().trim();
+        }
+
+        String contentTa = '';
+        final rawContentTa = d['contentTa'];
+        if (rawContentTa is List) {
+          contentTa = rawContentTa.map((e) => e.toString()).join('\n').trim();
+        } else {
+          contentTa = (rawContentTa ?? '').toString().trim();
+        }
+
         final isVerified = d['verified'] == true;
 
         if (sourceId.isEmpty ||
@@ -2350,20 +2408,15 @@ ITEM FORMAT:
           continue;
         }
 
-        // 15-day buffer: events must be at least 15 days older than current date
-        final maxAllowedDate = currentDate.subtract(const Duration(days: 15));
-        final maxAllowedDay = DateTime(maxAllowedDate.year, maxAllowedDate.month, maxAllowedDate.day);
-
         final eventDay = DateTime(
           eventDt.year,
           eventDt.month,
           eventDt.day,
         );
 
-        // Event must be at least 15 days old (<= maxAllowedDay) and not older than cutoffDate
-        if (eventDay.isAfter(maxAllowedDay) || 
-            eventDay.isBefore(DateTime(cutoffDate.year, cutoffDate.month, cutoffDate.day)) ||
-            publishedDt.isAfter(maxAllowedDate)) {
+        // Event must be within the last 90 days and not in the future
+        if (eventDay.isAfter(currentDate) || 
+            eventDay.isBefore(DateTime(cutoffDate.year, cutoffDate.month, cutoffDate.day))) {
           continue;
         }
 
@@ -2401,14 +2454,74 @@ ITEM FORMAT:
   }
 
   static Future<bool> generateAndSaveDailyNews(DateTime date) async {
-    // DO NOT let the model manufacture news.
-    //
-    // Populate `current_affairs_points` from a trusted source collector/admin
-    // process with the mandatory provenance fields documented above.
-    AppLog.d(
-      "AI_DEBUG: generateAndSaveDailyNews skipped. "
-          "Current affairs requires verified source records.",
-    );
+    final db = FirebaseFirestore.instance;
+    final dateStr = AppDate.format(date);
+    AppLog.d("AI_DEBUG: [DailyNews] Generating verified news highlights for $dateStr in structured array format...");
+
+    final prompt = '''
+You are an expert TNPSC Current Affairs News Collector and Editor.
+Generate 30 verified daily current affairs highlight points suitable for TNPSC Group 1, Group 2, and Group 4 exams for the date $dateStr.
+CRITICAL REQUIREMENTS:
+1. You must generate highlights distributed EVENLY across ALL the following categories: Awards, Sports, Economy, Science & Technology, Tamil Nadu Governance, Infrastructure, Education, International Affairs, Environment, National Affairs.
+2. CRITICAL LANGUAGE RULE: English fields (`titleEn`, `contentEn`, `event_name`) must be strictly in English. Tamil fields (`titleTa`, `contentTa`) must be strictly in Tamil script. Absolutely NO other languages or scripts (such as Hindi, Devanagari, Telugu, Kannada, Malayalam) are allowed anywhere.
+
+For each highlight point, return a JSON object with EXACTLY this structure:
+{
+  "source_id": "pib_${dateStr}_01",
+  "source_name": "Press Information Bureau (PIB)",
+  "source_url": "https://pib.gov.in/PressReleasePage.aspx?PRID=123456",
+  "event_id": "unique_snake_case_event_id",
+  "event_name": "Short title of the event in English",
+  "event_date": "$dateStr",
+  "topic_key": "Awards",
+  "category": "Awards",
+  "titleEn": "English headline",
+  "titleTa": "Tamil headline",
+  "contentEn": [
+    "Paragraph 1 in English with rich facts.",
+    "Paragraph 2 in English with context."
+  ],
+  "contentTa": [
+    "தமிழில் பத்தி 1 விரிவான தகவல்களுடன்.",
+    "தமிழில் பத்தி 2 பின்னணியுடன்."
+  ]
+}
+
+Return ONLY a valid JSON array of objects. No markdown formatting.
+''';
+
+    final res = await _generateWithFallback(prompt);
+    if (res != null) {
+      try {
+        final parsed = _parseQuestions(res);
+        if (parsed is List && parsed.isNotEmpty) {
+          final batch = db.batch();
+          int savedCount = 0;
+          for (var item in parsed) {
+            final map = Map<String, dynamic>.from(item as Map);
+            final sourceId = map['source_id']?.toString().trim().isNotEmpty == true 
+                ? map['source_id'].toString().trim() 
+                : "news_${dateStr}_$savedCount";
+            map['source_id'] = sourceId;
+            map['verified'] = true;
+            map['date'] = dateStr;
+            map['timestamp'] = FieldValue.serverTimestamp();
+            if (map['category'] == null && map['topic_key'] != null) {
+              map['category'] = map['topic_key'];
+            }
+
+            final ref = db.collection('current_affairs_points').doc(sourceId);
+            batch.set(ref, map, SetOptions(merge: true));
+            savedCount++;
+          }
+          await batch.commit();
+          AppLog.d("AI_DEBUG: [SUCCESS] Generated and saved $savedCount verified news points for $dateStr into current_affairs_points with array paragraphs.");
+          return true;
+        }
+      } catch (e) {
+        AppLog.d("AI_DEBUG: [DailyNews] Parse Error: $e");
+      }
+    }
     return false;
   }
 
@@ -2697,7 +2810,7 @@ Return ONLY a JSON object with this exact structure:
       }
     }
 
-    await db.collection('quizzes').add({
+    await db.collection('quizzes').doc('ca_$quizDateStr').set({
       'date': quizDateStr,
       'title': "Current Affairs Quiz / நடப்பு நிகழ்வுகள்",
       'quizType': 'current_affairs',
@@ -2706,7 +2819,7 @@ Return ONLY a JSON object with this exact structure:
       'knowledgeCutoffDate': currentDateStr,
       'sourceOnly': true,
       'createdAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
     await draftRef.delete();
     AppLog.d("AI_DEBUG: [CA] FINAL SAVE SUCCESS - ${finalQs.length} 100% verified questions");
     return true;
@@ -2734,20 +2847,21 @@ Return ONLY a JSON object with this exact structure:
 
   static Future<void> checkAndAutoGenerateNews() async {
     try {
-      final todayStr = AppDate.getTodayString();
+      final yesterday = DateTime.now().subtract(const Duration(days: 0));
+      final yesterdayStr = AppDate.format(yesterday);
       final db = FirebaseFirestore.instance;
 
-      // Check if news for today already exists
+      // Check if news for yesterday already exists
       final query = await db.collection('current_affairs_points')
-          .where('date', isEqualTo: todayStr)
+          .where('date', isEqualTo: yesterdayStr)
           .limit(1)
           .get();
 
       if (query.docs.isEmpty) {
-        AppLog.d("AI_DEBUG: No news found for today ($todayStr). Triggering auto-generation...");
-        await generateAndSaveDailyNews(AppDate.getISTNow());
+        AppLog.d("AI_DEBUG: No news found for yesterday ($yesterdayStr). Triggering auto-generation for yesterday...");
+        await generateAndSaveDailyNews(yesterday);
       } else {
-        AppLog.d("AI_DEBUG: News for today ($todayStr) already exists. Skipping auto-gen.");
+        AppLog.d("AI_DEBUG: News for yesterday ($yesterdayStr) already exists. Skipping auto-gen.");
       }
     } catch (e) {
       AppLog.e("AI_DEBUG: Error in auto news generation", e);

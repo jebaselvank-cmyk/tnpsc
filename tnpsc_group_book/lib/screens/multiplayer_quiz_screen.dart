@@ -367,6 +367,7 @@ class _MultiplayerQuizScreenState extends State<MultiplayerQuizScreen> {
                                     fontSize: 15,
                                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                     color: isDark ? Colors.white : AppTheme.textMainColor,
+                                    singleLine: true,
                                   ),
                                 ),
                               ],

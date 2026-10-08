@@ -437,6 +437,26 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _nextQuestion() {
+    int tamilTotal = 0, tamilCorrect = 0, gsTotal = 0, gsCorrect = 0, aptitudeTotal = 0, aptitudeCorrect = 0;
+    for (int i = 0; i <= _currentQuestionIndex && i < _selectedAnswers.length; i++) {
+      final selected = _selectedAnswers[i];
+      if (selected == null) continue;
+      final q = _visibleQuestions[i];
+      final isCorrect = selected == q.correctOptionIndex;
+      final qType = (q.quizType ?? "").toLowerCase();
+      if (qType == 'general_tamil' || qType.contains('tamil')) {
+        tamilTotal++;
+        if (isCorrect) tamilCorrect++;
+      } else if (qType == 'aptitude' || qType.contains('aptitude') || qType.contains('math')) {
+        aptitudeTotal++;
+        if (isCorrect) aptitudeCorrect++;
+      } else {
+        gsTotal++;
+        if (isCorrect) gsCorrect++;
+      }
+    }
+    AppLog.d("AI_DEBUG_STATS_NEXT: Tamil: $tamilCorrect/$tamilTotal, GS: $gsCorrect/$gsTotal, Aptitude: $aptitudeCorrect/$aptitudeTotal");
+
     if (_currentQuestionIndex < _visibleQuestions.length - 1) {
       setState(() {
         _currentQuestionIndex++;
@@ -1106,6 +1126,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                                   fontSize: 15,
                                                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                                   color: isDark ? Colors.white : AppTheme.textMainColor,
+                                                  singleLine: true,
                                                 ),
                                               ),
                                             ],

@@ -66,8 +66,8 @@ class Question {
         map['options'].isNotEmpty &&
         map['options'][0] is Map) {
       final optsList = List<Map<String, dynamic>>.from(map['options']);
-      optsEn = optsList.map((o) => (o['en'] ?? "").toString()).toList();
-      optsTa = optsList.map((o) => (o['ta'] ?? "").toString()).toList();
+      optsEn = optsList.map((o) => cleanOptionText((o['en'] ?? "").toString())).toList();
+      optsTa = optsList.map((o) => cleanOptionText((o['ta'] ?? "").toString())).toList();
     }
 
     // 2. Compute structured fields if they are missing (Parsing Legacy Strings)
@@ -91,8 +91,8 @@ class Question {
       for (var opt in map['options']) {
         if (opt is String) {
           var parsed = AppLanguage.parseBilingual(opt);
-          optsEn.add(parsed['en']!);
-          optsTa.add(parsed['ta']!);
+          optsEn.add(cleanOptionText(parsed['en']!));
+          optsTa.add(cleanOptionText(parsed['ta']!));
         }
       }
     }
@@ -102,10 +102,10 @@ class Question {
     
     List<String> finalOpts = [];
     if (map['options'] is List && map['options'].isNotEmpty && map['options'][0] is String) {
-      finalOpts = List<String>.from(map['options']);
+      finalOpts = List<String>.from(map['options']).map((opt) => cleanOptionText(opt)).toList();
     } else if (optsEn != null && optsTa != null) {
       for (int i = 0; i < optsEn.length; i++) {
-        finalOpts.add("${optsEn[i]} / ${optsTa[i]}");
+        finalOpts.add(cleanOptionText("${optsEn[i]} / ${optsTa[i]}"));
       }
     }
 
@@ -129,6 +129,22 @@ class Question {
   }
 
   String get uniqueId => id ?? question.hashCode.toString();
+
+  static String cleanOptionText(String text) {
+    String cleaned = text
+        .replaceAll('\n', ' ')
+        .replaceAll('\r', ' ')
+        .replaceAll('\\n', ' ')
+        .replaceAll(RegExp(r'[\r\n]+'), ' ')
+        .replaceAll(RegExp(r'\s*,\s*'), ', ')
+        .replaceAll(RegExp(r',\s*,\s*'), ', ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (cleaned.endsWith(',')) {
+      cleaned = cleaned.substring(0, cleaned.length - 1).trim();
+    }
+    return cleaned;
+  }
 
   /// Automatic Formatter for TNPSC Match, Statement, and Chronological Questions
   static String formatQuestionText(String? rawText) {
@@ -198,7 +214,7 @@ class Question {
     } else if (lang == 'en') {
       rawOpts = optionsEn ?? options;
     }
-    return rawOpts.map((opt) => opt.replaceAll(RegExp(r'[\r\n]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim()).toList();
+    return rawOpts.map((opt) => cleanOptionText(opt)).toList();
   }
 
   String get displayExplanation {
@@ -221,9 +237,15 @@ class Question {
 
   List<String> get bilingualOptions {
     if (optionsEn != null && optionsTa != null) {
-      return List.generate(optionsEn!.length, (i) => "${optionsEn![i]} / ${optionsTa![i]}".replaceAll(RegExp(r'[\r\n]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim());
+      return List.generate(optionsEn!.length, (i) {
+        final en = cleanOptionText(optionsEn![i]);
+        final ta = cleanOptionText(optionsTa![i]);
+        if (en == ta || en.isEmpty) return ta;
+        if (ta.isEmpty) return en;
+        return "$ta  |  $en";
+      });
     }
-    return options.map((opt) => opt.replaceAll(RegExp(r'[\r\n]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim()).toList();
+    return options.map((opt) => cleanOptionText(opt)).toList();
   }
 
   String get bilingualExplanation => (explanationEn != null && explanationTa != null)
