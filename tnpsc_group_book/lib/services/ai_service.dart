@@ -536,6 +536,38 @@ class AiService {
     final expTa = (q['explanation_ta'] ?? q['explanation'] ?? '').toString().toLowerCase();
     final combined = '$qEn $qTa $expEn $expTa';
 
+    // Check for Tamil literature / grammar / language keywords first
+    if (combined.contains('thirukkural') ||
+        combined.contains('kamba ramayanam') ||
+        combined.contains('sangam literature') ||
+        combined.contains('tamil literature') ||
+        combined.contains('bhakti movement') ||
+        combined.contains('vetrumai') ||
+        combined.contains('ettuthogai') ||
+        combined.contains('pattupattu') ||
+        combined.contains('silappatikaram') ||
+        combined.contains('manimekalai') ||
+        combined.contains('purananuru') ||
+        combined.contains('kurunthogai') ||
+        combined.contains('paddinappalai') ||
+        combined.contains('kalithogai') ||
+        combined.contains('bharathidasan') ||
+        combined.contains('பத்துப்பாட்டு') ||
+        combined.contains('எட்டுத்தொகை') ||
+        combined.contains('சிலப்பதிகாரம்') ||
+        combined.contains('மணிமேகலை') ||
+        combined.contains('புறநானூறு') ||
+        combined.contains('குறுந்தொகை') ||
+        combined.contains('பட்டினப்பாலை') ||
+        combined.contains('கலித்தொகை') ||
+        combined.contains('திருக்குறள்') ||
+        combined.contains('வேற்றுமை') ||
+        combined.contains('தமிழ் இலக்கிய') ||
+        combined.contains('சங்க காலம்') ||
+        combined.contains('பக்தி இலக்கிய')) {
+      return 'general_tamil';
+    }
+
     if (combined.contains('compound interest') ||
         combined.contains('simple interest') ||
         combined.contains('percentage') ||
@@ -557,16 +589,6 @@ class AiService {
         combined.contains('காலம்') ||
         combined.contains('சூத்திரம்: கூடுதல்')) {
       return 'aptitude';
-    }
-
-    if (combined.contains('thirukkural') ||
-        combined.contains('kamba ramayanam') ||
-        combined.contains('sangam literature') ||
-        combined.contains('பத்துப்பாட்டு') ||
-        combined.contains('எட்டுத்தொகை') ||
-        combined.contains('சிலப்பதிகாரம்') ||
-        combined.contains('திருக்குறள்')) {
-      return 'general_tamil';
     }
 
     return q['quiz_type']?.toString().toLowerCase() ?? 'general_studies';
@@ -1248,59 +1270,65 @@ $commonRules
 """;
 
     // --------------------------------------------------------------------
-    // Daily quiz generation with draft accumulator loop
+    // Daily quiz generation with precise category quotas (10 Tamil, 6 GS, 4 Aptitude)
     List<dynamic> draftQuestions = [];
     Set<String> seenTexts = {};
 
-    Future<void> accumulateDaily(String promptText, String quizType) async {
-      if (draftQuestions.length >= 20) return;
-      final res = await _generateWithFallback(promptText);
-      if (res != null) {
-        List<dynamic> parsed = _parseQuestions(res);
-        List<dynamic> validQ = _filterValidQuestions(parsed, generationDate: generationDate);
-        int rejected = parsed.length - validQ.length;
-        AppLog.d("AI_DEBUG: [Daily Quiz - $quizType] Generated: ${parsed.length}, Added: ${validQ.length}, Rejected: $rejected");
-        for (var item in validQ) {
-          String textTa = (item['question_ta'] ?? '').toString().trim();
-          if (textTa.isNotEmpty && !seenTexts.contains(textTa)) {
-            seenTexts.add(textTa);
-            int index = draftQuestions.length + 1;
-            String topicKey = quizType == 'general_tamil' ? 'Culture' : (quizType == 'general_studies' ? 'National Affairs' : 'Economy');
-            String eventName = quizType == 'general_tamil' ? 'TNPSC General Tamil & Literature' : (quizType == 'general_studies' ? 'TNPSC General Studies Assessment' : 'TNPSC Quantitative Aptitude');
-            String sourceName = quizType == 'general_tamil' ? 'Tamil Nadu Textbooks (Samacheer Kalvi)' : 'Press Information Bureau (PIB)';
-            String sourceUrl = quizType == 'general_tamil' ? 'https://www.tntextbooks.in' : 'https://pib.gov.in';
+    int getCountForType(String type) => draftQuestions.where((q) => q['quiz_type'] == type).length;
 
-            draftQuestions.add({
-              ...item,
-              'quiz_type': quizType,
-              'topic_key': topicKey,
-              'event_name': eventName,
-              'event_date': dateStr,
-              'published_at': DateTime.now().toIso8601String(),
-              'source_name': sourceName,
-              'source_url': sourceUrl,
-              'source_id': "${quizType}_${dateStr}_$index",
-              'event_id': "${quizType}_event_${dateStr}_$index",
-            });
-            if (draftQuestions.length >= 20) break;
+    Future<void> fillCategory(String promptText, String quizType, int targetCount, int maxAttemptsPerCategory) async {
+      int attempts = 0;
+      while (getCountForType(quizType) < targetCount && attempts < maxAttemptsPerCategory) {
+        attempts++;
+        int needed = targetCount - getCountForType(quizType);
+        if (needed <= 0) break;
+
+        final promptWithTarget = promptText.replaceAll(RegExp(r'Target: \d+'), 'Target: $needed').replaceAll(RegExp(r'up to \d+'), 'up to $needed');
+        final res = await _generateWithFallback(promptWithTarget);
+        if (res != null) {
+          List<dynamic> parsed = _parseQuestions(res);
+          List<dynamic> validQ = _filterValidQuestions(parsed, generationDate: generationDate);
+          int rejected = parsed.length - validQ.length;
+          AppLog.d("AI_DEBUG: [Daily Quiz - $quizType] Attempt $attempts -> Generated: ${parsed.length}, Added: ${validQ.length}, Rejected: $rejected");
+
+          for (var item in validQ) {
+            if (getCountForType(quizType) >= targetCount) break;
+            String textTa = (item['question_ta'] ?? '').toString().trim();
+            if (textTa.isNotEmpty && !seenTexts.contains(textTa)) {
+              seenTexts.add(textTa);
+              int index = draftQuestions.length + 1;
+              String topicKey = quizType == 'general_tamil' ? 'Culture' : (quizType == 'general_studies' ? 'National Affairs' : 'Economy');
+              String eventName = quizType == 'general_tamil' ? 'TNPSC General Tamil & Literature' : (quizType == 'general_studies' ? 'TNPSC General Studies Assessment' : 'TNPSC Quantitative Aptitude');
+              String sourceName = quizType == 'general_tamil' ? 'Tamil Nadu Textbooks (Samacheer Kalvi)' : 'Press Information Bureau (PIB)';
+              String sourceUrl = quizType == 'general_tamil' ? 'https://www.tntextbooks.in' : 'https://pib.gov.in';
+
+              draftQuestions.add({
+                ...item,
+                'quiz_type': quizType,
+                'topic_key': topicKey,
+                'event_name': eventName,
+                'event_date': dateStr,
+                'published_at': DateTime.now().toIso8601String(),
+                'source_name': sourceName,
+                'source_url': sourceUrl,
+                'source_id': "${quizType}_${dateStr}_$index",
+                'event_id': "${quizType}_event_${dateStr}_$index",
+              });
+            }
           }
         }
-        AppLog.d("AI_DEBUG: [Daily Quiz Progress] Total accumulated: ${draftQuestions.length}/20");
+        await Future.delayed(const Duration(seconds: 1));
       }
     }
 
-    await accumulateDaily(promptTamil, 'general_tamil');
-    if (draftQuestions.length < 20) await accumulateDaily(promptGS, 'general_studies');
-    if (draftQuestions.length < 20) await accumulateDaily(promptAptitude, 'aptitude');
+    // 1. Fill General Tamil (Target: 10)
+    await fillCategory(promptTamil, 'general_tamil', 10, 5);
 
-    // Auto-top-up loop until 20 reached (max 3 attempts)
-    int topUpTries = 0;
-    while (draftQuestions.length < 20 && topUpTries < 3) {
-      topUpTries++;
-      int needed = 20 - draftQuestions.length;
-      String topUpPrompt = "Generate $needed UNIQUE TNPSC General MCQs (Bilingual). $commonRules";
-      await accumulateDaily(topUpPrompt, 'general_studies');
-    }
+    // 2. Fill General Studies (Target: 6)
+    await fillCategory(promptGS, 'general_studies', 6, 5);
+
+    // 3. Fill Aptitude (Target: 4)
+    await fillCategory(promptAptitude, 'aptitude', 4, 5);
 
     if (draftQuestions.length < 20) {
       AppLog.d("AI_DEBUG: [FAILED] Daily Quiz generation for $dateStr fell short at ${draftQuestions.length}/20");
@@ -1312,7 +1340,7 @@ $commonRules
     }
     draftQuestions.shuffle();
     List<dynamic> allQuestions = draftQuestions;
-    AppLog.d("AI_DEBUG: [SUCCESS] Daily Quiz generated for $dateStr. Total questions added: ${allQuestions.length}");
+    AppLog.d("AI_DEBUG: [SUCCESS] Daily Quiz generated for $dateStr. Total questions added: ${allQuestions.length} (Tamil: ${getCountForType('general_tamil')}, GS: ${getCountForType('general_studies')}, Aptitude: ${getCountForType('aptitude')})");
 
     // Store / update in Firestore
     final querySnapshot = await FirebaseFirestore.instance
@@ -1552,47 +1580,45 @@ $commonRules
     List<dynamic> draftQuestions = [];
     Set<String> seenTexts = {};
 
-    Future<void> accumulateMock(String promptText, String quizType) async {
-      if (draftQuestions.length >= 50) return;
-      final res = await _generateWithFallback(promptText);
-      if (res != null) {
-        List<dynamic> parsed = _parseQuestions(res);
-        List<dynamic> validBatch = _filterValidQuestions(parsed);
-        int rejected = parsed.length - validBatch.length;
-        AppLog.d("AI_DEBUG: [Mock Quiz - $quizType] Generated: ${parsed.length}, Added: ${validBatch.length}, Rejected: $rejected");
-        for (var q in validBatch) {
-          String textTa = (q['question_ta'] ?? '').toString().trim();
-          if (textTa.isNotEmpty && !seenTexts.contains(textTa)) {
-            seenTexts.add(textTa);
-            draftQuestions.add({...q, 'quiz_type': quizType});
-            if (draftQuestions.length >= 50) break;
+    int getMockCountForType(String type) => draftQuestions.where((q) => q['quiz_type'] == type).length;
+
+    Future<void> fillMockCategory(String promptText, String quizType, int targetCount, int maxAttempts) async {
+      int attempts = 0;
+      while (getMockCountForType(quizType) < targetCount && attempts < maxAttempts) {
+        attempts++;
+        int needed = targetCount - getMockCountForType(quizType);
+        if (needed <= 0) break;
+
+        final promptWithTarget = promptText.replaceAll(RegExp(r'exactly \d+'), 'exactly $needed').replaceAll(RegExp(r'up to \d+'), 'up to $needed');
+        final res = await _generateWithFallback(promptWithTarget);
+        if (res != null) {
+          List<dynamic> parsed = _parseQuestions(res);
+          List<dynamic> validBatch = _filterValidQuestions(parsed);
+          int rejected = parsed.length - validBatch.length;
+          AppLog.d("AI_DEBUG: [Mock Quiz - $quizType] Attempt $attempts -> Generated: ${parsed.length}, Added: ${validBatch.length}, Rejected: $rejected");
+
+          for (var q in validBatch) {
+            if (getMockCountForType(quizType) >= targetCount) break;
+            String textTa = (q['question_ta'] ?? '').toString().trim();
+            if (textTa.isNotEmpty && !seenTexts.contains(textTa)) {
+              seenTexts.add(textTa);
+              final detectedType = q['quiz_type']?.toString().toLowerCase() ?? quizType;
+              draftQuestions.add({...q, 'quiz_type': detectedType});
+            }
           }
         }
-        AppLog.d("AI_DEBUG: [Mock Quiz Progress] Total accumulated: ${draftQuestions.length}/50");
+        await Future.delayed(const Duration(seconds: 1));
       }
     }
 
-    // 1️⃣ Tamil batches
-    final promptTamil1 = promptTamil.replaceFirst("exactly 25", "exactly 13");
-    final promptTamil2 = promptTamil.replaceFirst("exactly 25", "exactly 12");
+    // 1. Fill General Tamil (Target: 25)
+    await fillMockCategory(promptTamil, 'general_tamil', 25, 5);
 
-    await accumulateMock(promptTamil1, 'general_tamil');
-    if (draftQuestions.length < 25) await accumulateMock(promptTamil2, 'general_tamil');
+    // 2. Fill General Studies (Target: 15)
+    await fillMockCategory(promptGS, 'general_studies', 15, 5);
 
-    // 2️⃣ GS batch
-    if (draftQuestions.length < 40) await accumulateMock(promptGS, 'general_studies');
-
-    // 3️⃣ Aptitude batch
-    if (draftQuestions.length < 50) await accumulateMock(promptAptitude, 'aptitude');
-
-    // Auto-top-up loop until 50 reached (max 4 attempts)
-    int topUpTries = 0;
-    while (draftQuestions.length < 50 && topUpTries < 4) {
-      topUpTries++;
-      int needed = 50 - draftQuestions.length;
-      String topUpPrompt = "Generate $needed UNIQUE TNPSC MCQs (Bilingual, Mix of Tamil, GS, Aptitude). $commonRules";
-      await accumulateMock(topUpPrompt, 'general_studies');
-    }
+    // 3. Fill Aptitude (Target: 10)
+    await fillMockCategory(promptAptitude, 'aptitude', 10, 5);
 
     // --------------------------------------------------------------------
     if (draftQuestions.length >= 50) {
