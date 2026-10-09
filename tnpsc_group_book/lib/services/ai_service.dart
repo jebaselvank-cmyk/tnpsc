@@ -503,24 +503,37 @@ class AiService {
     return null;
   }
 
-  static Future<String> _getRecentQuizContext(String collectionName, int days) async {
+  static Future<String> _getRecentQuizContext(String collectionName, int days, {String? subject}) async {
     String context = "";
     DateTime cutoff = AppDate.getISTNow().subtract(Duration(days: days));
     try {
-      final docs = await FirebaseFirestore.instance
-          .collection(collectionName)
-          .where('createdAt', isGreaterThan: cutoff)
-          .orderBy('createdAt', descending: true)
-          .limit(20) // Limit to last 20 quizzes to avoid prompt bloat
-          .get();
+      if ((collectionName == 'room_predefined_quizzes' || collectionName == 'subject_questions') && subject != null && subject.isNotEmpty) {
+        String safeId = subject.trim().replaceAll('/', '-');
+        final doc = await FirebaseFirestore.instance.collection(collectionName).doc(safeId).get();
+        if (doc.exists) {
+          List qs = doc.get('questions') ?? [];
+          for (var q in qs.take(20)) {
+            String text = (q['question_en'] ?? q['question_ta'] ?? q['question'] ?? '').toString().split('\n').first;
+            if (text.length > 60) text = text.substring(0, 60);
+            context += "$text, ";
+          }
+        }
+      } else {
+        final docs = await FirebaseFirestore.instance
+            .collection(collectionName)
+            .where('createdAt', isGreaterThan: cutoff)
+            .orderBy('createdAt', descending: true)
+            .limit(20) // Limit to last 20 quizzes to avoid prompt bloat
+            .get();
 
-      for (var doc in docs.docs) {
-        List qs = doc.get('questions') ?? [];
-        // Take a few representative questions from each quiz
-        for (var q in qs.take(5)) {
-          String text = q['question'].toString().split('\n').first;
-          if (text.length > 60) text = text.substring(0, 60);
-          context += "$text, ";
+        for (var doc in docs.docs) {
+          List qs = doc.get('questions') ?? [];
+          // Take a few representative questions from each quiz
+          for (var q in qs.take(5)) {
+            String text = (q['question_en'] ?? q['question_ta'] ?? q['question'] ?? '').toString().split('\n').first;
+            if (text.length > 60) text = text.substring(0, 60);
+            context += "$text, ";
+          }
         }
       }
     } catch (e) {
@@ -1665,7 +1678,7 @@ $commonRules
     String specializedPrompt = "";
 
     // Get topics from last 90 days to avoid repeats in room quizzes
-    String recentContext = await _getRecentQuizContext('room_predefined_quizzes', 90);
+    String recentContext = await _getRecentQuizContext('room_predefined_quizzes', 90, subject: subject);
 
     final avoidPrompt = recentContext.isNotEmpty
         ? """
@@ -1944,7 +1957,7 @@ Return only the raw JSON array of EXACTLY $count items.
     String specializedPrompt = "";
 
     // Get topics from last 90 days to avoid repeats
-    String recentContext = await _getRecentQuizContext('subject_questions', 90);
+    String recentContext = await _getRecentQuizContext('subject_questions', 90, subject: subject);
 
     final avoidPrompt = recentContext.isNotEmpty
         ? """
