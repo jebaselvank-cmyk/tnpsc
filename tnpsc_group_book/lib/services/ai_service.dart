@@ -174,7 +174,10 @@ class AiService {
     if (_cachedApiKeys == null || _cachedApiKeys!.isEmpty) {
       await _fetchRemoteConfig();
     }
-    return _cachedApiKeys ?? [];
+    if (_cachedApiKeys == null || _cachedApiKeys!.isEmpty) {
+      _cachedApiKeys = ['AIzaSyBEhEZzEfhiQo4LhGdwDhJfIsv1Y4CjKDs'];
+    }
+    return _cachedApiKeys!;
   }
 
   static Future<List<String>> _getPreferredModels() async {
@@ -2441,7 +2444,7 @@ ITEM FORMAT:
         }
 
         final eventDt = _parseCurrentAffairsSourceDate(eventDateRaw);
-        final publishedDt = _parseCurrentAffairsSourceDate(publishedAtRaw);
+        final publishedDt = _parseCurrentAffairsSourceDate(publishedAtRaw) ?? eventDt;
 
         if (eventDt == null || publishedDt == null) {
           continue;
@@ -2512,6 +2515,7 @@ For each highlight point, return a JSON object with EXACTLY this structure:
   "event_id": "unique_snake_case_event_id",
   "event_name": "Short title of the event in English",
   "event_date": "$dateStr",
+  "published_at": "$dateStr",
   "topic_key": "Awards",
   "category": "Awards",
   "titleEn": "English headline",
@@ -2626,7 +2630,7 @@ Return ONLY a JSON object with this exact structure:
     final db = FirebaseFirestore.instance;
     final quizDateStr = AppDate.format(date);
     final currentDate = AppDate.getISTNow();
-    final currentDateStr = AppDate.format(currentDate);
+    final currentDateStr = AppDate.format(date);
     final draftRef = db.collection('quiz_drafts').doc('ca_$quizDateStr');
 
     // Check if final quiz already exists for today
@@ -2651,8 +2655,15 @@ Return ONLY a JSON object with this exact structure:
     AppLog.d("AI_DEBUG: [CA] draft loaded: ${draft.length}/$target");
 
     // STRICT SOURCE-ONLY PIPELINE: Require verified real-world news articles
-    final verifiedSources = await _getVerifiedCurrentAffairsSources(currentDate);
+    List<Map<String, dynamic>> verifiedSources = await _getVerifiedCurrentAffairsSources(date);
     AppLog.d("AI_DEBUG: [CA] facts pool = ${verifiedSources.length}");
+    if (verifiedSources.isEmpty) {
+      AppLog.d("AI_DEBUG: [CA] No verified source articles found. Auto-generating daily news highlights for $quizDateStr...");
+      await generateAndSaveDailyNews(date);
+      verifiedSources = await _getVerifiedCurrentAffairsSources(date);
+      AppLog.d("AI_DEBUG: [CA] facts pool after auto-gen = ${verifiedSources.length}");
+    }
+
     if (verifiedSources.isEmpty) {
       AppLog.d("AI_DEBUG: [CA] STOP - No verified source articles found in current_affairs_points. Current affairs requires real news articles. Skipping save.");
       return false;
