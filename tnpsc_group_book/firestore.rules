@@ -35,6 +35,10 @@ service cloud.firestore {
       allow read: if true;
       allow write, delete: if isAdmin();
     }
+    match /exam_papers/{docId} {
+      allow read: if true;
+      allow write, delete: if isAdmin() || request.auth != null;
+    }
     match /admin_config/{docId} {
       allow read: if true;
       allow write, delete: if isAdmin();

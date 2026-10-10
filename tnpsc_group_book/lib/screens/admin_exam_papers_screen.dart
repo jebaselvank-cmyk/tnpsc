@@ -228,23 +228,12 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
             _selectedPdfName = fileName;
             _selectedPdfPages = AiService.getPdfPageCount(bytes);
 
-            String digitalText = AiService.extractDigitalTextFromPdf(bytes);
-            if (digitalText.length > 300) {
-              _selectedPdfIsScanned = false;
-              rawTextCtrl.text = digitalText;
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text("Selected Digital PDF '$fileName' ($_selectedPdfPages pages). Extracted ${digitalText.length} characters!"),
-                ));
-              }
-            } else {
-              _selectedPdfIsScanned = true;
-              rawTextCtrl.text = "[SCANNED_PDF: $fileName | Pages: $_selectedPdfPages]";
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text("Selected Scanned PDF '$fileName' ($_selectedPdfPages pages). Ready for AI Vision extraction!"),
-                ));
-              }
+            _selectedPdfIsScanned = true;
+            rawTextCtrl.text = "[SCANNED_PDF: $fileName | Pages: $_selectedPdfPages]";
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text("Selected PDF '$fileName' ($_selectedPdfPages pages). Ready for High-Accuracy AI Vision extraction!"),
+              ));
             }
             if (setDialogState != null) {
               setDialogState(() {});

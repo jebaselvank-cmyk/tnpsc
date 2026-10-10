@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive/hive.dart';
@@ -988,6 +989,28 @@ class _QuizScreenState extends State<QuizScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 10),
+                                  if (question.imageUrl != null && question.imageUrl!.isNotEmpty) ...[
+                                    const SizedBox(height: 14),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: question.imageUrl!.startsWith('http')
+                                          ? Image.network(
+                                              question.imageUrl!,
+                                              height: 200,
+                                              width: double.infinity,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                                            )
+                                          : Image.file(
+                                              File(question.imageUrl!),
+                                              height: 200,
+                                              width: double.infinity,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                                            ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                  ],
                                   if (_selectedAnswers[_currentQuestionIndex] != null)
                                     _unlockedHints[_currentQuestionIndex]
                                         ? Container(

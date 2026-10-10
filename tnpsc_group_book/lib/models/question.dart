@@ -16,6 +16,7 @@ class Question {
   final List<String>? optionsTa;
   final String? explanationEn;
   final String? explanationTa;
+  final String? imageUrl;
 
   Question({
     this.id,
@@ -31,6 +32,7 @@ class Question {
     this.optionsTa,
     this.explanationEn,
     this.explanationTa,
+    this.imageUrl,
   });
 
   Map<String, dynamic> toMap() {
@@ -43,6 +45,7 @@ class Question {
       'subject': subject,
       'quiz_type': quizType,
       'question_en': questionEn,
+      'image_url': imageUrl,
       'question_ta': questionTa,
       'options_en': optionsEn,
       'options_ta': optionsTa,
@@ -125,6 +128,7 @@ class Question {
       optionsTa: optsTa,
       explanationEn: eEn,
       explanationTa: eTa,
+      imageUrl: map['imageUrl']?.toString() ?? map['image_url']?.toString(),
     );
   }
 
@@ -132,6 +136,7 @@ class Question {
 
   static String cleanOptionText(String text) {
     String cleaned = text
+        .replaceFirst(RegExp(r'^\s*[\(\[]?[A-Ea-e1-5][\)\]\.]\s*'), '')
         .replaceAll('\n', ' ')
         .replaceAll('\r', ' ')
         .replaceAll('\\n', ' ')

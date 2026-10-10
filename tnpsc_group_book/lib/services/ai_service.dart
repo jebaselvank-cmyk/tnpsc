@@ -174,10 +174,7 @@ class AiService {
     if (_cachedApiKeys == null || _cachedApiKeys!.isEmpty) {
       await _fetchRemoteConfig();
     }
-    if (_cachedApiKeys == null || _cachedApiKeys!.isEmpty) {
-      _cachedApiKeys = ['AIzaSyBEhEZzEfhiQo4LhGdwDhJfIsv1Y4CjKDs'];
-    }
-    return _cachedApiKeys!;
+    return _cachedApiKeys ?? [];
   }
 
   static Future<List<String>> _getPreferredModels() async {
@@ -221,7 +218,7 @@ class AiService {
 
   static bool _lastFailWasParse = false;
 
-  static Future<String?> _generateWithFallback(String prompt, {String? base64Pdf}) async {
+  static Future<String?> _generateWithFallback(String prompt, {String? base64Pdf, double temperature = 0.4}) async {
     // 0. Check Sticky Config First
     final sticky = HiveService.getStickyAiConfig();
     if (sticky != null) {
@@ -231,7 +228,7 @@ class AiService {
 
       if (sKey.isNotEmpty && sModel.isNotEmpty && sVersion.isNotEmpty) {
         AppLog.d("AI_DEBUG: Using Sticky Config - Model: $sModel, Version: $sVersion");
-        final res = await _tryModelRequest(sKey, sModel, sVersion, prompt, base64Pdf: base64Pdf);
+        final res = await _tryModelRequest(sKey, sModel, sVersion, prompt, base64Pdf: base64Pdf, temperature: temperature);
         if (res != null) return res;
 
         AppLog.d("AI_DEBUG: Sticky Config failed. Clearing and proceeding to discovery.");
@@ -299,7 +296,7 @@ class AiService {
       for (String version in ['v1beta']) {
         if (keyFailed) break;
         for (String modelName in finalModelsToTry) {
-          final res = await _tryModelRequest(apiKey, modelName, version, prompt, base64Pdf: base64Pdf, onKeyInvalid: () => keyFailed = true);
+          final res = await _tryModelRequest(apiKey, modelName, version, prompt, base64Pdf: base64Pdf, onKeyInvalid: () => keyFailed = true, temperature: temperature);
           if (res != null) {
             // SUCCESS! Save this as the sticky config for the rest of the day
             AppLog.d("AI_DEBUG: Saving new Sticky Config: $modelName on $version");
@@ -377,6 +374,7 @@ class AiService {
       String prompt, {
         String? base64Pdf,
         Function? onKeyInvalid,
+        double temperature = 0.4,
       }) async {
     int retries = 0;
     const int maxRetries = 2;
@@ -429,7 +427,7 @@ class AiService {
             ],
             'generationConfig': {
               'responseMimeType': 'application/json',
-              'temperature': 0.4,
+              'temperature': temperature,
               'topP': 0.85,
               'topK': 20,
               'maxOutputTokens': 16384,
@@ -651,8 +649,8 @@ class AiService {
       }
 
       final options = q['options'];
-      if (options is! List || options.length != 4) {
-        AppLog.d("AI_DEBUG: REJECT - options length != 4");
+      if (options is! List || options.length < 4 || options.length > 5) {
+        AppLog.d("AI_DEBUG: REJECT - options length not between 4 and 5");
         return false;
       }
 
@@ -3060,19 +3058,21 @@ CRITICAL INSTRUCTIONS - 100% VERBATIM EXTRACTION & ZERO SPELLING MISTAKES:
      * Preserve exact Tamil glyphs: ண vs ன, ல vs ள vs ழ, ர vs ற, குறில் vs நெடில்.
      * Ensure all pulli/dots (க், ச், ட், த், ப், ற், ன்...) are precisely placed as in the original print.
      * Retain all names, historical titles, author names, book titles, and technical terms exactly as printed.
-2. EXTRACT ALL 4 OPTIONS (A, B, C, D) EXACTLY AS PRINTED:
+2. EXTRACT ALL 5 OPTIONS (A, B, C, D, E) EXACTLY AS PRINTED (including (E) விடை தெரியவில்லை):
    - "options": [
        {"en": "Exact text of Option A as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் A உரை அப்படியே"},
-       {"en": "Exact text of Option B as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் B உரை அப்படியே"},
+       {"en": "Screenshot or Exact text of Option B as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் B உரை அப்படியே"},
        {"en": "Exact text of Option C as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் C உரை அப்படியே"},
-       {"en": "Exact text of Option D as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் D உரை அப்படியே"}
+       {"en": "Exact text of Option D as printed", "ta": "வினாத்தாளில் உள்ள விருப்பம் D உரை அப்படியே"},
+       {"en": "Answer not known", "ta": "விடை தெரியவில்லை"}
      ]
-   - NEVER invent placeholder text like "Option A" or empty commas. Copy the real printed text of each option.
-3. PRESERVE SPECIAL TNPSC QUESTION STRUCTURES VERBATIM:
-   - For "Match the Following (பொருத்துக)":
-     Extract BOTH the entire Left column (a, b, c, d) AND the entire Right column (1, 2, 3, 4) with their full descriptions.
-     Format each pair on a new line using \\n (e.g. "(a) Left text — 1. Right text\\n(b) Left text — 2. Right text...").
-     The options A, B, C, D must be the exact matching code combinations from the paper.
+   - NEVER omit option E ((E) விடை தெரியவில்லை). Copy all 5 options exactly as printed in the exam paper.
+   - DO NOT include option labels like (A), (B), A), B), (a), (b) inside the option text values. Only provide the pure option text (e.g., '3 4 1 2', 'பகை'). The option prefix letters are handled automatically by the app.
+3. PRESERVE SPECIAL TNPSC QUESTION STRUCTURES VERBATIM (பொருத்துக / கூற்று காரணம் / காலவரிசை):
+   - For "Match the Following (பொருத்துக)" with two side-by-side columns:
+     * Read the left column items (a, b, c, d) and right column items (1, 2, 3, 4) with absolute precision. DO NOT hallucinate, guess, or substitute words (e.g., do NOT confuse 'தீமை' with 'திணை' or 'பிறப்பு' with 'திடிப்பு'). Transcribe every Tamil letter exactly as printed.
+     * Format the question with the columns explicitly on a new line using \\n (e.g., "வினியாலணையும் பெயர்களின் வகைக்கேோடு பொருத்துக :\n(a) அழிந்தது தீமை — 1. திணைப்பெயர் கொண்டது\n(b) அற்றது பிறப்பு — 2. இடப்பெயர் கொண்டது...").
+     * CRITICAL: The options A, B, C, D MUST ONLY contain the matching code numbers as printed in the options table (e.g., "3 4 1 2", "3 1 4 2", "4 3 2 1", "4 1 2 3"). NEVER put the (a), (b) items inside the options array! Option E is always "விடை தெரியவில்லை".
    - For "Statement and Reason / Assertion (கூற்று மற்றும் காரணம்)":
      Extract both Assertion and Reason verbatim on separate lines with \\n.
    - For "Chronological Order (காலவரிசைப்படுத்துக)":
@@ -3105,7 +3105,7 @@ Return ONLY a valid JSON array:
 No Markdown formatting, no code fence, no extra preamble. Only raw JSON array.
 ''';
 
-      final res = await _generateWithFallback(prompt, base64Pdf: base64Pdf);
+      final res = await _generateWithFallback(prompt, base64Pdf: base64Pdf, temperature: 0.1);
       if (res != null) {
         int start = res.indexOf('[');
         int last = res.lastIndexOf(']');
@@ -3148,10 +3148,10 @@ CRITICAL INSTRUCTIONS - 100% VERBATIM EXTRACTION & ZERO SPELLING MISTAKES:
    - ZERO SPELLING MISTAKES IN TAMIL:
      * Preserve exact Tamil glyphs: ண vs ன, ல vs ள vs ழ, ர vs ற, குறில் vs நெடில்.
      * Ensure all pulli/dots (க், ச், ட், த், ப், ற், ன்...) are precisely placed.
-2. EXTRACT ALL 4 OPTIONS (A, B, C, D) EXACTLY AS PRINTED:
-   - Copy the real text of each option A, B, C, D without placeholders.
-3. PRESERVE SPECIAL TNPSC QUESTION STRUCTURES:
-   - For Match the following (பொருத்துக): Include both left and right columns on separate lines with \\n.
+2. EXTRACT ALL 5 OPTIONS (A, B, C, D, E) EXACTLY AS PRINTED (including (E) விடை தெரியவில்லை):
+   - Copy the real text of each option A, B, C, D, and E (விடை தெரியவில்லை) without placeholders.
+3. PRESERVE SPECIAL TNPSC QUESTION STRUCTURES (பொருத்துக / கூற்று காரணம்):
+   - For Match the following (பொருத்துக) with two side-by-side columns: Include both left and right columns on separate lines with \\n without any word substitutions (e.g. keep 'தீமை' and 'பிறப்பு' exact).
    - For Assertion/Reason (கூற்று மற்றும் காரணம்): Keep both on separate lines with \\n.
 4. ACCURATE ANSWER KEY & EXPLANATIONS:
    - Identify the correct answer key (0, 1, 2, or 3).
@@ -3179,7 +3179,7 @@ JSON FORMAT:
 Return ONLY raw JSON array.
 ''';
 
-      final res = await _generateWithFallback(prompt, base64Pdf: base64Pdf);
+      final res = await _generateWithFallback(prompt, base64Pdf: base64Pdf, temperature: 0.1);
       if (res != null) {
         int start = res.indexOf('[');
         int last = res.lastIndexOf(']');
