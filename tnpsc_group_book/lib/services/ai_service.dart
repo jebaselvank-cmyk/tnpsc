@@ -3212,6 +3212,46 @@ No Markdown formatting, no code fence, no extra preamble. Only raw JSON array.
     }
   }
 
+  /// Splits raw exam paper text into chunk blocks grouped by question numbers (e.g., ~15 questions per chunk)
+  /// preventing cut-in-half questions at arbitrary character offsets.
+  static List<String> splitTextIntoQuestionChunks(String rawText, {int targetQuestionsPerChunk = 15}) {
+    List<String> chunks = [];
+    if (rawText.trim().isEmpty) return chunks;
+
+    RegExp qNumRegex = RegExp(r'^\s*(\d{1,3})[.)]\s+', multiLine: true);
+    Iterable<Match> matches = qNumRegex.allMatches(rawText);
+
+    if (matches.length < 5) {
+      // Fallback to overlapping character chunking if question numbers are not standard
+      int chunkSize = 3500;
+      int overlap = 800;
+      int offset = 0;
+      while (offset < rawText.length) {
+        int end = (offset + chunkSize < rawText.length) ? offset + chunkSize : rawText.length;
+        chunks.add(rawText.substring(offset, end));
+        if (end == rawText.length) break;
+        offset += (chunkSize - overlap);
+      }
+      return chunks;
+    }
+
+    List<int> matchIndices = matches.map((m) => m.start).toList();
+    int totalMatches = matchIndices.length;
+
+    for (int i = 0; i < totalMatches; i += targetQuestionsPerChunk) {
+      int startChar = matchIndices[i];
+      int endIdx = (i + targetQuestionsPerChunk < totalMatches) ? i + targetQuestionsPerChunk : totalMatches;
+      int endChar = (endIdx < totalMatches) ? matchIndices[endIdx] : rawText.length;
+
+      String chunkText = rawText.substring(startChar, endChar).trim();
+      if (chunkText.isNotEmpty) {
+        chunks.add(chunkText);
+      }
+    }
+
+    return chunks;
+  }
+
   /// AI Chunked PDF Parser: Extracts 10-15 questions from raw PDF text chunk,
   /// fact-checks answer keys, ensures bilingual fields, and generates explanations.
   static Future<List<Map<String, dynamic>>> parseAndEnrichPdfChunk({

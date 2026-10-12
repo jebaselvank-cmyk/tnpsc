@@ -259,15 +259,10 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
           });
         }
       } else {
-        // Plain text extraction
-        String chunkText = rawText;
-        if (rawText.length > 3000) {
-          int startOffset = (currentCount * 250);
-          if (startOffset < rawText.length) {
-            int endOffset = (startOffset + 3500 < rawText.length) ? startOffset + 3500 : rawText.length;
-            chunkText = rawText.substring(startOffset, endOffset);
-          }
-        }
+        // Plain text extraction grouped by question boundaries
+        List<String> textChunks = AiService.splitTextIntoQuestionChunks(rawText, targetQuestionsPerChunk: 15);
+        int chunkIndex = (currentCount / 15).floor().clamp(0, textChunks.isNotEmpty ? textChunks.length - 1 : 0);
+        String chunkText = textChunks.isNotEmpty ? textChunks[chunkIndex] : rawText;
 
         newQuestions = await AiService.parseAndEnrichPdfChunk(
           rawChunkText: chunkText,
@@ -405,6 +400,7 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
     final totalController = TextEditingController(text: "100");
     final rawTextController = TextEditingController();
     final jsonController = TextEditingController();
+    bool isOneClickExtracting = false;
 
     showModalBottomSheet(
       context: context,
@@ -570,49 +566,175 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: isOneClickExtracting
+                        ? null
+                        : () async {
+                            if (titleController.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                content: Text("Please enter a Paper Title / தலைப்பு"),
+                              ));
+                              return;
+                            }
+
+                            String pastedText = rawTextController.text.trim();
+                            if (pastedText.isEmpty && _selectedPdfBytes == null && _selectedPdfPath == null && jsonController.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                content: Text("Please paste Raw PDF Text or select a PDF file first!"),
+                              ));
+                              return;
+                            }
+
+                            setDialogState(() => isOneClickExtracting = true);
+                            int year = int.tryParse(yearController.text.trim()) ?? 2025;
+                            int total = int.tryParse(totalController.text.trim()) ?? 100;
+                            String paperTitle = titleController.text.trim();
+
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text("🚀 1-Click AI Extraction, Proofreading & Saving to Firestore in progress..."),
+                              duration: Duration(seconds: 5),
+                            ));
+
+                            List<Map<String, dynamic>> extractedQuestions = [];
+
+                            // Check if JSON array was provided
+                            String jsonStr = jsonController.text.trim();
+                            if (jsonStr.isNotEmpty) {
+                              try {
+                                int start = jsonStr.indexOf('[');
+                                int end = jsonStr.lastIndexOf(']');
+                                if (start != -1 && end != -1) {
+                                  List parsed = jsonDecode(jsonStr.substring(start, end + 1));
+                                  extractedQuestions = parsed.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+                                }
+                              } catch (e) {
+                                AppLog.e("Error parsing json input: $e");
+                              }
+                            }
+
+                            // If JSON was empty, extract from pasted text or PDF
+                            if (extractedQuestions.isEmpty && pastedText.isNotEmpty && !pastedText.contains('[SCANNED_PDF:')) {
+                              List<String> textChunks = AiService.splitTextIntoQuestionChunks(pastedText, targetQuestionsPerChunk: 15);
+                              int startQ = 1;
+
+                              for (int i = 0; i < textChunks.length; i++) {
+                                String chunk = textChunks[i];
+                                List<Map<String, dynamic>> chunkQs = await AiService.parseAndEnrichPdfChunk(
+                                  rawChunkText: chunk,
+                                  startQuestionNum: startQ,
+                                  examType: examType,
+                                );
+
+                                if (chunkQs.isNotEmpty) {
+                                  extractedQuestions.addAll(chunkQs);
+                                  startQ += chunkQs.length;
+                                }
+
+                                if (extractedQuestions.length >= total) break;
+                              }
+                            } else if (extractedQuestions.isEmpty && _selectedPdfBytes != null) {
+                              int totalPages = AiService.getPdfPageCount(_selectedPdfBytes!);
+                              int pagesPerChunk = 6;
+                              int startPage = 0;
+
+                              while (startPage < totalPages && extractedQuestions.length < total) {
+                                List<int>? sliced = AiService.slicePdfPages(_selectedPdfBytes!, startPage, pagesPerChunk);
+                                List<Map<String, dynamic>> chunkQs = await AiService.extractQuestionsFromPdfBytes(
+                                  pdfBytes: sliced ?? _selectedPdfBytes!,
+                                  examType: examType,
+                                  startQuestionNum: extractedQuestions.length + 1,
+                                  maxQuestions: 15,
+                                );
+
+                                if (chunkQs.isNotEmpty) {
+                                  extractedQuestions.addAll(chunkQs);
+                                } else {
+                                  break;
+                                }
+
+                                startPage += pagesPerChunk;
+                              }
+                            }
+
+                            // Spell-check & Proofread extracted questions
+                            if (extractedQuestions.isNotEmpty) {
+                              extractedQuestions = await AiService.proofreadAndFixExamPaperSpelling(extractedQuestions);
+                            }
+
+                            // Save directly to Firestore 'exam_papers' collection
+                            bool ok = await _firestoreService.saveExamPaper(
+                              examType: examType,
+                              year: year,
+                              title: paperTitle,
+                              questions: extractedQuestions,
+                              rawText: pastedText.isNotEmpty ? pastedText : null,
+                              pdfPath: _selectedPdfPath,
+                              totalQuestions: total,
+                              processedCount: extractedQuestions.length,
+                              isCompleted: extractedQuestions.isNotEmpty && extractedQuestions.length >= total,
+                            );
+
+                            setDialogState(() => isOneClickExtracting = false);
+
+                            if (ok && mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text("✨ 1-Click Success! Saved ${extractedQuestions.length} proofread questions to Firestore!"),
+                                backgroundColor: Colors.green,
+                                duration: const Duration(seconds: 4),
+                              ));
+                              _fetchPapers();
+                            } else if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                content: Text("Failed to save exam paper. Please try again."),
+                              ));
+                            }
+                          },
+                    icon: isOneClickExtracting
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.bolt_rounded, size: 20),
+                    label: Text(
+                      isOneClickExtracting
+                          ? "AI Processing & Proofreading..."
+                          : "⚡ 1-Click AI Extract, Proofread & Save to Firestore",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
                     onPressed: () async {
                       if (titleController.text.trim().isEmpty) return;
                       int year = int.tryParse(yearController.text.trim()) ?? 2025;
                       int total = int.tryParse(totalController.text.trim()) ?? 100;
 
-                      List<Map<String, dynamic>> questions = [];
-                      String jsonStr = jsonController.text.trim();
-                      if (jsonStr.isNotEmpty) {
-                        try {
-                          int start = jsonStr.indexOf('[');
-                          int end = jsonStr.lastIndexOf(']');
-                          if (start != -1 && end != -1) {
-                            List parsed = jsonDecode(jsonStr.substring(start, end + 1));
-                            questions = parsed.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-                          }
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("JSON Parse Error: $e")));
-                          return;
-                        }
-                      }
-
                       bool ok = await _firestoreService.saveExamPaper(
                         examType: examType,
                         year: year,
                         title: titleController.text.trim(),
-                        questions: questions,
+                        questions: [],
                         rawText: rawTextController.text.trim().isNotEmpty ? rawTextController.text.trim() : null,
                         pdfPath: _selectedPdfPath,
                         totalQuestions: total,
-                        processedCount: questions.length,
-                        isCompleted: questions.isNotEmpty && questions.length >= total,
+                        processedCount: 0,
+                        isCompleted: false,
                       );
 
                       if (ok && mounted) {
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Exam paper saved!")));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Draft Exam Paper saved!")));
                         _fetchPapers();
                       }
                     },
-                    child: const Text("Save Exam Paper", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: const Text("Save Draft Only (without AI extraction)", style: TextStyle(color: Colors.grey, fontSize: 12)),
                   ),
                 ),
               ],
@@ -1220,6 +1342,7 @@ class _AnswerKeyQuestionCardState extends State<_AnswerKeyQuestionCard> {
   late TextEditingController _explanationTaController;
   bool _isEditingText = false;
   bool _isSaving = false;
+  bool _isFixingSingle = false;
 
   @override
   void initState() {
@@ -1250,6 +1373,72 @@ class _AnswerKeyQuestionCardState extends State<_AnswerKeyQuestionCard> {
     _explanationEnController.dispose();
     _explanationTaController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fixSingleQuestionWithAi() async {
+    setState(() => _isFixingSingle = true);
+    try {
+      List<Map<String, String>> currentOpts = [];
+      for (int i = 0; i < _optionControllers.length; i++) {
+        String ta = Question.cleanOptionText(_optionControllers[i].text.trim());
+        currentOpts.add({'en': ta, 'ta': ta});
+      }
+
+      Map<String, dynamic> singleQ = {
+        'question_ta': _questionTaController.text.trim(),
+        'question_en': widget.question.questionEn ?? _questionTaController.text.trim(),
+        'options': currentOpts,
+        'correctOptionIndex': _selectedCorrectIndex,
+        'explanation_ta': _explanationTaController.text.trim(),
+        'explanation_en': _explanationEnController.text.trim(),
+      };
+
+      List<Map<String, dynamic>> result = await AiService.proofreadAndFixExamPaperSpelling([singleQ]);
+
+      if (result.isNotEmpty) {
+        Map<String, dynamic> fixed = result.first;
+        _questionTaController.text = (fixed['question_ta'] ?? fixed['question'] ?? '').toString();
+
+        if (fixed['options'] is List) {
+          List opts = fixed['options'];
+          for (int i = 0; i < opts.length && i < _optionControllers.length; i++) {
+            if (opts[i] is Map) {
+              _optionControllers[i].text = (opts[i]['ta'] ?? opts[i]['en'] ?? '').toString();
+            } else if (opts[i] is String) {
+              _optionControllers[i].text = opts[i].toString();
+            }
+          }
+        }
+
+        if (fixed['correctOptionIndex'] is int &&
+            fixed['correctOptionIndex'] >= 0 &&
+            fixed['correctOptionIndex'] < _optionControllers.length) {
+          _selectedCorrectIndex = fixed['correctOptionIndex'];
+        }
+
+        if (fixed['explanation_ta'] != null && fixed['explanation_ta'].toString().isNotEmpty) {
+          _explanationTaController.text = fixed['explanation_ta'].toString();
+        }
+        if (fixed['explanation_en'] != null && fixed['explanation_en'].toString().isNotEmpty) {
+          _explanationEnController.text = fixed['explanation_en'].toString();
+        }
+
+        await _saveChanges();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("✨ AI fixed Tamil spelling & updated Firestore!"),
+            backgroundColor: Colors.green,
+          ));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("AI Fix Error: $e")));
+      }
+    } finally {
+      if (mounted) setState(() => _isFixingSingle = false);
+    }
   }
 
   Future<void> _saveChanges() async {
@@ -1390,16 +1579,29 @@ class _AnswerKeyQuestionCardState extends State<_AnswerKeyQuestionCard> {
               ),
             ),
             const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                onPressed: _isSaving ? null : _saveChanges,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                icon: _isSaving
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text("Save Question & Answer Key"),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: (_isSaving || _isFixingSingle) ? null : _fixSingleQuestionWithAi,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.indigo,
+                    side: BorderSide(color: Colors.indigo.shade300),
+                  ),
+                  icon: _isFixingSingle
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.indigo))
+                      : const Icon(Icons.auto_fix_high, size: 16),
+                  label: const Text("✨ Auto-Fix with AI", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+                ElevatedButton.icon(
+                  onPressed: (_isSaving || _isFixingSingle) ? null : _saveChanges,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                  icon: _isSaving
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text("Save Changes"),
+                ),
+              ],
             ),
           ],
         ),
