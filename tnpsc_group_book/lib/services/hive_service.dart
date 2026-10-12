@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/question.dart';
@@ -25,6 +26,15 @@ class HiveService {
     ]);
     
     isInitialized = true;
+    
+    // Invalidate old offline_questions cache once for question option formatting fix (v3)
+    var userBox = Hive.box(userBoxName);
+    bool optionFixCleared = userBox.get('option_fix_v3_cleared', defaultValue: false) as bool;
+    if (!optionFixCleared || kDebugMode) {
+      await Hive.box(questionsBoxName).clear();
+      await userBox.put('option_fix_v3_cleared', true);
+      AppLog.d("AI_DEBUG: Cleared stale questions cache for option formatting fix v3");
+    }
     
     // AI_DEBUG: Run daily cleanup in the background to not block startup
     Future.microtask(() => _cleanupOldDailyData());

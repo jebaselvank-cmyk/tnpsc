@@ -123,10 +123,10 @@ class _ResultScreenState extends State<ResultScreen> {
 
     AppLog.d("AI_DEBUG_STATS: Tamil: $tamilCorrect/$tamilTotal, GS: $gsCorrect/$gsTotal, Aptitude: $aptitudeCorrect/$aptitudeTotal");
 
-    // Update performance with dynamic totals from current quiz
-    HiveService.updateCategoryPerformance('general_tamil', tamilCorrect, tamilTotal);
-    HiveService.updateCategoryPerformance('general_studies', gsCorrect, gsTotal);
-    HiveService.updateCategoryPerformance('aptitude', aptitudeCorrect, aptitudeTotal);
+    // Update performance with dynamic totals from current daily quiz (overwrite, do not accumulate with previous data)
+    HiveService.updateCategoryPerformance('general_tamil', tamilCorrect, tamilTotal, accumulate: false);
+    HiveService.updateCategoryPerformance('general_studies', gsCorrect, gsTotal, accumulate: false);
+    HiveService.updateCategoryPerformance('aptitude', aptitudeCorrect, aptitudeTotal, accumulate: false);
   }
 
   String _formatTime(int seconds) {

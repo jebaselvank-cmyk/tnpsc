@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:tnpsc_group_book/utils/app_language.dart';
+
 
 class Question {
   final String? id; // Unique ID for bookmarks
@@ -55,6 +57,9 @@ class Question {
   }
 
   factory Question.fromMap(Map<String, dynamic> map) {
+    if (kDebugMode) {
+      print('DEBUG_DB: raw question map -> options: ${map['options']}, options_en: ${map['options_en']}, options_ta: ${map['options_ta']}');
+    }
     // 1. Detect if it's the new structured format
     String? qEn = map['question_en']?.toString();
     String? qTa = map['question_ta']?.toString();
@@ -64,8 +69,16 @@ class Question {
     List<String>? optsEn;
     List<String>? optsTa;
 
+    // Check direct separate list fields (e.g. options_en / options_ta)
+    var rawOptsEn = map['options_en'] ?? map['optionsEn'];
+    var rawOptsTa = map['options_ta'] ?? map['optionsTa'];
+
+    if (rawOptsEn is List && rawOptsTa is List) {
+      optsEn = List<String>.from(rawOptsEn).map((o) => cleanOptionText(o.toString())).toList();
+      optsTa = List<String>.from(rawOptsTa).map((o) => cleanOptionText(o.toString())).toList();
+    }
     // Handle new options format: List of objects [{"en": "...", "ta": "..."}]
-    if (map['options'] is List &&
+    else if (map['options'] is List &&
         map['options'].isNotEmpty &&
         map['options'][0] is Map) {
       final optsList = List<Map<String, dynamic>>.from(map['options']);
@@ -100,16 +113,64 @@ class Question {
       }
     }
 
+    // Intelligent option auto-repair for Assertion/Reason and Sequence questions
+    if (optsEn != null && optsTa != null && optsEn.length == optsTa.length) {
+      bool isAssertionReason = (qEn?.toLowerCase().contains('assertion') == true) || (qTa?.contains('கூற்று') == true);
+      bool isSequence = (qEn?.contains('(1)') == true && qEn?.contains('(2)') == true) || 
+                        (qTa?.contains('(1)') == true && qTa?.contains('(2)') == true) ||
+                        (qEn?.contains('1.') == true && qEn?.contains('2.') == true) ||
+                        (qTa?.contains('1.') == true && qTa?.contains('2.') == true);
+
+      for (int i = 0; i < optsEn.length; i++) {
+        String en = optsEn[i];
+        String ta = optsTa[i];
+
+        if (isAssertionReason) {
+          if (ta.startsWith('மற்றும் (R)') || ta.startsWith('மற்றும்') || (ta.contains('இரண்டும் சரி') && !ta.contains('கூற்று'))) {
+            ta = 'கூற்று (A) மற்றும் காரணம் (R) ' + ta.replaceFirst(RegExp(r'^மற்றும்\s*(\(R\)\s*)?'), '').trim();
+          } else if (ta.contains('சரி, ஆனால்') || ta.contains('சரி ஆனால்') || ta.startsWith('சரி')) {
+            if (!ta.contains('கூற்று')) {
+              ta = 'கூற்று (A) சரி, ஆனால் காரணம் (R) தவறு.';
+            }
+          } else if (ta.contains('தவறு, ஆனால்') || ta.contains('தவறு ஆனால்') || ta.startsWith('தவறு')) {
+            if (!ta.contains('கூற்று')) {
+              ta = 'கூற்று (A) தவறு, ஆனால் காரணம் (R) சரி.';
+            }
+          }
+
+          if (en.startsWith('and (R)') || en.startsWith('and') || (en.contains('are true') && !en.contains('Both (A)'))) {
+            en = 'Both (A) and (R) ' + en.replaceFirst(RegExp(r'^and\s*(\(R\)\s*)?'), '').trim();
+          } else if (en.contains('is true, but') || en.contains('true, but') || en.startsWith('is true')) {
+            if (!en.contains('Assertion')) {
+              en = 'Assertion (A) is true, but Reason (R) is false.';
+            }
+          } else if (en.contains('is false, but') || en.contains('false, but') || en.startsWith('is false')) {
+            if (!en.contains('Assertion')) {
+              en = 'Assertion (A) is false, but Reason (R) is true.';
+            }
+          }
+        }
+
+        if (isSequence) {
+          ta = ta.replaceAll(RegExp(r'^[\s,]+'), '').trim();
+          en = en.replaceAll(RegExp(r'^[\s,]+'), '').trim();
+        }
+
+        optsEn[i] = en;
+        optsTa[i] = ta;
+      }
+    }
+
     // 3. Compute legacy fields for backward compatibility
     String finalQ = rawQ.isNotEmpty ? rawQ : "$qEn\n$qTa";
     
     List<String> finalOpts = [];
-    if (map['options'] is List && map['options'].isNotEmpty && map['options'][0] is String) {
-      finalOpts = List<String>.from(map['options']).map((opt) => cleanOptionText(opt)).toList();
-    } else if (optsEn != null && optsTa != null) {
+    if (optsEn != null && optsTa != null && optsEn.isNotEmpty) {
       for (int i = 0; i < optsEn.length; i++) {
         finalOpts.add(cleanOptionText("${optsEn[i]} / ${optsTa[i]}"));
       }
+    } else if (map['options'] is List && map['options'].isNotEmpty && map['options'][0] is String) {
+      finalOpts = List<String>.from(map['options']).map((opt) => cleanOptionText(opt)).toList();
     }
 
     String finalEx = rawE.isNotEmpty ? rawE : "$eEn $eTa";
@@ -135,13 +196,66 @@ class Question {
   String get uniqueId => id ?? question.hashCode.toString();
 
   static String cleanOptionText(String text) {
-    String cleaned = text
+    if (kDebugMode) {
+      print('DEBUG_CLEAN: input="$text"');
+    }
+    String t = text.trim();
+
+    // Auto-repair if a matching option was previously stripped and starts with `-` or lacks (a) while containing (b)
+    if ((t.contains('(b)-') || t.contains('(b) -') || t.contains('(b):') || t.contains('(ஆ)-') || t.contains('(ஆ) -')) &&
+        !t.startsWith('(a)') && !t.startsWith('(A)') && !t.startsWith('(அ)')) {
+      if (t.startsWith('-')) {
+        t = '(a)$t';
+      } else {
+        t = '(a)-' + t;
+      }
+      if (kDebugMode) {
+        print('DEBUG_CLEAN: repaired output = "$t"');
+      }
+    }
+
+    // Strip stray leading commas or colons or whitespace (if not a matching option starting with -)
+    if (!t.startsWith('-')) {
+      t = t.replaceAll(RegExp(r'^[\s,:]+'), '').trim();
+    }
+
+    // Do NOT strip prefixes if this option is a chronological / sequence option (e.g. "3 4 1 2" or "3, 4, 1, 2")
+    if (RegExp(r'^\d+[\s,]+\d+').hasMatch(t)) {
+      return t;
+    }
+
+    // Do NOT strip prefixes if this option is:
+    // 1. A matching combination (e.g. contains (a)-, (b)-, etc. or multiple (a), (b))
+    // 2. A sequence/ordering option (e.g. contains (1), (2), (3), (4))
+    // 3. An Assertion / Reason option (e.g. contains கூற்று, காரணம், Assertion, Reason)
+    if ((t.contains('(a)') && (t.contains('(b)') || t.contains('(c)') || t.contains('(d)'))) ||
+        (t.contains('(அ)') && (t.contains('(ஆ)') || t.contains('(இ)') || t.contains('(ஈ)'))) ||
+        (t.contains('(A)') && (t.contains('(B)') || t.contains('(C)') || t.contains('(D)'))) ||
+        t.contains('(1)') || t.contains('(2)') || t.contains('(3)') || t.contains('(4)') ||
+        t.contains('கூற்று') || t.contains('காரணம்') || t.contains('Assertion') || t.contains('Reason') ||
+        t.contains('(a)-') || t.contains('(b)-') || t.contains('(c)-') || t.contains('(d)-') ||
+        t.contains('(a) -') || t.contains('(b) -') || t.contains('(c) -') || t.contains('(d) -') ||
+        t.contains('(அ)-') || t.contains('(ஆ)-') || t.contains('(இ)-') || t.contains('(ஈ)-') ||
+        t.contains('(அ) -') || t.contains('(ஆ) -') || t.contains('(இ) -') || t.contains('(ஈ) -') ||
+        t.contains('(a):') || t.contains('(b):') || t.contains('(c):') || t.contains('(d):')) {
+      return t
+          .replaceAll('\n', ' ')
+          .replaceAll('\r', ' ')
+          .replaceAll('\\n', ' ')
+          .replaceAll(RegExp(r'[\r\n]+'), ' ')
+          .replaceAll(RegExp(r'\s*,\s*'), ', ')
+          .replaceAll(RegExp(r',\s*,\s*'), ', ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+    }
+
+    String cleaned = t
         .replaceFirst(RegExp(r'^\s*[\(\[]?[A-Ea-e1-5][\)\]\.]\s*'), '')
         .replaceAll('\n', ' ')
         .replaceAll('\r', ' ')
         .replaceAll('\\n', ' ')
         .replaceAll(RegExp(r'[\r\n]+'), ' ')
-        .replaceAll(RegExp(r'\s*,\s*'), ', ')
+        .replaceAll(RegExp(r',\s*,\s*'), ', ')
         .replaceAll(RegExp(r',\s*,\s*'), ', ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
@@ -157,6 +271,12 @@ class Question {
 
     String text = rawText.replaceAll('\\n', '\n');
 
+    // 0. Protect matching pairs (e.g. "— 1.") from being split
+    text = text.replaceAllMapped(
+      RegExp(r'—\s+([1-9]\.)'),
+      (m) => '—@@@MATCH_SEP@@@${m[1]}',
+    );
+
     // 1. Add newline before items (a), (b), (c), (d) or (அ), (ஆ), (இ), (ஈ) or a), b), etc.
     text = text.replaceAllMapped(
       RegExp(r'(?<!\n)\s*(\([a-dA-D]\)|\([அஆஇஈ]\)|\b[a-dA-D]\)|\b[அஆஇஈ]\))'),
@@ -168,6 +288,10 @@ class Question {
       RegExp(r'(?<!\n)\s*(\([1-9]\)|\([iIvVxX]+\))'),
       (m) => '\n${m[1]}',
     );
+
+    // 2b. Format chronological list items (1., 2., 3., 4.) onto separate lines
+    text = text.replaceAllMapped(RegExp(r':\s+([1-9]\.)'), (m) => ':\n${m[1]}');
+    text = text.replaceAllMapped(RegExp(r'\s+([2-9]\.)'), (m) => '\n${m[1]}');
 
     // 3. Add newline before List I, List II / பட்டியல் I, பட்டியல் II
     text = text.replaceAllMapped(
@@ -195,6 +319,9 @@ class Question {
 
     // 5. Clean up redundant multiple newlines (max 2 consecutive newlines)
     text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+
+    // Restore match pairs separator
+    text = text.replaceAll('@@@MATCH_SEP@@@', ' ');
 
     return text.trim();
   }

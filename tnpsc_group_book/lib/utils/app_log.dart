@@ -6,7 +6,7 @@ class AppLog {
 
   /// Logs a debug message if showDebugLogs is true
   static void d(String message) {
-    if (showDebugLogs) {
+    if (kDebugMode && showDebugLogs) {
       debugPrint(message);
     }
   }

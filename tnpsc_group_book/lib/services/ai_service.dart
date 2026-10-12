@@ -3118,7 +3118,10 @@ No Markdown formatting, no code fence, no extra preamble. Only raw JSON array.
             }
           }
           final filtered = _filterValidQuestions(questions, isExamPaper: true);
-          return filtered.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final verified = await verifyAndEnrichExamPaperQuestions(
+            filtered.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+          );
+          return verified;
         }
       }
       return [];
@@ -3192,7 +3195,10 @@ Return ONLY raw JSON array.
             }
           }
           final filtered = _filterValidQuestions(questions, isExamPaper: true);
-          return filtered.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final verified = await verifyAndEnrichExamPaperQuestions(
+            filtered.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+          );
+          return verified;
         }
       }
       return [];

@@ -526,6 +526,9 @@ function renderResultsUI() {
                 <button class="share-btn" onclick="shareResult()">
                     <span>📲</span> ${currentLang === 'ta' ? 'வாட்ஸ்அப்பில் பகிர்க' : 'Share on WhatsApp'}
                 </button>
+                <button class="share-btn" style="background: #0088cc;" onclick="shareTelegram()">
+                    <span>✈️</span> ${currentLang === 'ta' ? 'டெலிகிராமில் பகிர்க' : 'Share on Telegram'}
+                </button>
                 <button class="secondary-btn" onclick="location.reload()">
                     ${currentLang === 'ta' ? 'மீண்டும் விளையாடு' : 'Try Again'}
                 </button>
@@ -550,6 +553,11 @@ function shuffleArray(array) {
 function shareResult() {
     const text = `🎯 *TNPSC Quiz Challenge | My Result* 🔥\n\nI scored *${score}/${currentQuiz.questions.length}* in today's Daily Quiz! 💯\n\nTNPSC Group 1, 2, 4 தேர்வுக்கு தயாராகிறீர்களா? 📚\nஇந்த Quiz-ல் உங்களுடைய அறிவை Test பண்ணிப் பாருங்கள்!\n\n✅ Daily TNPSC Quiz\n✅ Mock Tests\n✅ Leaderboard & Streak 🔥\n\n📲 *Download App:*\nhttps://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book\n\n👉 *Play Online:*\nhttps://tnpsc-masterapp-dailyquiz.web.app\n\n#TNPSC #TNPSCQuiz #TNPSCGroup4 #TNPSCPreparation #TNPSCMaster #DailyQuiz #Tamilவினாடிவினா`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`);
+}
+
+function shareTelegram() {
+    const text = `🎯 *TNPSC Quiz Challenge | My Result* 🔥\n\nI scored *${score}/${currentQuiz.questions.length}* in today's Daily Quiz! 💯\n\nTNPSC Group 1, 2, 4 தேர்வுக்கு தயாராகிறீர்களா? 📚\nஇந்த Quiz-ல் உங்களுடைய அறிவை Test பண்ணிப் பாருங்கள்!\n\n✅ Daily TNPSC Quiz\n✅ Mock Tests\n✅ Leaderboard & Streak 🔥\n\n📲 *Download App:*\nhttps://play.google.com/store/apps/details?id=com.tnpsc.groupbook.tnpsc_group_book\n\n👉 *Play Online:*\nhttps://tnpsc-masterapp-dailyquiz.web.app\n\n#TNPSC #TNPSCQuiz #TNPSCGroup4 #TNPSCPreparation #TNPSCMaster #DailyQuiz`;
+    window.open(`https://t.me/share/url?url=https://tnpsc-masterapp-dailyquiz.web.app&text=${encodeURIComponent(text)}`);
 }
 
 function formatDate(dateStr) {
