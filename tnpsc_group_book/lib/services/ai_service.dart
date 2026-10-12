@@ -2932,25 +2932,36 @@ Return ONLY a JSON object with this exact structure:
         String batchJson = jsonEncode(batch);
 
         final prompt = '''
-You are an Expert TNPSC Examiner and Fact Verifier.
+You are an Expert TNPSC Examiner, Senior Tamil Proofreader, and Fact Verifier.
 Analyze the following batch of authentic TNPSC exam paper questions.
 
 YOUR MANDATORY TASKS:
-1. PRESERVE ORIGINAL VERBATIM TEXT: Do NOT change, shorten, or reword the original `question_en`, `question_ta`, and `options` from the paper. Maintain 100% exact printed wording and zero spelling mistakes.
-2. FACT-CHECK EVERY QUESTION: Verify if the marked `correctOptionIndex` (0-3) is 100% factually and mathematically correct.
-3. CORRECT ANY WRONG ANSWERS: If `correctOptionIndex` is wrong or points to the wrong option, update `correctOptionIndex` to the TRUE correct option index (0, 1, 2, or 3).
-4. GENERATE DETAILED BILINGUAL EXPLANATIONS:
-   - For `explanation_ta`: Provide a clear, detailed 2-3 sentence explanation in pure literary Tamil explaining why the answer is correct (and step-by-step formula/math steps for Aptitude).
-   - For `explanation_en`: Provide a clear, detailed 2-3 sentence explanation in English explaining why the answer is correct (and step-by-step math steps for Aptitude).
-5. ENSURE BILINGUAL FIELDS:
+1. RIGOROUS TAMIL SPELLING & OCR PROOFREADING (தமிழ் எழுத்துப்பிழை மற்றும் பிழைதிருத்தம்):
+   - Meticulously proofread and fix ALL Tamil spelling mistakes in `question_ta`, `options` (ta fields), and `explanation_ta`.
+   - Fix common OCR / font encoding errors:
+     * Fix missing or misassigned pulli/dots on Tamil consonants (e.g., ensure 'க்', 'ச்', 'ட்', 'த்', 'ப்', 'ற்', 'ன்' have pulli dots where required grammatically).
+     * Fix ண / ன, ல / ள / ழ, ர / ற, குறில் / நெடில் confusion errors caused by OCR scans or legacy font encodings.
+     * Fix broken vowel markers (ா, ி, ீ, ு, ூ, ெ, ே, ை, ொ, ோ, ௌ).
+     * Fix broken conjoined letters and ensure clean standard Unicode Tamil text.
+   - PRESERVE exact literary terminology, historical names, poet/author names, and question intent. DO NOT summarize or rewrite the questions!
+
+2. FACT-CHECK EVERY QUESTION & ANSWER KEY:
+   - Verify if `correctOptionIndex` (0-3) is 100% factually and mathematically correct.
+   - If `correctOptionIndex` is wrong or points to the wrong option, update `correctOptionIndex` to the TRUE correct option index (0, 1, 2, or 3).
+
+3. GENERATE DETAILED BILINGUAL EXPLANATIONS:
+   - For `explanation_ta`: Provide a clear, detailed 2-3 sentence explanation in pure literary Tamil with ZERO spelling mistakes.
+   - For `explanation_en`: Provide a clear, detailed 2-3 sentence explanation in English with step-by-step formula/math steps for Aptitude.
+
+4. BILINGUAL STRUCTURE:
    - Ensure `question_en` and `question_ta` are accurate and fully preserved.
-   - Ensure `options` array contains 4 objects `[{"en": "...", "ta": "..."}]`.
+   - Ensure `options` array contains 4 or 5 objects `[{"en": "...", "ta": "..."}]` with clean, prefix-free option text.
 
 INPUT QUESTIONS BATCH:
 $batchJson
 
 STRICT OUTPUT FORMAT:
-Return ONLY a valid JSON array containing the verified and enriched questions. NO Markdown, no preamble, no surrounding text.
+Return ONLY a valid JSON array containing the verified, proofread, and enriched questions. NO Markdown, no preamble, no surrounding text.
 ''';
 
         final res = await _generateWithFallback(prompt);
@@ -2982,6 +2993,76 @@ Return ONLY a valid JSON array containing the verified and enriched questions. N
       return verifiedQuestions;
     } catch (e) {
       AppLog.e("Error in verifyAndEnrichExamPaperQuestions: $e");
+      return questions;
+    }
+  }
+
+  /// Dedicated AI Tamil Spell Checker & Proofreader for Exam Paper Questions.
+  /// Scans every Tamil question, option, and explanation, corrects OCR/typo spelling errors,
+  /// fixes pulli dots (க், ச், த்...), ண/ன, ல/ள/ழ, ர/ற, ி/ீ, ெ/ே and saves clean standard Unicode Tamil.
+  static Future<List<Map<String, dynamic>>> proofreadAndFixExamPaperSpelling(
+    List<Map<String, dynamic>> questions,
+  ) async {
+    try {
+      List<Map<String, dynamic>> proofreadQuestions = [];
+      int batchSize = 10;
+
+      for (int i = 0; i < questions.length; i += batchSize) {
+        int end = (i + batchSize < questions.length) ? i + batchSize : questions.length;
+        List<Map<String, dynamic>> batch = questions.sublist(i, end);
+        String batchJson = jsonEncode(batch);
+
+        final prompt = '''
+You are a Senior Tamil Linguist, Chief TNPSC Exam Editor, and Expert Tamil Spell Checker.
+Your task is to fix ALL Tamil spelling mistakes, OCR scanning errors, font encoding glitches, and typographical errors in the provided questions, options, and explanations.
+
+STRICT TAMIL PROOFREADING INSTRUCTIONS:
+1. FIX ALL TAMIL SPELLING & OCR TYPOS:
+   - Fix missing or incorrect pulli dots on Tamil consonants (e.g. ensure 'க்', 'ச்', 'ட்', 'த்', 'ப்', 'ற்', 'ன்' have pulli dots where required grammatically).
+   - Fix ண / ன, ல / ள / ழ, ர / ற, குறில் / நெடில் confusion (e.g., 'தளீர்' -> 'தளிர்', 'வெண்டுமென' -> 'வேண்டுமென', 'கருமும்' -> 'கருவும்', 'தோர்கோட்டு' -> 'தோற்கோட்டு', 'நடந்தது' -> 'நடந்தது').
+   - Fix broken vowel markers (ா, ி, ீ, ு, ூ, ெ, ே, ை, ொ, ோ, ௌ).
+   - Fix broken conjoined unicode letters and ensure clean standard Tamil spelling.
+2. PRESERVE ORIGINAL QUESTION MEANING & CHOICE VALUES:
+   - Do NOT rewrite, summarize, or alter the meaning of questions or options.
+   - Retain all 4 or 5 options in their exact order.
+   - Retain `correctOptionIndex` (0, 1, 2, 3) exactly as given.
+   - Clean option texts of any leftover option labels like (A), (B), A), B).
+
+INPUT QUESTIONS BATCH:
+$batchJson
+
+STRICT OUTPUT FORMAT:
+Return ONLY a valid JSON array containing the spell-checked questions. NO Markdown fence, no preamble, raw JSON array.
+''';
+
+        final res = await _generateWithFallback(prompt, temperature: 0.1);
+        if (res != null) {
+          try {
+            int start = res.indexOf('[');
+            int last = res.lastIndexOf(']');
+            if (start != -1 && last != -1) {
+              List<dynamic> parsed = jsonDecode(res.substring(start, last + 1));
+              List<Map<String, dynamic>> batchParsed = [];
+              for (var q in parsed) {
+                if (q is Map) {
+                  batchParsed.add(Map<String, dynamic>.from(q));
+                }
+              }
+              final filtered = _filterValidQuestions(batchParsed, isExamPaper: true);
+              proofreadQuestions.addAll(filtered.map((e) => Map<String, dynamic>.from(e as Map)));
+              continue;
+            }
+          } catch (e) {
+            AppLog.e("AI_DEBUG: Error parsing proofread batch $i-$end: $e");
+          }
+        }
+        // Fallback: retain original batch
+        proofreadQuestions.addAll(batch);
+      }
+
+      return proofreadQuestions;
+    } catch (e) {
+      AppLog.e("Error in proofreadAndFixExamPaperSpelling: $e", e);
       return questions;
     }
   }

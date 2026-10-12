@@ -166,6 +166,137 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
     _fetchPapers();
   }
 
+  Future<void> _processAllChunksAuto(Map<String, dynamic> paper) async {
+    setState(() => _isChunkProcessing = true);
+    String paperDocId = paper['docId'] ?? paper['id'];
+    String rawText = paper['rawText'] ?? "";
+    String examType = paper['examType'] ?? 'Group 4';
+    int totalExpected = paper['totalQuestions'] is int ? paper['totalQuestions'] : 100;
+    bool isScanned = rawText.contains('[SCANNED_PDF:') || paper['pdfPath'] != null;
+
+    List<int>? pdfBytes = _selectedPdfBytes;
+    if (isScanned && pdfBytes == null && paper['pdfPath'] != null) {
+      final f = File(paper['pdfPath']);
+      if (f.existsSync()) {
+        pdfBytes = await f.readAsBytes();
+      }
+    }
+
+    if (isScanned && pdfBytes == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("PDF file required. Please pick the PDF file to extract questions."),
+        ));
+      }
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      List<PlatformFile> files = result?.files ?? [];
+      if (files.isNotEmpty && files.first.path != null) {
+        pdfBytes = await File(files.first.path!).readAsBytes();
+        _selectedPdfBytes = pdfBytes;
+        _selectedPdfPath = files.first.path;
+      } else {
+        setState(() => _isChunkProcessing = false);
+        return;
+      }
+    }
+
+    int totalPages = (isScanned && pdfBytes != null) ? AiService.getPdfPageCount(pdfBytes) : 1;
+    int maxLoops = 20; // Safety limit
+    int loopCount = 0;
+
+    while (loopCount < maxLoops) {
+      loopCount++;
+
+      DocumentSnapshot docSnap = await FirebaseFirestore.instance.collection('exam_papers').doc(paperDocId).get();
+      if (!docSnap.exists) break;
+
+      Map<String, dynamic> currentData = Map<String, dynamic>.from(docSnap.data() as Map);
+      List<dynamic> currentQuestions = currentData['questions'] ?? [];
+      int currentCount = currentQuestions.length;
+      int processedPages = currentData['processedPages'] is int ? currentData['processedPages'] : 0;
+
+      if (currentCount >= totalExpected || (isScanned && processedPages >= totalPages && processedPages > 0)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("✨ Auto Extraction Complete! Saved $currentCount / $totalExpected questions to Exam Paper."),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ));
+        }
+        break;
+      }
+
+      int startQuestionNum = currentCount + 1;
+      int pagesPerChunk = 6;
+      int startPage = processedPages;
+      if (startPage >= totalPages) startPage = 0;
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("🤖 Auto Extraction Loop $loopCount: Extracting Q#$startQuestionNum onwards (Pages ${startPage + 1}..${startPage + pagesPerChunk} of $totalPages)..."),
+          duration: const Duration(seconds: 4),
+        ));
+      }
+
+      List<Map<String, dynamic>> newQuestions = [];
+
+      if (isScanned && pdfBytes != null) {
+        List<int>? sliced = AiService.slicePdfPages(pdfBytes, startPage, pagesPerChunk);
+        newQuestions = await AiService.extractQuestionsFromPdfBytes(
+          pdfBytes: sliced ?? pdfBytes,
+          examType: examType,
+          startQuestionNum: startQuestionNum,
+          maxQuestions: 15,
+        );
+
+        if (newQuestions.isNotEmpty) {
+          int newProcessedPages = (startPage + pagesPerChunk < totalPages) ? startPage + pagesPerChunk : totalPages;
+          await FirebaseFirestore.instance.collection('exam_papers').doc(paperDocId).update({
+            'processedPages': newProcessedPages,
+          });
+        }
+      } else {
+        // Plain text extraction
+        String chunkText = rawText;
+        if (rawText.length > 3000) {
+          int startOffset = (currentCount * 250);
+          if (startOffset < rawText.length) {
+            int endOffset = (startOffset + 3500 < rawText.length) ? startOffset + 3500 : rawText.length;
+            chunkText = rawText.substring(startOffset, endOffset);
+          }
+        }
+
+        newQuestions = await AiService.parseAndEnrichPdfChunk(
+          rawChunkText: chunkText,
+          startQuestionNum: startQuestionNum,
+          examType: examType,
+        );
+      }
+
+      if (newQuestions.isEmpty) {
+        AppLog.d("AI_DEBUG: Auto chunk $loopCount extracted 0 questions. Stopping loop.");
+        break;
+      }
+
+      int totalNow = currentCount + newQuestions.length;
+      bool isCompleted = totalNow >= totalExpected;
+
+      await _firestoreService.appendExamPaperChunk(
+        paperDocId: paperDocId,
+        newQuestionsChunk: newQuestions,
+        isCompleted: isCompleted,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 1000));
+    }
+
+    setState(() => _isChunkProcessing = false);
+    _fetchPapers();
+  }
+
   Future<void> _deletePaper(String docId, String title) async {
     bool confirm = await showDialog(
           context: context,
@@ -636,6 +767,55 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
     }
   }
 
+  bool _isAiSpellChecking = false;
+
+  Future<void> _runAiSpellCheck(Map<String, dynamic> paper, StateSetter modalSetState) async {
+    List<dynamic> rawQuestions = paper['questions'] ?? [];
+    String paperDocId = paper['docId'] ?? paper['id'];
+    String examType = paper['examType'] ?? 'Group 4';
+
+    if (rawQuestions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("No questions to proofread. Please extract questions first."),
+      ));
+      return;
+    }
+
+    modalSetState(() => _isAiSpellChecking = true);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text("✨ AI is proofreading & fixing Tamil spelling for all ${rawQuestions.length} questions..."),
+      duration: const Duration(seconds: 5),
+    ));
+
+    List<Map<String, dynamic>> questionsMap = rawQuestions.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+
+    List<Map<String, dynamic>> proofread = await AiService.proofreadAndFixExamPaperSpelling(questionsMap);
+
+    bool ok = await _firestoreService.saveExamPaper(
+      id: paperDocId,
+      examType: examType,
+      year: paper['year'] is int ? paper['year'] : 2025,
+      title: paper['title'] ?? 'Exam Paper',
+      questions: proofread,
+      rawText: paper['rawText'],
+      pdfPath: paper['pdfPath'],
+      totalQuestions: paper['totalQuestions'],
+      processedCount: proofread.length,
+      isCompleted: paper['isCompleted'] ?? false,
+    );
+
+    modalSetState(() => _isAiSpellChecking = false);
+
+    if (ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("✨ All Tamil spelling & option typos fixed successfully by AI!"),
+        backgroundColor: Colors.green,
+      ));
+      Navigator.pop(context);
+      _fetchPapers();
+    }
+  }
+
   void _showAnswerKeyEditor(Map<String, dynamic> paper) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     String paperDocId = paper['docId'] ?? paper['id'];
@@ -679,28 +859,70 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isAiVerifying ? null : () => _runAiVerification(paper, modalSetState),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    icon: _isAiVerifying
-                        ? const SizedBox(width: 16, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.auto_awesome, size: 18),
-                    label: Text(
-                      _isAiVerifying
-                          ? "AI Extracting & Verifying Answers..."
-                          : (questions.isEmpty
-                              ? "✨ Extract All Questions & Answers with AI"
-                              : "AI Auto-Verify Answers & Add Explanations"),
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                if (questions.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: (_isAiVerifying || _isAiSpellChecking) ? null : () => _runAiVerification(paper, modalSetState),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepPurple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: _isAiVerifying
+                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.auto_awesome, size: 16),
+                          label: const Text(
+                            "Verify Answers",
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: (_isAiVerifying || _isAiSpellChecking) ? null : () => _runAiSpellCheck(paper, modalSetState),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: _isAiSpellChecking
+                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.spellcheck, size: 16),
+                          label: const Text(
+                            "✨ Fix Tamil Spelling",
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isAiVerifying ? null : () => _runAiVerification(paper, modalSetState),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: _isAiVerifying
+                          ? const SizedBox(width: 16, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.auto_awesome, size: 18),
+                      label: const Text(
+                        "✨ Extract All Questions & Answers with AI",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
                     ),
                   ),
-                ),
+                ],
                 const Divider(),
                 Expanded(
                   child: questions.isEmpty
@@ -872,9 +1094,15 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                                             padding: EdgeInsets.zero,
                                           ),
                                           const SizedBox(width: 6),
-                                          Text("Year: ${paper['year']}  •  $processed / $total Qs",
+                                          Expanded(
+                                            child: Text(
+                                              "Year: ${paper['year']}  •  $processed / $total Qs",
                                               style: AppTheme.getStyle(
-                                                  fontSize: 12, color: isDark ? Colors.white60 : Colors.black54)),
+                                                  fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -908,28 +1136,52 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  if (!isCompleted && paper['rawText'] != null)
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: OutlinedButton.icon(
-                                        onPressed: _isChunkProcessing ? null : () => _processNextChunk(paper),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: Colors.orange.shade800,
-                                          side: BorderSide(color: Colors.orange.shade800),
+                                  if (!isCompleted && (paper['rawText'] != null || paper['pdfPath'] != null)) ...[
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ElevatedButton.icon(
+                                            onPressed: _isChunkProcessing ? null : () => _processAllChunksAuto(paper),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.deepPurple,
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets.symmetric(vertical: 8),
+                                            ),
+                                            icon: _isChunkProcessing
+                                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                                : const Icon(Icons.bolt, size: 16),
+                                            label: const Text(
+                                              "⚡ Auto Extract All",
+                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                          ),
                                         ),
-                                        icon: _isChunkProcessing
-                                            ? const SizedBox(
-                                                width: 14,
-                                                height: 14,
-                                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
-                                              )
-                                            : const Icon(Icons.play_arrow_rounded, size: 18),
-                                        label: Text(
-                                          "Resume Processing Chunk #${processed + 1} (தொடர்க)",
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: _isChunkProcessing ? null : () => _processNextChunk(paper),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.orange.shade800,
+                                              side: BorderSide(color: Colors.orange.shade800),
+                                              padding: const EdgeInsets.symmetric(vertical: 8),
+                                            ),
+                                            icon: _isChunkProcessing
+                                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange))
+                                                : const Icon(Icons.play_arrow_rounded, size: 16),
+                                            label: Text(
+                                              "Chunk #${processed + 1} Only",
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -962,25 +1214,63 @@ class _AnswerKeyQuestionCard extends StatefulWidget {
 
 class _AnswerKeyQuestionCardState extends State<_AnswerKeyQuestionCard> {
   late int _selectedCorrectIndex;
+  late TextEditingController _questionTaController;
+  late List<TextEditingController> _optionControllers;
   late TextEditingController _explanationEnController;
   late TextEditingController _explanationTaController;
+  bool _isEditingText = false;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     _selectedCorrectIndex = widget.question.correctOptionIndex;
+    _questionTaController = TextEditingController(
+      text: widget.question.questionTa ?? widget.question.question,
+    );
+
+    final rawOpts = widget.question.optionsTa ?? widget.question.options;
+    _optionControllers = List.generate(
+      rawOpts.length,
+      (i) => TextEditingController(
+        text: rawOpts[i].replaceAll(RegExp(r'[\r\n]+'), ' ').trim(),
+      ),
+    );
+
     _explanationEnController = TextEditingController(text: widget.question.explanationEn ?? "");
     _explanationTaController = TextEditingController(text: widget.question.explanationTa ?? "");
+  }
+
+  @override
+  void dispose() {
+    _questionTaController.dispose();
+    for (var c in _optionControllers) {
+      c.dispose();
+    }
+    _explanationEnController.dispose();
+    _explanationTaController.dispose();
+    super.dispose();
   }
 
   Future<void> _saveChanges() async {
     setState(() => _isSaving = true);
     final fs = FirestoreService();
+
+    List<Map<String, String>> updatedOptions = [];
+    final optsEn = widget.question.optionsEn;
+    for (int i = 0; i < _optionControllers.length; i++) {
+      String ta = Question.cleanOptionText(_optionControllers[i].text.trim());
+      String en = (optsEn != null && i < optsEn.length) ? optsEn[i] : ta;
+      updatedOptions.add({'en': en, 'ta': ta});
+    }
+
     bool ok = await fs.updateQuestionAnswerKey(
       paperDocId: widget.paperDocId,
       questionIndex: widget.index,
       newCorrectOptionIndex: _selectedCorrectIndex,
+      newQuestionTa: _questionTaController.text.trim(),
+      newQuestionEn: widget.question.questionEn,
+      newOptions: updatedOptions,
       newExplanationEn: _explanationEnController.text.trim(),
       newExplanationTa: _explanationTaController.text.trim(),
     );
@@ -988,7 +1278,7 @@ class _AnswerKeyQuestionCardState extends State<_AnswerKeyQuestionCard> {
     setState(() => _isSaving = false);
     if (ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("Q${widget.index + 1} Answer Key updated!"),
+        content: Text("Q${widget.index + 1} Question details updated successfully!"),
         duration: const Duration(seconds: 1),
       ));
       widget.onUpdated();
@@ -998,7 +1288,6 @@ class _AnswerKeyQuestionCardState extends State<_AnswerKeyQuestionCard> {
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final displayOpts = widget.question.displayOptions;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -1008,19 +1297,60 @@ class _AnswerKeyQuestionCardState extends State<_AnswerKeyQuestionCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Question ${widget.index + 1}",
-                style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("Question ${widget.index + 1}",
+                    style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                TextButton.icon(
+                  onPressed: () => setState(() => _isEditingText = !_isEditingText),
+                  icon: Icon(_isEditingText ? Icons.visibility : Icons.edit_note, size: 18),
+                  label: Text(_isEditingText ? "Preview" : "✏️ Edit Text / திருத்து"),
+                ),
+              ],
+            ),
             const SizedBox(height: 6),
-            Text(widget.question.displayQuestion,
-                style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            if (_isEditingText) ...[
+              TextField(
+                controller: _questionTaController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: "வினா உரை (Question Tamil)",
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text("Edit Options Text / விடைகளை திருத்து:",
+                  style: AppTheme.getStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              ...List.generate(_optionControllers.length, (optIdx) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: TextField(
+                    controller: _optionControllers[optIdx],
+                    decoration: InputDecoration(
+                      labelText: "Option ${String.fromCharCode(65 + optIdx)}",
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                );
+              }),
+            ] else ...[
+              Text(
+                _questionTaController.text,
+                style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ],
             const SizedBox(height: 12),
             Text("Select Correct Option / சரியான விடையைத் தேர்வு செய்:",
                 style: AppTheme.getStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : Colors.black54)),
             const SizedBox(height: 6),
             Column(
-              children: List.generate(displayOpts.length, (optIdx) {
+              children: List.generate(_optionControllers.length, (optIdx) {
                 bool isSelected = (_selectedCorrectIndex == optIdx);
-                String optText = displayOpts[optIdx].replaceAll(RegExp(r'[\r\n]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+                String optText = _optionControllers[optIdx].text.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
                 return RadioListTile<int>(
                   value: optIdx,
                   groupValue: _selectedCorrectIndex,
@@ -1068,7 +1398,7 @@ class _AnswerKeyQuestionCardState extends State<_AnswerKeyQuestionCard> {
                 icon: _isSaving
                     ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text("Save Answer Key"),
+                label: const Text("Save Question & Answer Key"),
               ),
             ),
           ],

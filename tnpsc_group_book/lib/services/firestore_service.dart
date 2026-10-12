@@ -2402,16 +2402,65 @@ class FirestoreService {
       Map<String, dynamic> data = Map<String, dynamic>.from(docSnap.data() as Map);
       List<dynamic> existingQuestions = List<dynamic>.from(data['questions'] ?? []);
 
-      existingQuestions.addAll(newQuestionsChunk);
+      // Deduplicate against existing questions in this exam paper
+      Set<String> existingKeys = existingQuestions.map((q) {
+        if (q is Map) {
+          String qTa = (q['question_ta'] ?? '').toString().trim().toLowerCase();
+          String qEn = (q['question_en'] ?? '').toString().trim().toLowerCase();
+          String qRaw = (q['question'] ?? '').toString().trim().toLowerCase();
+          return qTa.isNotEmpty ? qTa : (qEn.isNotEmpty ? qEn : qRaw);
+        }
+        return '';
+      }).where((k) => k.isNotEmpty).toSet();
+
+      List<Map<String, dynamic>> sanitizedNewChunk = [];
+      for (var q in newQuestionsChunk) {
+        String qTa = (q['question_ta'] ?? '').toString().trim().toLowerCase();
+        String qEn = (q['question_en'] ?? '').toString().trim().toLowerCase();
+        String qRaw = (q['question'] ?? '').toString().trim().toLowerCase();
+        String key = qTa.isNotEmpty ? qTa : (qEn.isNotEmpty ? qEn : qRaw);
+
+        // Skip exact duplicate questions
+        if (key.isNotEmpty && existingKeys.contains(key)) {
+          continue;
+        }
+        if (key.isNotEmpty) {
+          existingKeys.add(key);
+        }
+
+        // Clean options and strip unwanted prefixes like (A), (B), A.
+        if (q['options'] is List) {
+          List<dynamic> cleanedOpts = [];
+          for (var opt in q['options']) {
+            if (opt is Map) {
+              String en = Question.cleanOptionText((opt['en'] ?? '').toString());
+              String ta = Question.cleanOptionText((opt['ta'] ?? '').toString());
+              cleanedOpts.add({'en': en, 'ta': ta});
+            } else if (opt is String) {
+              cleanedOpts.add(Question.cleanOptionText(opt));
+            } else {
+              cleanedOpts.add(opt);
+            }
+          }
+          q['options'] = cleanedOpts;
+        }
+
+        sanitizedNewChunk.add(q);
+      }
+
+      existingQuestions.addAll(sanitizedNewChunk);
+
+      int totalExpected = data['totalQuestions'] is int ? data['totalQuestions'] : 100;
+      bool completed = isCompleted || existingQuestions.length >= totalExpected;
 
       await docRef.update({
         'questions': existingQuestions,
         'processedCount': existingQuestions.length,
-        'isCompleted': isCompleted,
+        'isCompleted': completed,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      AppLog.d("AI_DEBUG: Appended chunk of ${newQuestionsChunk.length} questions to $paperDocId. Total now: ${existingQuestions.length}");
+      AppLog.d("AI_DEBUG: Appended chunk of ${sanitizedNewChunk.length} unique questions to $paperDocId. Total now: ${existingQuestions.length}");
       return true;
     } catch (e) {
       AppLog.e("Error appending exam paper chunk: $e", e);
@@ -2465,11 +2514,14 @@ class FirestoreService {
     }
   }
 
-  /// Update a specific question's answer key & explanation inside an exam paper
+  /// Update a specific question's text, options, answer key & explanation inside an exam paper
   Future<bool> updateQuestionAnswerKey({
     required String paperDocId,
     required int questionIndex,
     required int newCorrectOptionIndex,
+    String? newQuestionTa,
+    String? newQuestionEn,
+    List<dynamic>? newOptions,
     String? newExplanationEn,
     String? newExplanationTa,
   }) async {
@@ -2485,6 +2537,17 @@ class FirestoreService {
 
       Map<String, dynamic> q = Map<String, dynamic>.from(questions[questionIndex] as Map);
       q['correctOptionIndex'] = newCorrectOptionIndex;
+
+      if (newQuestionTa != null && newQuestionTa.isNotEmpty) {
+        q['question_ta'] = newQuestionTa;
+        q['question'] = newQuestionTa;
+      }
+      if (newQuestionEn != null && newQuestionEn.isNotEmpty) {
+        q['question_en'] = newQuestionEn;
+      }
+      if (newOptions != null && newOptions.isNotEmpty) {
+        q['options'] = newOptions;
+      }
       if (newExplanationEn != null) q['explanation_en'] = newExplanationEn;
       if (newExplanationTa != null) q['explanation_ta'] = newExplanationTa;
 
@@ -2495,7 +2558,7 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      AppLog.d("AI_DEBUG: Question $questionIndex answer key updated for $paperDocId");
+      AppLog.d("AI_DEBUG: Question $questionIndex details updated for $paperDocId");
       return true;
     } catch (e) {
       AppLog.e("Error updating question answer key: $e", e);
