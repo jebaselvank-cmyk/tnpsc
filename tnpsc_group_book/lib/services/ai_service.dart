@@ -3123,7 +3123,7 @@ Return ONLY a valid JSON array containing the spell-checked questions. NO Markdo
     required List<int> pdfBytes,
     required String examType,
     int startQuestionNum = 1,
-    int maxQuestions = 15,
+    int maxQuestions = 25,
   }) async {
     try {
       String base64Pdf = base64Encode(pdfBytes);
@@ -3212,18 +3212,18 @@ No Markdown formatting, no code fence, no extra preamble. Only raw JSON array.
     }
   }
 
-  /// Splits raw exam paper text into chunk blocks grouped by question numbers (e.g., ~15 questions per chunk)
+  /// Splits raw exam paper text into chunk blocks grouped by question numbers (25 questions per chunk: 1-25, 26-50, 51-75, 76-100)
   /// preventing cut-in-half questions at arbitrary character offsets.
-  static List<String> splitTextIntoQuestionChunks(String rawText, {int targetQuestionsPerChunk = 15}) {
+  static List<String> splitTextIntoQuestionChunks(String rawText, {int targetQuestionsPerChunk = 25}) {
     List<String> chunks = [];
     if (rawText.trim().isEmpty) return chunks;
 
-    RegExp qNumRegex = RegExp(r'^\s*(\d{1,3})[.)]\s+', multiLine: true);
+    RegExp qNumRegex = RegExp(r'^\s*(\d{1,3})\s*[.:)\-]+\s*', multiLine: true);
     Iterable<Match> matches = qNumRegex.allMatches(rawText);
 
     if (matches.length < 5) {
       // Fallback to overlapping character chunking if question numbers are not standard
-      int chunkSize = 3500;
+      int chunkSize = 3000;
       int overlap = 800;
       int offset = 0;
       while (offset < rawText.length) {
@@ -3277,9 +3277,15 @@ CRITICAL INSTRUCTIONS - 100% VERBATIM EXTRACTION & ZERO SPELLING MISTAKES:
 3. PRESERVE SPECIAL TNPSC QUESTION STRUCTURES (பொருத்துக / கூற்று காரணம்):
    - For Match the following (பொருத்துக) with two side-by-side columns: Include both left and right columns on separate lines with \\n without any word substitutions (e.g. keep 'தீமை' and 'பிறப்பு' exact).
    - For Assertion/Reason (கூற்று மற்றும் காரணம்): Keep both on separate lines with \\n.
-4. ACCURATE ANSWER KEY & EXPLANATIONS:
-   - Identify the correct answer key (0, 1, 2, or 3).
-   - Generate detailed bilingual explanations.
+4. ACCURATE CORRECT ANSWER SELECTION (100% துல்லியமான விடைத் தேர்வு):
+   - Meticulously analyze the question, options, and official TNPSC facts/grammar rules to determine the TRUE correct answer.
+   - Set "correctOptionIndex" as a valid integer:
+     * 0 for Option (A)
+     * 1 for Option (B)
+     * 2 for Option (C)
+     * 3 for Option (D)
+   - If an official answer key is printed or marked in the source text, use that exact option index.
+   - Generate clear, detailed bilingual explanations (`explanation_ta` and `explanation_en`) explaining step-by-step why this answer is correct.
 
 RAW EXAM PAPER TEXT:
 $rawChunkText

@@ -249,7 +249,7 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
           pdfBytes: sliced ?? pdfBytes,
           examType: examType,
           startQuestionNum: startQuestionNum,
-          maxQuestions: 15,
+          maxQuestions: 25,
         );
 
         if (newQuestions.isNotEmpty) {
@@ -259,9 +259,9 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
           });
         }
       } else {
-        // Plain text extraction grouped by question boundaries
-        List<String> textChunks = AiService.splitTextIntoQuestionChunks(rawText, targetQuestionsPerChunk: 15);
-        int chunkIndex = (currentCount / 15).floor().clamp(0, textChunks.isNotEmpty ? textChunks.length - 1 : 0);
+        // Plain text extraction grouped by question boundaries (25 questions per batch: 1-25, 26-50, 51-75, 76-100)
+        List<String> textChunks = AiService.splitTextIntoQuestionChunks(rawText, targetQuestionsPerChunk: 25);
+        int chunkIndex = (currentCount / 25).floor().clamp(0, textChunks.isNotEmpty ? textChunks.length - 1 : 0);
         String chunkText = textChunks.isNotEmpty ? textChunks[chunkIndex] : rawText;
 
         newQuestions = await AiService.parseAndEnrichPdfChunk(
@@ -620,7 +620,7 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
 
                             // If JSON was empty, extract from pasted text or PDF
                             if (extractedQuestions.isEmpty && pastedText.isNotEmpty && !pastedText.contains('[SCANNED_PDF:')) {
-                              List<String> textChunks = AiService.splitTextIntoQuestionChunks(pastedText, targetQuestionsPerChunk: 15);
+                              List<String> textChunks = AiService.splitTextIntoQuestionChunks(pastedText, targetQuestionsPerChunk: 25);
                               int startQ = 1;
 
                               for (int i = 0; i < textChunks.length; i++) {
@@ -638,6 +638,33 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
 
                                 if (extractedQuestions.length >= total) break;
                               }
+
+                              // GAP RECOVERY PASS: If less than total questions extracted, run a targeted recovery pass!
+                              if (extractedQuestions.length < total) {
+                                int missingStart = extractedQuestions.length + 1;
+                                RegExp missingRegex = RegExp('^\\s*$missingStart[.:)\\-]+\\s*', multiLine: true);
+                                Match? match = missingRegex.firstMatch(pastedText);
+
+                                String remainingText = "";
+                                if (match != null) {
+                                  remainingText = pastedText.substring(match.start);
+                                } else {
+                                  int cutoff = (pastedText.length * 0.75).floor();
+                                  remainingText = pastedText.substring(cutoff);
+                                }
+
+                                if (remainingText.isNotEmpty) {
+                                  List<Map<String, dynamic>> remainingQs = await AiService.parseAndEnrichPdfChunk(
+                                    rawChunkText: remainingText,
+                                    startQuestionNum: missingStart,
+                                    examType: examType,
+                                  );
+
+                                  if (remainingQs.isNotEmpty) {
+                                    extractedQuestions.addAll(remainingQs);
+                                  }
+                                }
+                              }
                             } else if (extractedQuestions.isEmpty && _selectedPdfBytes != null) {
                               int totalPages = AiService.getPdfPageCount(_selectedPdfBytes!);
                               int pagesPerChunk = 6;
@@ -649,7 +676,7 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                                   pdfBytes: sliced ?? _selectedPdfBytes!,
                                   examType: examType,
                                   startQuestionNum: extractedQuestions.length + 1,
-                                  maxQuestions: 15,
+                                  maxQuestions: 25,
                                 );
 
                                 if (chunkQs.isNotEmpty) {
