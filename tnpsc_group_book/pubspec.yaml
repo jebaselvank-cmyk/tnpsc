@@ -3,7 +3,7 @@ description: "TNPSC Master Flutter application"
 publish_to: 'none' # private package
 
 # Version Change
-version: 1.2.3+26
+version: 1.2.4+27
 
 environment:
   sdk: ">=3.11.0 <4.0.0"

@@ -8,9 +8,13 @@ import io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin
 
 class MainActivity : FlutterFragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Enable edge-to-edge display using the new Activity 1.8+ API
-        // This handles status bar and navigation bar transparency correctly for Android 15
-        enableEdgeToEdge()
+        try {
+            // Enable edge-to-edge display using the Activity 1.8+ API
+            enableEdgeToEdge()
+        } catch (e: Throwable) {
+            // Safely ignore edge-to-edge on OEM Android 10/11 devices (OPPO, Vivo, Xiaomi)
+            // that throw UnsupportedOperationException: Unknown windowLayoutInDisplayCutoutMode: 3
+        }
         super.onCreate(savedInstanceState)
     }
 

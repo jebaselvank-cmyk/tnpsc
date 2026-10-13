@@ -292,6 +292,107 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
     _fetchPapers();
   }
 
+  Future<void> _fillMissingQuestions(Map<String, dynamic> paper) async {
+    setState(() => _isChunkProcessing = true);
+    String paperDocId = paper['docId'] ?? paper['id'];
+    String rawText = paper['rawText'] ?? "";
+    String examType = paper['examType'] ?? 'Group 4';
+    int totalExpected = paper['totalQuestions'] is int ? paper['totalQuestions'] : 100;
+    List<dynamic> existingQuestions = paper['questions'] ?? [];
+    int currentCount = existingQuestions.length;
+
+    if (currentCount >= totalExpected) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("Paper already complete! All $totalExpected questions are saved."),
+        ));
+      }
+      setState(() => _isChunkProcessing = false);
+      return;
+    }
+
+    int missingStart = currentCount + 1;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("🔍 Searching & extracting missing questions (#$missingStart to #$totalExpected)..."),
+        duration: const Duration(seconds: 4),
+      ));
+    }
+
+    List<Map<String, dynamic>> recoveredQs = [];
+
+    if (rawText.isNotEmpty && !rawText.contains('[SCANNED_PDF:')) {
+      RegExp missingRegex = RegExp('^\\s*$missingStart[.:)\\-]+\\s*', multiLine: true);
+      Match? match = missingRegex.firstMatch(rawText);
+
+      String gapText = "";
+      if (match != null) {
+        gapText = rawText.substring(match.start);
+      } else {
+        int cutoff = (rawText.length * 0.70).floor();
+        gapText = rawText.substring(cutoff);
+      }
+
+      recoveredQs = await AiService.parseAndEnrichPdfChunk(
+        rawChunkText: gapText,
+        startQuestionNum: missingStart,
+        examType: examType,
+      );
+    } else {
+      // PDF-based gap fill
+      List<int>? pdfBytes = _selectedPdfBytes;
+      if (pdfBytes == null && paper['pdfPath'] != null) {
+        final f = File(paper['pdfPath']);
+        if (f.existsSync()) {
+          pdfBytes = await f.readAsBytes();
+        }
+      }
+
+      if (pdfBytes != null) {
+        int totalPages = AiService.getPdfPageCount(pdfBytes);
+        int startPage = (totalPages * (currentCount / totalExpected)).floor().clamp(0, totalPages - 1);
+        List<int>? sliced = AiService.slicePdfPages(pdfBytes, startPage, totalPages - startPage);
+
+        recoveredQs = await AiService.extractQuestionsFromPdfBytes(
+          pdfBytes: sliced ?? pdfBytes,
+          examType: examType,
+          startQuestionNum: missingStart,
+          maxQuestions: (totalExpected - currentCount),
+        );
+      }
+    }
+
+    if (recoveredQs.isNotEmpty) {
+      recoveredQs = await AiService.proofreadAndFixExamPaperSpelling(recoveredQs);
+
+      int totalNow = currentCount + recoveredQs.length;
+      bool isCompleted = totalNow >= totalExpected;
+
+      bool ok = await _firestoreService.appendExamPaperChunk(
+        paperDocId: paperDocId,
+        newQuestionsChunk: recoveredQs,
+        isCompleted: isCompleted,
+      );
+
+      if (ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("✨ Successfully added ${recoveredQs.length} missing questions! Total now: $totalNow / $totalExpected"),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
+        ));
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("No missing questions found in text. Check if raw text contains all questions."),
+        ));
+      }
+    }
+
+    setState(() => _isChunkProcessing = false);
+    _fetchPapers();
+  }
+
   Future<void> _deletePaper(String docId, String title) async {
     bool confirm = await showDialog(
           context: context,
@@ -1311,7 +1412,7 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: OutlinedButton.icon(
-                                            onPressed: _isChunkProcessing ? null : () => _processNextChunk(paper),
+                                            onPressed: _isChunkProcessing ? null : () => _fillMissingQuestions(paper),
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: Colors.orange.shade800,
                                               side: BorderSide(color: Colors.orange.shade800),
@@ -1319,10 +1420,10 @@ class _AdminExamPapersScreenState extends State<AdminExamPapersScreen> {
                                             ),
                                             icon: _isChunkProcessing
                                                 ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange))
-                                                : const Icon(Icons.play_arrow_rounded, size: 16),
-                                            label: Text(
-                                              "Chunk #${processed + 1} Only",
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                                : const Icon(Icons.find_replace_rounded, size: 16),
+                                            label: const Text(
+                                              "🔄 Fill Missing Qs",
+                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                                               overflow: TextOverflow.ellipsis,
                                               maxLines: 1,
                                             ),

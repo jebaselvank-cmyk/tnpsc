@@ -2468,7 +2468,7 @@ class FirestoreService {
     }
   }
 
-  /// Fetch all exam papers from 'exam_papers' collection
+  /// Fetch all exam papers from 'exam_papers' collection with fast cache fallback
   Future<List<Map<String, dynamic>>> getExamPapers({String? examType, int? year}) async {
     try {
       Query query = _db.collection('exam_papers');
@@ -2479,7 +2479,16 @@ class FirestoreService {
         query = query.where('year', isEqualTo: year);
       }
 
-      QuerySnapshot snap = await query.get();
+      QuerySnapshot snap;
+      try {
+        snap = await query.get(const GetOptions(source: Source.cache));
+        if (snap.docs.isEmpty) {
+          snap = await query.get();
+        }
+      } catch (e) {
+        snap = await query.get();
+      }
+
       List<Map<String, dynamic>> list = [];
       for (var doc in snap.docs) {
         var data = Map<String, dynamic>.from(doc.data() as Map);
