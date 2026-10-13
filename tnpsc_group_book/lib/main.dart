@@ -36,6 +36,7 @@ import 'services/tts_service.dart';
 import 'services/deep_link_service.dart';
 import 'services/firestore_service.dart';
 import 'services/version_service.dart';
+import 'services/iap_service.dart';
 
 // Widgets
 import 'widgets/lazy_indexed_stack.dart';
@@ -145,9 +146,10 @@ Future<void> main() async {
   try {
     AppLanguage.init();
     AppTheme.init();
+    IapService().init();
 
     AppLog.d(
-      'MAIN: App preferences initialized',
+      'MAIN: App preferences & IAP initialized',
     );
   } catch (e, stack) {
     AppLog.e(

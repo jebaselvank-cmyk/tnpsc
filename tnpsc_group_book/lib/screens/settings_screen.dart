@@ -9,6 +9,8 @@ import '../services/firestore_service.dart';
 import '../models/subject.dart';
 import 'admin_panel_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:tnpsc_group_book/screens/premium_subscription_screen.dart';
+import 'package:tnpsc_group_book/services/iap_service.dart';
 
 import 'package:tnpsc_group_book/screens/bookmark_screen.dart';
 import 'package:tnpsc_group_book/screens/feedback_screen.dart';
@@ -244,6 +246,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.all(16.0),
                 children: [
                   _buildProfileSection(isDarkMode),
+
+                  const SizedBox(height: 12),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: IapService.isProNotifier,
+                    builder: (context, isPro, _) {
+                      return Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: isPro
+                                  ? [Colors.green.shade700, Colors.teal.shade600]
+                                  : [Colors.amber.shade800, Colors.deepOrange.shade700],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: const BoxDecoration(
+                                color: Colors.white24,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                isPro ? Icons.workspace_premium : Icons.stars_rounded,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                            ),
+                            title: Text(
+                              isPro ? "TNPSC Master PRO Active" : "⭐ Upgrade to PRO — ₹49 / மாதம்",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            subtitle: Text(
+                              isPro
+                                  ? "100% விளம்பரமில்லாத பிரீமியம் கணக்கு"
+                                  : "விளம்பரமில்லாத கற்றல் & தடையற்ற AI அணுகல்",
+                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                            trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 18),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (ctx) => const PremiumSubscriptionScreen()),
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
 
                   // Rewards Section
                   Text(

@@ -48,6 +48,7 @@ dependencies:
   gal: ^2.3.2
   file_picker: ^8.1.2
   syncfusion_flutter_pdf: ^35.1.37
+  in_app_purchase: ^3.2.0
 
 dev_dependencies:
   flutter_test:
