@@ -2468,7 +2468,67 @@ class FirestoreService {
     }
   }
 
-  /// Fetch all exam papers from 'exam_papers' collection with fast cache fallback
+  /// Save a specific chunk/set of an exam paper as a separate document in 'exam_papers'
+  Future<bool> saveExamPaperSet({
+    required String examType,
+    required int year,
+    required String title,
+    required List<Map<String, dynamic>> questions,
+    required int setIndex,
+    String? rawText,
+    String? pdfPath,
+    int? totalQuestions,
+  }) async {
+    try {
+      final baseId = "${examType.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}_$year";
+      final safeTitleSlug = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+      final docId = "${baseId}_${safeTitleSlug}_set_$setIndex";
+
+      // Sanitize options in questions
+      for (var q in questions) {
+        if (q['options'] is List) {
+          List<dynamic> cleanedOpts = [];
+          for (var opt in q['options']) {
+            if (opt is Map) {
+              String en = Question.cleanOptionText((opt['en'] ?? '').toString());
+              String ta = Question.cleanOptionText((opt['ta'] ?? '').toString());
+              cleanedOpts.add({'en': en, 'ta': ta});
+            } else if (opt is String) {
+              cleanedOpts.add(Question.cleanOptionText(opt));
+            } else {
+              cleanedOpts.add(opt);
+            }
+          }
+          q['options'] = cleanedOpts;
+        }
+      }
+
+      final data = {
+        'id': docId,
+        'baseId': baseId,
+        'examType': examType,
+        'year': year,
+        'title': title,
+        'setIndex': setIndex,
+        'totalQuestions': totalQuestions ?? 100,
+        'processedCount': questions.length,
+        'isCompleted': questions.isNotEmpty,
+        'questions': questions,
+        if (rawText != null) 'rawText': rawText,
+        if (pdfPath != null) 'pdfPath': pdfPath,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await _db.collection('exam_papers').doc(docId).set(data, SetOptions(merge: true));
+      AppLog.d("AI_DEBUG: Exam paper set $setIndex saved separately: $docId");
+      return true;
+    } catch (e) {
+      AppLog.e("Error saving exam paper set: $e", e);
+      return false;
+    }
+  }
+
+  /// Fetch all exam papers from 'exam_papers' collection, grouping separate sets by title/examType/year
   Future<List<Map<String, dynamic>>> getExamPapers({String? examType, int? year}) async {
     try {
       Query query = _db.collection('exam_papers');
@@ -2479,21 +2539,40 @@ class FirestoreService {
         query = query.where('year', isEqualTo: year);
       }
 
-      QuerySnapshot snap;
-      try {
-        snap = await query.get(const GetOptions(source: Source.cache));
-        if (snap.docs.isEmpty) {
-          snap = await query.get();
-        }
-      } catch (e) {
-        snap = await query.get();
-      }
+      QuerySnapshot snap = await query.get();
 
-      List<Map<String, dynamic>> list = [];
+      Map<String, Map<String, dynamic>> mergedPapers = {};
+
       for (var doc in snap.docs) {
         var data = Map<String, dynamic>.from(doc.data() as Map);
-        data['docId'] = doc.id;
-        list.add(data);
+        String title = data['title'] ?? 'Exam Paper';
+        String eType = data['examType'] ?? 'Group 4';
+        int yr = data['year'] is int ? data['year'] : 2025;
+        String groupKey = "${eType}_${yr}_$title";
+
+        List<dynamic> setQuestions = data['questions'] ?? [];
+
+        if (!mergedPapers.containsKey(groupKey)) {
+          mergedPapers[groupKey] = {
+            'docId': doc.id,
+            'examType': eType,
+            'year': yr,
+            'title': title,
+            'totalQuestions': data['totalQuestions'] ?? 100,
+            'questions': <dynamic>[...setQuestions],
+            'rawText': data['rawText'],
+            'pdfPath': data['pdfPath'],
+          };
+        } else {
+          List<dynamic> existingQuestions = mergedPapers[groupKey]!['questions'];
+          existingQuestions.addAll(setQuestions);
+        }
+      }
+
+      List<Map<String, dynamic>> list = mergedPapers.values.toList();
+      for (var p in list) {
+        p['processedCount'] = (p['questions'] as List).length;
+        p['isCompleted'] = p['processedCount'] >= (p['totalQuestions'] ?? 100);
       }
 
       // Sort by Year descending, then title
@@ -2571,6 +2650,40 @@ class FirestoreService {
       return true;
     } catch (e) {
       AppLog.e("Error updating question answer key: $e", e);
+      return false;
+    }
+  }
+
+  /// Delete a specific question by index from an exam paper
+  Future<bool> deleteExamPaperQuestion({
+    required String paperDocId,
+    required int questionIndex,
+  }) async {
+    try {
+      DocumentReference docRef = _db.collection('exam_papers').doc(paperDocId);
+      DocumentSnapshot docSnap = await docRef.get();
+      if (!docSnap.exists) return false;
+
+      Map<String, dynamic> data = Map<String, dynamic>.from(docSnap.data() as Map);
+      List<dynamic> questions = List<dynamic>.from(data['questions'] ?? []);
+
+      if (questionIndex < 0 || questionIndex >= questions.length) return false;
+
+      questions.removeAt(questionIndex);
+      int totalExpected = data['totalQuestions'] is int ? data['totalQuestions'] : 100;
+      bool completed = questions.length >= totalExpected;
+
+      await docRef.update({
+        'questions': questions,
+        'processedCount': questions.length,
+        'isCompleted': completed,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      AppLog.d("AI_DEBUG: Question at index $questionIndex deleted from $paperDocId");
+      return true;
+    } catch (e) {
+      AppLog.e("Error deleting exam paper question: $e", e);
       return false;
     }
   }

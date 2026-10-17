@@ -3123,7 +3123,7 @@ Return ONLY a valid JSON array containing the spell-checked questions. NO Markdo
     required List<int> pdfBytes,
     required String examType,
     int startQuestionNum = 1,
-    int maxQuestions = 25,
+    int maxQuestions = 50,
   }) async {
     try {
       String base64Pdf = base64Encode(pdfBytes);
@@ -3219,7 +3219,7 @@ No Markdown formatting, no code fence, no extra preamble. Only raw JSON array.
     if (rawText.trim().isEmpty) return chunks;
 
     RegExp qNumRegex = RegExp(r'^\s*(\d{1,3})\s*[.:)\-]+\s*', multiLine: true);
-    Iterable<Match> matches = qNumRegex.allMatches(rawText);
+    List<Match> matches = qNumRegex.allMatches(rawText).toList();
 
     if (matches.length < 5) {
       // Fallback to overlapping character chunking if question numbers are not standard
@@ -3246,6 +3246,26 @@ No Markdown formatting, no code fence, no extra preamble. Only raw JSON array.
       String chunkText = rawText.substring(startChar, endChar).trim();
       if (chunkText.isNotEmpty) {
         chunks.add(chunkText);
+      }
+    }
+
+    // Ensure any remaining text after the last matched question index is also processed via character chunking
+    if (matchIndices.isNotEmpty) {
+      int lastMatchStart = matchIndices.last;
+      if (lastMatchStart < rawText.length - 200) {
+        String remainingText = rawText.substring(lastMatchStart);
+        int chunkSize = 3000;
+        int overlap = 800;
+        int offset = 0;
+        while (offset < remainingText.length) {
+          int end = (offset + chunkSize < remainingText.length) ? offset + chunkSize : remainingText.length;
+          String remChunk = remainingText.substring(offset, end);
+          if (remChunk.trim().isNotEmpty && !chunks.contains(remChunk)) {
+            chunks.add(remChunk);
+          }
+          if (end == remainingText.length) break;
+          offset += (chunkSize - overlap);
+        }
       }
     }
 

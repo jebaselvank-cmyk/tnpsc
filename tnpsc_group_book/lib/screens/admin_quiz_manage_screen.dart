@@ -254,6 +254,32 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
     );
   }
 
+  void _deleteQuestion(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Question"),
+        content: Text("Are you sure you want to delete Question ${index + 1}?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              setState(() {
+                _questions.removeAt(index);
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Question deleted. Save changes to update Firestore!"), backgroundColor: Colors.orange),
+              );
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleShareQuestion(Question q) async {
     showModalBottomSheet(
       context: context,
@@ -448,21 +474,37 @@ class _AdminQuizManageScreenState extends State<AdminQuizManageScreen> {
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        "Question ${index + 1}",
-                                        style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
+                                      Expanded(
+                                        child: Text(
+                                          "Question ${index + 1}",
+                                          style: AppTheme.getStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
+                                        ),
                                       ),
                                       Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           IconButton(
-                                            icon: const AppIcon(AppIcons.share, size: 20, color: Colors.blue),
+                                            icon: const AppIcon(AppIcons.share, size: 18, color: Colors.blue),
                                             onPressed: () => _handleShareQuestion(q),
                                             tooltip: "Share Question",
+                                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                                            constraints: const BoxConstraints(),
                                           ),
+                                          const SizedBox(width: 4),
                                           IconButton(
-                                            icon: const AppIcon(AppIcons.edit, size: 20),
+                                            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                            onPressed: () => _deleteQuestion(index),
+                                            tooltip: "Delete Question",
+                                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          IconButton(
+                                            icon: const AppIcon(AppIcons.edit, size: 18),
                                             onPressed: () => _editQuestion(index),
+                                            tooltip: "Edit Question",
+                                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                                            constraints: const BoxConstraints(),
                                           ),
                                         ],
                                       ),
