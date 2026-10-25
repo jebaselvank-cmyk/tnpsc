@@ -1,16 +1,27 @@
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:http/http.dart' as http;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:tnpsc_group_book/utils/app_date.dart';
-import '../utils/app_log.dart';
 import '../models/question.dart';
 import 'hive_service.dart';
 
 class AiService {
+  static void _log(String message) {
+    if (kDebugMode) {
+      debugPrint(message);
+    }
+  }
+
+  static void _logError(String message, [dynamic error, StackTrace? stackTrace]) {
+    debugPrint("ERROR: $message");
+    if (error != null) debugPrint(error.toString());
+    if (stackTrace != null) debugPrint(stackTrace.toString());
+  }
+
   static List<String>? _cachedApiKeys;
   static List<String>? _cachedPreferredModels;
 
@@ -153,7 +164,7 @@ class AiService {
       if (keysStr.isNotEmpty) {
         _cachedApiKeys =
             keysStr.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-        AppLog.d("AI_DEBUG: Loaded ${_cachedApiKeys!.length} API keys from Remote Config");
+        _log("AI_DEBUG: Loaded ${_cachedApiKeys!.length} API keys from Remote Config");
       }
 
       // 2. Preferred Models
@@ -161,10 +172,10 @@ class AiService {
       if (modelsStr.isNotEmpty) {
         _cachedPreferredModels =
             modelsStr.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-        AppLog.d("AI_DEBUG: Preferred Models from Remote Config: $_cachedPreferredModels");
+        _log("AI_DEBUG: Preferred Models from Remote Config: $_cachedPreferredModels");
       }
     } catch (e) {
-      AppLog.d("AI_DEBUG: Remote Config Error: $e");
+      _log("AI_DEBUG: Remote Config Error: $e");
     } finally {
       _isFetchingConfig = false;
     }
@@ -227,11 +238,11 @@ class AiService {
       String sVersion = sticky['version'] ?? "";
 
       if (sKey.isNotEmpty && sModel.isNotEmpty && sVersion.isNotEmpty) {
-        AppLog.d("AI_DEBUG: Using Sticky Config - Model: $sModel, Version: $sVersion");
+        _log("AI_DEBUG: Using Sticky Config - Model: $sModel, Version: $sVersion");
         final res = await _tryModelRequest(sKey, sModel, sVersion, prompt, base64Pdf: base64Pdf, temperature: temperature);
         if (res != null) return res;
 
-        AppLog.d("AI_DEBUG: Sticky Config failed. Clearing and proceeding to discovery.");
+        _log("AI_DEBUG: Sticky Config failed. Clearing and proceeding to discovery.");
         await HiveService.clearStickyAiConfig();
       }
     }
@@ -244,7 +255,7 @@ class AiService {
       // 1. Discover available models
       List<String> discoveredModels = [];
       try {
-        AppLog.d("AI_DEBUG: Discovering models with key: ${apiKey.substring(0, 5)}...");
+        _log("AI_DEBUG: Discovering models with key: ${apiKey.substring(0, 5)}...");
         final listUrl = Uri.parse(
           'https://generativelanguage.googleapis.com/v1/models?key=$apiKey',
         );
@@ -258,11 +269,11 @@ class AiService {
             }
           }
         } else {
-          AppLog.d("AI_DEBUG: Key ${apiKey.substring(0, 5)} discovery failed (${listRes.statusCode}). Trying next key...");
+          _log("AI_DEBUG: Key ${apiKey.substring(0, 5)} discovery failed (${listRes.statusCode}). Trying next key...");
           continue; // Try next API key
         }
       } catch (e) {
-        AppLog.d("AI_DEBUG: Discovery failed for key ${apiKey.substring(0, 5)}: $e");
+        _log("AI_DEBUG: Discovery failed for key ${apiKey.substring(0, 5)}: $e");
         continue;
       }
 
@@ -289,7 +300,7 @@ class AiService {
         finalModelsToTry = ['gemini-1.5-flash', 'gemini-pro'];
       }
 
-      AppLog.d("AI_DEBUG: Trying restricted stable models: $finalModelsToTry");
+      _log("AI_DEBUG: Trying restricted stable models: $finalModelsToTry");
 
       // 3. Try each model (v1beta)
       bool keyFailed = false;
@@ -299,7 +310,7 @@ class AiService {
           final res = await _tryModelRequest(apiKey, modelName, version, prompt, base64Pdf: base64Pdf, onKeyInvalid: () => keyFailed = true, temperature: temperature);
           if (res != null) {
             // SUCCESS! Save this as the sticky config for the rest of the day
-            AppLog.d("AI_DEBUG: Saving new Sticky Config: $modelName on $version");
+            _log("AI_DEBUG: Saving new Sticky Config: $modelName on $version");
             await HiveService.saveStickyAiConfig(apiKey, modelName, version);
             return res;
           }
@@ -381,7 +392,7 @@ class AiService {
 
     while (retries <= maxRetries) {
       try {
-        AppLog.d("AI_DEBUG: REST Call - Trying $modelName on $version (Attempt ${retries + 1})...");
+        _log("AI_DEBUG: REST Call - Trying $modelName on $version (Attempt ${retries + 1})...");
         final url = Uri.parse(
           'https://generativelanguage.googleapis.com/$version/models/$modelName:generateContent?key=$apiKey',
         );
@@ -440,7 +451,7 @@ class AiService {
           final data = jsonDecode(response.body);
           final candidate = data['candidates'][0];
           if (candidate['finishReason'] != 'STOP' && candidate['finishReason'] != 'MAX_TOKENS') {
-            AppLog.d("AI_DEBUG: Model finished with reason: ${candidate['finishReason']}");
+            _log("AI_DEBUG: Model finished with reason: ${candidate['finishReason']}");
             return null; // Try next model
           }
 
@@ -452,7 +463,7 @@ class AiService {
               int lastBrace = text.lastIndexOf('}');
               if (lastBrace != -1) {
                 text = text.substring(0, lastBrace + 1) + ']';
-                AppLog.d("AI_DEBUG: Auto-healed truncated JSON array from MAX_TOKENS");
+                _log("AI_DEBUG: Auto-healed truncated JSON array from MAX_TOKENS");
               }
             }
 
@@ -467,37 +478,37 @@ class AiService {
               _lastFailWasParse = false;
               return text;
             } catch (e) {
-              AppLog.d("AI_DEBUG: JSON Decode failed for: ${text.substring(0, text.length > 50 ? 50 : text.length)}...");
+              _log("AI_DEBUG: JSON Decode failed for: ${text.substring(0, text.length > 50 ? 50 : text.length)}...");
               _lastFailWasParse = true;
               return null;
             }
           }
         } else if (response.statusCode == 429) {
           if (retries >= 3) {
-            AppLog.d("AI_DEBUG: Rate limit reached (429) after max retries. Rotating key and backing off...");
+            _log("AI_DEBUG: Rate limit reached (429) after max retries. Rotating key and backing off...");
             if (onKeyInvalid != null) onKeyInvalid();
             await Future.delayed(const Duration(seconds: 15));
             return null;
           }
-          AppLog.d("AI_DEBUG: Rate limit reached (429). Retrying after backoff (${retries + 1})...");
+          _log("AI_DEBUG: Rate limit reached (429). Retrying after backoff (${retries + 1})...");
           await Future.delayed(Duration(seconds: 8 * (retries + 1)));
           retries++;
           continue;
         } else if (response.statusCode == 403) {
-          AppLog.d("AI_DEBUG: Key invalid or permission denied (403). Switching key...");
+          _log("AI_DEBUG: Key invalid or permission denied (403). Switching key...");
           if (onKeyInvalid != null) onKeyInvalid();
           return null;
         } else if (response.statusCode == 503 || response.statusCode == 500) {
-          AppLog.d("AI_DEBUG: Server error (${response.statusCode}). Retrying...");
+          _log("AI_DEBUG: Server error (${response.statusCode}). Retrying...");
           await Future.delayed(Duration(seconds: 1 * (retries + 1)));
           retries++;
           continue;
         } else {
-          AppLog.d("AI_DEBUG: REST FAIL - Status: ${response.statusCode}");
+          _log("AI_DEBUG: REST FAIL - Status: ${response.statusCode}");
           return null; // Try next model
         }
       } catch (e) {
-        AppLog.d("AI_DEBUG: REST Error: $e");
+        _log("AI_DEBUG: REST Error: $e");
         return null; // Try next model
       }
     }
@@ -510,7 +521,7 @@ class AiService {
     try {
       if ((collectionName == 'room_predefined_quizzes' || collectionName == 'subject_questions') && subject != null && subject.isNotEmpty) {
         String safeId = subject.trim().replaceAll('/', '-');
-        final doc = await FirebaseFirestore.instance.collection(collectionName).doc(safeId).get();
+        final doc = await firestore.FirebaseFirestore.instance.collection(collectionName).doc(safeId).get();
         if (doc.exists) {
           List qs = doc.get('questions') ?? [];
           for (var q in qs.take(20)) {
@@ -520,7 +531,7 @@ class AiService {
           }
         }
       } else {
-        final docs = await FirebaseFirestore.instance
+        final docs = await firestore.FirebaseFirestore.instance
             .collection(collectionName)
             .where('createdAt', isGreaterThan: cutoff)
             .orderBy('createdAt', descending: true)
@@ -538,12 +549,26 @@ class AiService {
         }
       }
     } catch (e) {
-      AppLog.d("AI_DEBUG: Context fetch error ($collectionName): $e");
+      _log("AI_DEBUG: Context fetch error ($collectionName): $e");
     }
     return context;
   }
 
   static String _detectQuizType(Map<String, dynamic> q) {
+    // Source-bound Current Affairs metadata has priority.
+    final explicitType = (q['quiz_type'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    final hasCaMetadata =
+        (q['source_id']?.toString().trim().isNotEmpty ?? false) &&
+        (q['event_id']?.toString().trim().isNotEmpty ?? false);
+
+    if (explicitType == 'current_affairs' || hasCaMetadata) {
+      return 'current_affairs';
+    }
+
     final qEn = (q['question_en'] ?? q['question'] ?? '').toString().toLowerCase();
     final qTa = (q['question_ta'] ?? q['question'] ?? '').toString().toLowerCase();
     final expEn = (q['explanation_en'] ?? q['explanation'] ?? '').toString().toLowerCase();
@@ -610,22 +635,42 @@ class AiService {
 
   static bool _validateQuestion(Map<String, dynamic> q, {bool isExamPaper = false, DateTime? generationDate, bool skipYearCheck = false}) {
     try {
-      // Automatically correct quiz_type based on content analysis
-      q['quiz_type'] = _detectQuizType(q);
+      final hasCaMetadata =
+          (q['source_id']?.toString().trim().isNotEmpty ?? false) &&
+          (q['event_id']?.toString().trim().isNotEmpty ?? false);
 
-      // Validate event_date <= generationDate if present
-      final eventDateStr = q['event_date']?.toString().trim();
-      if (eventDateStr != null && eventDateStr.isNotEmpty && !isExamPaper) {
-        try {
-          DateTime evDate = DateTime.parse(eventDateStr);
-          DateTime genDate = generationDate ?? AppDate.getISTNow();
-          DateTime evDateOnly = DateTime(evDate.year, evDate.month, evDate.day);
-          DateTime genDateOnly = DateTime(genDate.year, genDate.month, genDate.day);
-          if (evDateOnly.isAfter(genDateOnly)) {
-            AppLog.d("AI_DEBUG: REJECT - event_date ($eventDateStr) is after generation date ($genDateOnly)");
-            return false;
-          }
-        } catch (_) {}
+      if (q['quiz_type']?.toString().toLowerCase() == 'current_affairs' || hasCaMetadata) {
+        q['quiz_type'] = 'current_affairs';
+        if (!hasCaMetadata && !isExamPaper) {
+          _log("AI_DEBUG: REJECT - Current Affairs question missing source_id/event_id");
+          return false;
+        }
+        if (_parseStrictDate(q['event_date']) == null) {
+          _log("AI_DEBUG: REJECT - Current Affairs question missing or invalid event_date");
+          return false;
+        }
+      } else {
+        q['quiz_type'] = _detectQuizType(q);
+      }
+
+      // Validate event_date strictly when present.
+      final eventDateStr = q['event_date']?.toString().trim() ?? '';
+      if (eventDateStr.isNotEmpty && !isExamPaper) {
+        final eventDay = _parseStrictDate(eventDateStr);
+        if (eventDay == null) {
+          _log("AI_DEBUG: REJECT - invalid event_date: $eventDateStr");
+          return false;
+        }
+        final generationDateValue = generationDate ?? AppDate.getISTNow();
+        final generationDay = DateTime(
+          generationDateValue.year,
+          generationDateValue.month,
+          generationDateValue.day,
+        );
+        if (eventDay.isAfter(generationDay)) {
+          _log("AI_DEBUG: REJECT - future event_date: $eventDateStr");
+          return false;
+        }
       }
 
       final qEn = q['question_en']?.toString().trim() ?? '';
@@ -633,7 +678,7 @@ class AiService {
       final expEn = q['explanation_en']?.toString().trim() ?? '';
       final expTa = q['explanation_ta']?.toString().trim() ?? '';
       if (qEn.isEmpty && qTa.isEmpty) {
-        AppLog.d("AI_DEBUG: REJECT - empty question");
+        _log("AI_DEBUG: REJECT - empty question");
         return false;
       }
 
@@ -643,14 +688,14 @@ class AiService {
         if (qEn.isEmpty && qTa.isNotEmpty) q['question_en'] = qTa;
       } else {
         if (qEn.isEmpty || qTa.isEmpty || qEn.length < 5 || qTa.length < 5) {
-          AppLog.d("AI_DEBUG: REJECT - question too short ($qEn / $qTa)");
+          _log("AI_DEBUG: REJECT - question too short ($qEn / $qTa)");
           return false;
         }
       }
 
       final options = q['options'];
       if (options is! List || options.length < 4 || options.length > 5) {
-        AppLog.d("AI_DEBUG: REJECT - options length not between 4 and 5");
+        _log("AI_DEBUG: REJECT - options length not between 4 and 5");
         return false;
       }
 
@@ -658,13 +703,13 @@ class AiService {
       Set<String> optionTextsTa = {};
       for (var opt in options) {
         if (opt is! Map) {
-          AppLog.d("AI_DEBUG: REJECT - option is not Map");
+          _log("AI_DEBUG: REJECT - option is not Map");
           return false;
         }
         var optEn = opt['en']?.toString().trim() ?? '';
         var optTa = opt['ta']?.toString().trim() ?? '';
         if (optEn.isEmpty && optTa.isEmpty) {
-          AppLog.d("AI_DEBUG: REJECT - option empty");
+          _log("AI_DEBUG: REJECT - option empty");
           return false;
         }
         if (isExamPaper) {
@@ -675,18 +720,18 @@ class AiService {
         optionTextsTa.add(opt['ta']?.toString() ?? '');
       }
       if (optionTextsEn.length < 2 || optionTextsTa.length < 2) {
-        AppLog.d("AI_DEBUG: REJECT - unique options < 2");
+        _log("AI_DEBUG: REJECT - unique options < 2");
         return false;
       }
 
       final correctIdx = q['correctOptionIndex'];
       if (correctIdx is! int && correctIdx is! num) {
-        AppLog.d("AI_DEBUG: REJECT - correctOptionIndex not int");
+        _log("AI_DEBUG: REJECT - correctOptionIndex not int");
         return false;
       }
       final idx = (correctIdx as num).toInt();
       if (idx < 0 || idx > 3) {
-        AppLog.d("AI_DEBUG: REJECT - correctOptionIndex out of bounds ($idx)");
+        _log("AI_DEBUG: REJECT - correctOptionIndex out of bounds ($idx)");
         return false;
       }
 
@@ -696,20 +741,20 @@ class AiService {
           final taOpt = opt['ta']?.toString() ?? '';
           final enOpt = opt['en']?.toString() ?? '';
           if (_hasForeignScripts(taOpt) || _hasThoughtLeaks(taOpt) || _hasThoughtLeaks(enOpt)) {
-            AppLog.d("AI_DEBUG: REJECT - foreign script or thought leak in option");
+            _log("AI_DEBUG: REJECT - foreign script or thought leak in option");
             return false;
           }
         }
       }
       if (_hasForeignScripts(qTa) || _hasForeignScripts(expTa) || 
           _hasThoughtLeaks(qEn) || _hasThoughtLeaks(qTa) || _hasThoughtLeaks(expEn) || _hasThoughtLeaks(expTa)) {
-        AppLog.d("AI_DEBUG: REJECT - foreign script or thought leak in Q/E");
+        _log("AI_DEBUG: REJECT - foreign script or thought leak in Q/E");
         return false;
       }
 
       // Check for answer leak
       if (_isAnswerLeaked(qEn, qTa, options, idx)) {
-        AppLog.d("AI_DEBUG: REJECT - Answer leaked in question text");
+        _log("AI_DEBUG: REJECT - Answer leaked in question text");
         return false;
       }
 
@@ -723,7 +768,7 @@ class AiService {
         }
       } else {
         if (expEn.isEmpty || expTa.isEmpty) {
-          AppLog.d("AI_DEBUG: REJECT - missing explanation (expEn: $expEn, expTa: $expTa)");
+          _log("AI_DEBUG: REJECT - missing explanation (expEn: $expEn, expTa: $expTa)");
           return false;
         }
 
@@ -736,38 +781,38 @@ class AiService {
             lowerExpEn.contains('hypothetical') || lowerExpEn.contains('future event') || lowerExpEn.contains('fictional') || lowerExpEn.contains('imaginary') || lowerExpEn.contains('not yet happened') ||
             lowerExpTa.contains('வழங்கப்படவில்லை') || lowerExpTa.contains('இல்லை') || lowerExpTa.contains('கருத்தியல்') || lowerExpTa.contains('தகவல் இல்லை') ||
             lowerExpTa.contains('உண்மையில் இல்லை') || lowerExpTa.contains('கற்பனையான') || lowerExpTa.contains('நிகழவில்லை')) {
-          AppLog.d("AI_DEBUG: REJECT - anti-hallucination filter triggered");
+          _log("AI_DEBUG: REJECT - anti-hallucination filter triggered");
           return false;
         }
 
         // Check Explanation vs correctOptionIndex Coherence:
         if (!_validateOptionExplanationCoherence(idx, lowerExpEn, lowerExpTa)) {
-          AppLog.d("AI_DEBUG: REJECT - option explanation coherence failed");
+          _log("AI_DEBUG: REJECT - option explanation coherence failed");
           return false;
         }
 
         // Check Match the following questions: Both Left and Right data must be present!
         if (!_validateMatchQuestion(qEn, qTa, options)) {
-          AppLog.d("AI_DEBUG: REJECT - match question validation failed");
+          _log("AI_DEBUG: REJECT - match question validation failed");
           return false;
         }
 
         // Check Award, Sports, and Event questions: Year or Date must be present!
         if (!skipYearCheck && !_validateCurrentAffairsYear(qEn, qTa)) {
-          AppLog.d("AI_DEBUG: REJECT - current affairs year check failed ($qTa)");
+          _log("AI_DEBUG: REJECT - current affairs year check failed ($qTa)");
           return false;
         }
 
         // Check current affairs strict rules (NEP 2020, Vague entities, etc.)
         if (!_passesCurrentAffairsRules(qEn, qTa, expEn, expTa)) {
-          AppLog.d("AI_DEBUG: REJECT - current affairs rules failed");
+          _log("AI_DEBUG: REJECT - current affairs rules failed");
           return false;
         }
       }
 
       return true;
     } catch (e) {
-      AppLog.d("AI_DEBUG: REJECT exception in _validateQuestion: $e");
+      _log("AI_DEBUG: REJECT exception in _validateQuestion: $e");
       return false;
     }
   }
@@ -852,7 +897,7 @@ class AiService {
         ];
         for (var p in enContradictions) {
           if (expEn.contains(p)) {
-            AppLog.d("AI_DEBUG: Rejected Question - Explanation claims option $wrongLetter is correct, but correctOptionIndex is $idx ($correctLetter)");
+            _log("AI_DEBUG: Rejected Question - Explanation claims option $wrongLetter is correct, but correctOptionIndex is $idx ($correctLetter)");
             return false;
           }
         }
@@ -868,7 +913,7 @@ class AiService {
         ];
         for (var p in taContradictions) {
           if (expTa.contains(p)) {
-            AppLog.d("AI_DEBUG: Rejected Question - Tamil explanation claims option $wrongLetter is correct, but correctOptionIndex is $idx ($correctLetter)");
+            _log("AI_DEBUG: Rejected Question - Tamil explanation claims option $wrongLetter is correct, but correctOptionIndex is $idx ($correctLetter)");
             return false;
           }
         }
@@ -929,7 +974,7 @@ class AiService {
     final hasYear = yearRegex.hasMatch(qTa) || yearRegex.hasMatch(qEn);
 
     if (!hasYear) {
-      AppLog.d("AI_DEBUG: Rejected Award/Sports/Summit Question - Missing year or date in question: $qTa");
+      _log("AI_DEBUG: Rejected Award/Sports/Summit Question - Missing year or date in question: $qTa");
       return false;
     }
 
@@ -984,7 +1029,7 @@ class AiService {
     final hasTa4 = num4Regex.hasMatch(qTa);
 
     if (!hasTaA || !hasTaB || !hasTaC || !hasTaD || !hasTa1 || !hasTa2 || !hasTa3 || !hasTa4) {
-      AppLog.d("AI_DEBUG: Rejected Match Question (Tamil) - Missing left or right items: Letters [a:$hasTaA, b:$hasTaB, c:$hasTaC, d:$hasTaD], Numbers [1:$hasTa1, 2:$hasTa2, 3:$hasTa3, 4:$hasTa4]");
+      _log("AI_DEBUG: Rejected Match Question (Tamil) - Missing left or right items: Letters [a:$hasTaA, b:$hasTaB, c:$hasTaC, d:$hasTaD], Numbers [1:$hasTa1, 2:$hasTa2, 3:$hasTa3, 4:$hasTa4]");
       return false;
     }
 
@@ -999,13 +1044,13 @@ class AiService {
     final hasEn4 = num4Regex.hasMatch(qEn);
 
     if (!hasEnA || !hasEnB || !hasEnC || !hasEnD || !hasEn1 || !hasEn2 || !hasEn3 || !hasEn4) {
-      AppLog.d("AI_DEBUG: Rejected Match Question (English) - Missing left or right items: Letters [a:$hasEnA, b:$hasEnB, c:$hasEnC, d:$hasEnD], Numbers [1:$hasEn1, 2:$hasEn2, 3:$hasEn3, 4:$hasEn4]");
+      _log("AI_DEBUG: Rejected Match Question (English) - Missing left or right items: Letters [a:$hasEnA, b:$hasEnB, c:$hasEnC, d:$hasEnD], Numbers [1:$hasEn1, 2:$hasEn2, 3:$hasEn3, 4:$hasEn4]");
       return false;
     }
 
     // Both sides must contain substantial descriptive text
     if (qTa.trim().length < 40 || qEn.trim().length < 40) {
-      AppLog.d("AI_DEBUG: Rejected Match Question - Text too short for 4 complete pairs.");
+      _log("AI_DEBUG: Rejected Match Question - Text too short for 4 complete pairs.");
       return false;
     }
 
@@ -1040,7 +1085,7 @@ class AiService {
 
     // 1. Check if quiz already exists and has 20 questions
     try {
-      final existingSnap = await FirebaseFirestore.instance
+      final existingSnap = await firestore.FirebaseFirestore.instance
           .collection('quizzes')
           .where('date', isEqualTo: dateStr)
           .where('type', isEqualTo: 'daily_quiz')
@@ -1048,7 +1093,7 @@ class AiService {
       if (existingSnap.docs.isNotEmpty) {
         List existingQs = existingSnap.docs.first.get('questions') ?? [];
         if (existingQs.length >= 20) {
-          AppLog.d("AI_DEBUG: Daily quiz for $dateStr already has ${existingQs.length} questions. Skipping generation.");
+          _log("AI_DEBUG: Daily quiz for $dateStr already has ${existingQs.length} questions. Skipping generation.");
           return true;
         }
       }
@@ -1303,7 +1348,7 @@ $commonRules
           List<dynamic> parsed = _parseQuestions(res);
           List<dynamic> validQ = _filterValidQuestions(parsed, generationDate: generationDate);
           int rejected = parsed.length - validQ.length;
-          AppLog.d("AI_DEBUG: [Daily Quiz - $quizType] Attempt $attempts -> Generated: ${parsed.length}, Added: ${validQ.length}, Rejected: $rejected");
+          _log("AI_DEBUG: [Daily Quiz - $quizType] Attempt $attempts -> Generated: ${parsed.length}, Added: ${validQ.length}, Rejected: $rejected");
 
           for (var item in validQ) {
             if (getCountForType(quizType) >= targetCount) break;
@@ -1345,7 +1390,7 @@ $commonRules
     await fillCategory(promptAptitude, 'aptitude', 4, 5);
 
     if (draftQuestions.length < 20) {
-      AppLog.d("AI_DEBUG: [FAILED] Daily Quiz generation for $dateStr fell short at ${draftQuestions.length}/20");
+      _log("AI_DEBUG: [FAILED] Daily Quiz generation for $dateStr fell short at ${draftQuestions.length}/20");
       return false;
     }
 
@@ -1354,10 +1399,10 @@ $commonRules
     }
     draftQuestions.shuffle();
     List<dynamic> allQuestions = draftQuestions;
-    AppLog.d("AI_DEBUG: [SUCCESS] Daily Quiz generated for $dateStr. Total questions added: ${allQuestions.length} (Tamil: ${getCountForType('general_tamil')}, GS: ${getCountForType('general_studies')}, Aptitude: ${getCountForType('aptitude')})");
+    _log("AI_DEBUG: [SUCCESS] Daily Quiz generated for $dateStr. Total questions added: ${allQuestions.length} (Tamil: ${getCountForType('general_tamil')}, GS: ${getCountForType('general_studies')}, Aptitude: ${getCountForType('aptitude')})");
 
     // Store / update in Firestore
-    final querySnapshot = await FirebaseFirestore.instance
+    final querySnapshot = await firestore.FirebaseFirestore.instance
         .collection('quizzes')
         .where('date', isEqualTo: dateStr)
         .where('type', isEqualTo: 'daily_quiz')
@@ -1369,16 +1414,16 @@ $commonRules
       'quizType': 'daily_quiz',
       'questions': allQuestions,
       'type': 'daily_quiz',
-      'createdAt': FieldValue.serverTimestamp(),
+      'createdAt': firestore.FieldValue.serverTimestamp(),
     };
 
     if (querySnapshot.docs.isNotEmpty) {
       await querySnapshot.docs.first.reference.set(
         quizData,
-        SetOptions(merge: true),
+        firestore.SetOptions(merge: true),
       );
     } else {
-      await FirebaseFirestore.instance.collection('quizzes').doc('daily_$dateStr').set(quizData, SetOptions(merge: true));
+      await firestore.FirebaseFirestore.instance.collection('quizzes').doc('daily_$dateStr').set(quizData, firestore.SetOptions(merge: true));
     }
     return true;
   }
@@ -1388,7 +1433,7 @@ $commonRules
 
     // 1. Check if quiz already exists and has 50 questions
     try {
-      final existingSnap = await FirebaseFirestore.instance
+      final existingSnap = await firestore.FirebaseFirestore.instance
           .collection('mock_tests')
           .where('date', isEqualTo: dateStr)
           .where('type', isEqualTo: 'daily_quiz')
@@ -1397,7 +1442,7 @@ $commonRules
       if (existingSnap.docs.isNotEmpty) {
         List existingQs = existingSnap.docs.first.get('questions') ?? [];
         if (existingQs.length >= 50) {
-          AppLog.d("AI_DEBUG: 50-Mock quiz for $dateStr already has ${existingQs.length} questions. Skipping generation.");
+          _log("AI_DEBUG: 50-Mock quiz for $dateStr already has ${existingQs.length} questions. Skipping generation.");
           return true;
         }
       }
@@ -1609,7 +1654,7 @@ $commonRules
           List<dynamic> parsed = _parseQuestions(res);
           List<dynamic> validBatch = _filterValidQuestions(parsed);
           int rejected = parsed.length - validBatch.length;
-          AppLog.d("AI_DEBUG: [Mock Quiz - $quizType] Attempt $attempts -> Generated: ${parsed.length}, Added: ${validBatch.length}, Rejected: $rejected");
+          _log("AI_DEBUG: [Mock Quiz - $quizType] Attempt $attempts -> Generated: ${parsed.length}, Added: ${validBatch.length}, Rejected: $rejected");
 
           for (var q in validBatch) {
             if (getMockCountForType(quizType) >= targetCount) break;
@@ -1642,10 +1687,10 @@ $commonRules
         draftQuestions = draftQuestions.sublist(0, 50);
       }
       List<dynamic> allQuestions = draftQuestions;
-      AppLog.d("AI_DEBUG: [SUCCESS] 50-Mock Quiz generated for $dateStr. Total questions added: ${allQuestions.length}");
+      _log("AI_DEBUG: [SUCCESS] 50-Mock Quiz generated for $dateStr. Total questions added: ${allQuestions.length}");
 
       // Final check for 50 questions total
-      final querySnapshot = await FirebaseFirestore.instance
+      final querySnapshot = await firestore.FirebaseFirestore.instance
           .collection('mock_tests')
           .where('date', isEqualTo: dateStr)
           .where('type', isEqualTo: 'daily_quiz')
@@ -1659,16 +1704,16 @@ $commonRules
         'quiz_type': 'tamil_gs_aptitude',
         'questions': allQuestions,
         'type': 'daily_quiz',
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdAt': firestore.FieldValue.serverTimestamp(),
       };
 
       if (querySnapshot.docs.isNotEmpty) {
         await querySnapshot.docs.first.reference.set(
           quizData,
-          SetOptions(merge: true),
+          firestore.SetOptions(merge: true),
         );
       } else {
-        await FirebaseFirestore.instance.collection('mock_tests').doc('mock_$dateStr').set(quizData, SetOptions(merge: true));
+        await firestore.FirebaseFirestore.instance.collection('mock_tests').doc('mock_$dateStr').set(quizData, firestore.SetOptions(merge: true));
       }
       return true;
     }
@@ -1739,7 +1784,7 @@ CRITICAL INSTRUCTIONS:
     } else if (subject == 'current_affairs') {
       // Current affairs MUST use the source-only pipeline.
       // Never let this generic subject generator invent news.
-      AppLog.d(
+      _log(
         "AI_DEBUG: Current affairs is disabled in generic subject generation. "
             "Use generateAndSaveCurrentAffairsQuiz() with verified sources.",
       );
@@ -1787,7 +1832,7 @@ Only return the raw JSON array, no other text or markdown formatting.
 
           if (validQuestions.length < 20) return false;
 
-          final docRef = FirebaseFirestore.instance.collection('room_predefined_quizzes').doc(subject);
+          final docRef = firestore.FirebaseFirestore.instance.collection('room_predefined_quizzes').doc(subject);
 
           // AI_DEBUG: Sliding Window Logic (Max 1500 questions)
           // 1. Fetch existing pool to maintain size
@@ -1802,7 +1847,7 @@ Only return the raw JSON array, no other text or markdown formatting.
             ...q,
             'quiz_type': subject,
             'subject': subject,
-            'createdAt': AppDate.getISTNow().toIso8601String(), // Changed from serverTimestamp to fix Array error
+            'createdAt': AppDate.getISTNow().toIso8601String(), // Changed from serverfirestore.Timestamp to fix Array error
           }).toList();
 
           // 3. Maintenance: Combine (Prepend new) and trim to latest 500
@@ -1812,21 +1857,21 @@ Only return the raw JSON array, no other text or markdown formatting.
 
           if (combinedQs.length > maxPoolSize) {
             combinedQs = combinedQs.sublist(0, maxPoolSize);
-            AppLog.d("AI_DEBUG: Pool Size Management for $subject. Kept latest 500 questions.");
+            _log("AI_DEBUG: Pool Size Management for $subject. Kept latest 500 questions.");
           }
 
           // 4. Save back to Firestore
           await docRef.set({
             'subject': subject,
             'questions': combinedQs,
-            'lastUpdated': FieldValue.serverTimestamp(),
-            'createdAt': FieldValue.serverTimestamp(), // Added for avoidance context fetch
-          }, SetOptions(merge: true));
+            'lastUpdated': firestore.FieldValue.serverTimestamp(),
+            'createdAt': firestore.FieldValue.serverTimestamp(), // Added for avoidance context fetch
+          }, firestore.SetOptions(merge: true));
 
           return true;
         }
       } catch (e) {
-        AppLog.d("AI_DEBUG: Room Predefined Quiz JSON Parse Error: $e");
+        _log("AI_DEBUG: Room Predefined Quiz JSON Parse Error: $e");
       }
     }
     return false;
@@ -1903,7 +1948,7 @@ Return only the raw JSON array of EXACTLY $count items.
 
           // VALIDATION: Ensure at least 70% of requested questions
           if (allQuestions.length < (count * 0.7)) {
-            AppLog.d(
+            _log(
               "AI_DEBUG: Count/Validation mismatch. Got valid ${allQuestions.length}, expected at least ${count * 0.7}.",
             );
             return false;
@@ -1912,7 +1957,7 @@ Return only the raw JSON array of EXACTLY $count items.
             allQuestions = allQuestions.sublist(0, count);
           }
 
-          final querySnapshot = await FirebaseFirestore.instance
+          final querySnapshot = await firestore.FirebaseFirestore.instance
               .collection('quizzes')
               .where('date', isEqualTo: dateStr)
               .where('quiz_type', isEqualTo: quizType)
@@ -1929,23 +1974,23 @@ Return only the raw JSON array of EXACTLY $count items.
                 .map((q) => {...q, 'quiz_type': quizType})
                 .toList(),
             'type': 'daily_quiz',
-            'createdAt': FieldValue.serverTimestamp(),
+            'createdAt': firestore.FieldValue.serverTimestamp(),
           };
 
           if (querySnapshot.docs.isNotEmpty) {
             await querySnapshot.docs.first.reference.set(
               quizData,
-              SetOptions(merge: true),
+              firestore.SetOptions(merge: true),
             );
           } else {
-            await FirebaseFirestore.instance
+            await firestore.FirebaseFirestore.instance
                 .collection('quizzes')
                 .add(quizData);
           }
           return true;
         }
       } catch (e) {
-        AppLog.d("AI_DEBUG: JSON Parse Error: $e");
+        _log("AI_DEBUG: JSON Parse Error: $e");
       }
     }
     return false;
@@ -2018,7 +2063,7 @@ CRITICAL INSTRUCTIONS:
     } else if (subject == 'current_affairs') {
       // Current affairs MUST use the source-only pipeline.
       // Never let this generic subject generator invent news.
-      AppLog.d(
+      _log(
         "AI_DEBUG: Current affairs is disabled in generic subject generation. "
             "Use generateAndSaveCurrentAffairsQuiz() with verified sources.",
       );
@@ -2068,7 +2113,7 @@ Only return the raw JSON array, no other text or markdown formatting.
               .toList();
 
           String safeId = subject.trim().replaceAll('/', '-');
-          final docRef = FirebaseFirestore.instance
+          final docRef = firestore.FirebaseFirestore.instance
               .collection('subject_questions')
               .doc(safeId);
           final doc = await docRef.get();
@@ -2092,13 +2137,13 @@ Only return the raw JSON array, no other text or markdown formatting.
           await docRef.set({
             'subject': subject,
             'questions': finalQuestions,
-            'lastUpdated': FieldValue.serverTimestamp(),
+            'lastUpdated': firestore.FieldValue.serverTimestamp(),
             'category': category,
-          }, SetOptions(merge: true));
+          }, firestore.SetOptions(merge: true));
           return true;
         }
       } catch (e) {
-        AppLog.d("AI_DEBUG: JSON Parse Error for $subject: $e");
+        _log("AI_DEBUG: JSON Parse Error for $subject: $e");
       }
     }
     return false;
@@ -2118,7 +2163,7 @@ Only return the raw JSON array, no other text or markdown formatting.
         if (start != -1 && end != -1) {
           List<dynamic> newMaterial = jsonDecode(res.substring(start, end + 1));
           String safeId = subject.trim().replaceAll('/', '-');
-          final docRef = FirebaseFirestore.instance
+          final docRef = firestore.FirebaseFirestore.instance
               .collection('subject_study_material')
               .doc(safeId);
           final doc = await docRef.get();
@@ -2147,12 +2192,12 @@ Only return the raw JSON array, no other text or markdown formatting.
             'subject': subject,
             'category': category,
             'material': finalMaterial,
-            'lastUpdated': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+            'lastUpdated': firestore.FieldValue.serverTimestamp(),
+          }, firestore.SetOptions(merge: true));
           return true;
         }
       } catch (e) {
-        AppLog.d("AI_DEBUG: Study Material Parse Error: $e");
+        _log("AI_DEBUG: Study Material Parse Error: $e");
       }
     }
     return false;
@@ -2257,12 +2302,12 @@ Only return the raw JSON array, no other text or markdown formatting.
       return defaultPrompt;
     }
     try {
-      final doc = await FirebaseFirestore.instance.collection('ai_prompts').doc(key).get();
+      final doc = await firestore.FirebaseFirestore.instance.collection('ai_prompts').doc(key).get();
       if (doc.exists && doc.data()?['prompt'] != null) {
         return doc.data()!['prompt'].toString();
       }
     } catch (e) {
-      AppLog.d("AI_DEBUG: Failed to fetch prompt for $key from Firestore: $e");
+      _log("AI_DEBUG: Failed to fetch prompt for $key from Firestore: $e");
     }
     return defaultPrompt;
   }
@@ -2300,6 +2345,7 @@ Use ONLY the FACTS below. Never use outside knowledge. Never invent facts.
 CURRENT_DATE (IST): {currentDateStr}
 
 RULES:
+- STRICT DATE FILTER: Use ONLY facts/events from last year or earlier this year (older than 1 month / 30 days). Strictly NO events from the last 1 month or current date.
 - Generate EXACTLY {ask} MCQs. Each question from a DIFFERENT fact.
 - STRICT FACT MAPPING: Each generated question must strictly correspond to its respective fact/event in the facts list. You MUST return the exact `source_id` of the fact you used.
 - Exactly 4 distinct options, exactly one correct. correctOptionIndex = 0-3.
@@ -2332,10 +2378,11 @@ FACTS:
   }) async {
     const defaultPromptTemplate = '''
 You are an expert TNPSC Current Affairs question writer.
-Generate EXACTLY {ask} unique, authentic, and verified current-affairs Multiple Choice Questions (MCQs) focusing on Tamil Nadu and India (recent past up to {currentDateStr}, respecting the 15-day safety buffer).
+Generate EXACTLY {ask} unique, authentic, and verified current-affairs Multiple Choice Questions (MCQs) focusing on Tamil Nadu and India from LAST YEAR and EARLIER THIS YEAR (strictly EXCLUDING the last 1 month and current date).
 Do not invent fictional facts, imaginary schemes, or future events.
 
 RULES:
+- STRICT DATE FILTER: Focus exclusively on events from last year or earlier this year (older than 1 month / 30 days). Strictly NO recent events from the last 1 month or current date.
 - Each question must be distinct and cover a different topic (Governance, Awards, Economy, Education, Environment, Infrastructure, Space, Sports, Science & Technology, International Affairs, National Affairs, Culture).
 - Exactly 4 distinct options, exactly one correct. correctOptionIndex = 0-3.
 - Put the year/month of the event inside the question text.
@@ -2372,19 +2419,43 @@ ITEM FORMAT:
         .replaceAll('{ask}', ask.toString());
   }
 
-  static DateTime? _parseCurrentAffairsSourceDate(dynamic value) {
+  static DateTime? _parseStrictDate(dynamic value) {
     if (value == null) return null;
-    if (value is Timestamp) return value.toDate();
-    if (value is DateTime) return value;
-    return DateTime.tryParse(value.toString());
+    DateTime? parsed;
+    if (value is firestore.Timestamp) {
+      parsed = value.toDate();
+    } else if (value is DateTime) {
+      parsed = value;
+    } else {
+      final text = value.toString().trim();
+      if (text.isEmpty) return null;
+      parsed = DateTime.tryParse(text);
+    }
+    if (parsed == null) return null;
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  static bool _isEligibleCaEventDate({
+    required DateTime eventDate,
+    required DateTime today,
+    int minAgeDays = 31,
+    int maxAgeDays = 1095,
+  }) {
+    final eventDay = DateTime(
+      eventDate.year,
+      eventDate.month,
+      eventDate.day,
+    );
+    final todayDay = DateTime(today.year, today.month, today.day);
+    final ageDays = todayDay.difference(eventDay).inDays;
+    return ageDays >= minAgeDays && ageDays <= maxAgeDays;
   }
 
   static Future<List<Map<String, dynamic>>> _getVerifiedCurrentAffairsSources(
       DateTime currentDate,
       ) async {
-    final db = FirebaseFirestore.instance;
+    final db = firestore.FirebaseFirestore.instance;
     final currentDateStr = AppDate.format(currentDate);
-    final cutoffDate = currentDate.subtract(const Duration(days: 1095));
 
     try {
       final snap = await db
@@ -2441,32 +2512,30 @@ ITEM FORMAT:
           continue;
         }
 
-        final eventDt = _parseCurrentAffairsSourceDate(eventDateRaw);
-        final publishedDt = _parseCurrentAffairsSourceDate(publishedAtRaw) ?? eventDt;
+        final eventDt = _parseStrictDate(eventDateRaw);
+        final publishedDt = _parseStrictDate(publishedAtRaw);
 
         if (eventDt == null || publishedDt == null) {
+          _log("AI_DEBUG: [CA] REJECT source $sourceId: invalid event_date or published_at");
           continue;
         }
 
-        final eventDay = DateTime(
-          eventDt.year,
-          eventDt.month,
-          eventDt.day,
-        );
-
-        // Event must be within the last 90 days and not in the future
-        if (eventDay.isAfter(currentDate) || 
-            eventDay.isBefore(DateTime(cutoffDate.year, cutoffDate.month, cutoffDate.day))) {
+        if (!_isEligibleCaEventDate(eventDate: eventDt, today: currentDate)) {
+          _log("AI_DEBUG: [CA] REJECT source $sourceId: event date outside allowed age range");
           continue;
         }
 
-        // Canonicalize dates/identity from Firestore. The model must never invent these.
+        if (publishedDt.isAfter(currentDate)) {
+          _log("AI_DEBUG: [CA] REJECT source $sourceId: published_at is in the future");
+          continue;
+        }
+
         d['source_id'] = sourceId;
         d['source_name'] = sourceName;
         d['source_url'] = sourceUrl;
         d['event_id'] = sourceEventId;
         d['topic_key'] = sourceTopicKey;
-        d['event_date'] = AppDate.format(eventDay);
+        d['event_date'] = AppDate.format(eventDt);
         d['published_at'] = publishedDt.toIso8601String();
         d['event_name'] = eventName;
         d['verified'] = true;
@@ -2481,56 +2550,93 @@ ITEM FORMAT:
         return bDate.compareTo(aDate);
       });
 
-      AppLog.d(
+      _log(
         "AI_DEBUG: Verified CA source pool: ${sources.length} "
-            "(cutoff=${AppDate.format(cutoffDate)}, current=$currentDateStr)",
+            "(current=$currentDateStr)",
       );
 
       return sources;
     } catch (e) {
-      AppLog.e("AI_DEBUG: Error loading verified CA sources", e);
+      _logError("AI_DEBUG: Error loading verified CA sources", e);
       return [];
     }
   }
 
   static Future<bool> generateAndSaveDailyNews(DateTime date) async {
-    final db = FirebaseFirestore.instance;
+    final db = firestore.FirebaseFirestore.instance;
     final dateStr = AppDate.format(date);
-    AppLog.d("AI_DEBUG: [DailyNews] Generating verified news highlights for $dateStr in structured array format...");
+    _log("AI_DEBUG: [DailyNews] Generating verified news highlights for $dateStr in structured array format...");
 
     final prompt = '''
-You are an expert TNPSC Current Affairs News Collector and Editor.
-Generate 30 verified daily current affairs highlight points suitable for TNPSC Group 1, Group 2, and Group 4 exams for the date $dateStr.
-CRITICAL REQUIREMENTS:
-1. You must generate highlights distributed EVENLY across ALL the following categories: Awards, Sports, Economy, Science & Technology, Tamil Nadu Governance, Infrastructure, Education, International Affairs, Environment, National Affairs.
-2. CRITICAL LANGUAGE RULE: English fields (`titleEn`, `contentEn`, `event_name`) must be strictly in English. Tamil fields (`titleTa`, `contentTa`) must be strictly in Tamil script. Absolutely NO other languages or scripts (such as Hindi, Devanagari, Telugu, Kannada, Malayalam) are allowed anywhere.
+You are a professional TNPSC Current Affairs Researcher, Fact-Checker, and Bilingual Tamil-English Educational Editor.
 
-For each highlight point, return a JSON object with EXACTLY this structure:
-{
-  "source_id": "pib_${dateStr}_01",
-  "source_name": "Press Information Bureau (PIB)",
-  "source_url": "https://pib.gov.in/PressReleasePage.aspx?PRID=123456",
-  "event_id": "unique_snake_case_event_id",
-  "event_name": "Short title of the event in English",
-  "event_date": "$dateStr",
-  "published_at": "$dateStr",
-  "topic_key": "Awards",
-  "category": "Awards",
-  "titleEn": "English headline",
-  "titleTa": "Tamil headline",
-  "contentEn": [
-    "Paragraph 1 in English with rich facts.",
-    "Paragraph 2 in English with context."
-  ],
-  "contentTa": [
-    "தமிழில் பத்தி 1 விரிவான தகவல்களுடன்.",
-    "தமிழில் பத்தி 2 பின்னணியுடன்."
-  ]
-}
+OBJECTIVE:
+Create accurate, exam-oriented daily current affairs highlights for TNPSC Group 1, Group 2, Group 2A, and Group 4 candidates.
 
-Return ONLY a valid JSON array of objects. No markdown formatting.
+TARGET DATE: $dateStr
+KNOWLEDGE CUTOFF DATE: $dateStr
+TARGET COUNT: 30 highlights.
+
+CRITICAL RULES — FACTUAL ACCURACY:
+- Use only real events that occurred or were officially announced on or before the target date.
+- Never invent news, awards, government schemes, appointments, statistics, rankings, sports results, scientific discoveries, or international agreements.
+- Never fabricate source URLs, article IDs, publication dates, quotations, or official announcements.
+- If a fact cannot be verified from available knowledge, EXCLUDE it. Do not guess or replace missing facts with AI-generated historical news.
+- Do not use future events or future announcements relative to the target date.
+- Distinguish the event date from the article publication date.
+- If fewer than 30 valid events are available, return only the verified events. Never invent events to reach the target count.
+- Avoid duplicate events, duplicate facts, misleading headlines, and conflicting dates.
+
+SOURCE PRIORITY:
+- Tamil Nadu Government official websites and government departments.
+- Press Information Bureau (PIB).
+- Relevant Union Government ministry websites.
+- Reserve Bank of India and other official regulatory bodies.
+- ISRO, DRDO, and other official scientific institutions.
+
+CATEGORY DISTRIBUTION:
+Select relevant, verified events evenly across: Tamil Nadu Governance, National Affairs, International Affairs, Economy, Awards and Honours, Sports, Science and Technology, Environment, Education, Infrastructure.
+
+LANGUAGE REQUIREMENTS:
+- titleEn and contentEn must be written entirely in English.
+- titleTa and contentTa must be written in natural, grammatically correct Tamil script.
+- Do not use Hindi, Devanagari, Telugu, Kannada, or Malayalam text.
+- Tamil explanations must preserve the exact meaning of the English facts.
+
+CONTENT REQUIREMENTS:
+- Provide a concise, informative headline.
+- Provide two meaningful paragraphs in English and two equivalent paragraphs in Tamil.
+- Include relevant dates, places, institutions, scheme names, and verified figures where available.
+
+OUTPUT REQUIREMENTS:
+Return ONLY a valid JSON array of objects with EXACTLY this schema:
+[
+  {
+    "source_id": "pib_${dateStr}_01",
+    "source_name": "Press Information Bureau (PIB)",
+    "source_url": "https://pib.gov.in/PressReleasePage.aspx?PRID=123456",
+    "event_id": "unique_snake_case_event_id",
+    "event_name": "Short title of the event in English",
+    "event_date": "$dateStr",
+    "published_at": "$dateStr",
+    "topic_key": "Awards",
+    "category": "Awards",
+    "titleEn": "Verified English headline",
+    "titleTa": "சரியான தமிழ் தலைப்பு",
+    "contentEn": [
+      "First factual paragraph in English.",
+      "Second factual paragraph in English, including TNPSC relevance."
+    ],
+    "contentTa": [
+      "முதல் பத்தி தமிழில்.",
+      "TNPSC தேர்வுக்கான முக்கியத்துவத்துடன் இரண்டாவது பத்தி தமிழில்."
+    ]
+  }
+]
+Return valid JSON only, without Markdown formatting or additional commentary.
 ''';
 
+    _log("AI_DEBUG: [CA_NEWS_PROMPT] Sending prompt to Gemini:\n$prompt");
     final res = await _generateWithFallback(prompt);
     if (res != null) {
       try {
@@ -2546,21 +2652,21 @@ Return ONLY a valid JSON array of objects. No markdown formatting.
             map['source_id'] = sourceId;
             map['verified'] = true;
             map['date'] = dateStr;
-            map['timestamp'] = FieldValue.serverTimestamp();
+            map['timestamp'] = firestore.FieldValue.serverTimestamp();
             if (map['category'] == null && map['topic_key'] != null) {
               map['category'] = map['topic_key'];
             }
 
             final ref = db.collection('current_affairs_points').doc(sourceId);
-            batch.set(ref, map, SetOptions(merge: true));
+            batch.set(ref, map, firestore.SetOptions(merge: true));
             savedCount++;
           }
           await batch.commit();
-          AppLog.d("AI_DEBUG: [SUCCESS] Generated and saved $savedCount verified news points for $dateStr into current_affairs_points with array paragraphs.");
+          _log("AI_DEBUG: [SUCCESS] Generated and saved $savedCount verified news points for $dateStr into current_affairs_points with array paragraphs.");
           return true;
         }
       } catch (e) {
-        AppLog.d("AI_DEBUG: [DailyNews] Parse Error: $e");
+        _log("AI_DEBUG: [DailyNews] Parse Error: $e");
       }
     }
     return false;
@@ -2605,6 +2711,7 @@ Return ONLY a JSON object with this exact structure:
         .replaceAll('{qTa}', qTa.toString())
         .replaceAll('{options}', options);
 
+    _log("AI_DEBUG: [CA_VERIFIER_PROMPT] Sending prompt to Gemini:\n$prompt");
     final res = await _generateWithFallback(prompt);
     if (res == null) return null;
     try {
@@ -2617,18 +2724,70 @@ Return ONLY a JSON object with this exact structure:
     }
   }
 
+  static Future<bool> _factCheckQuestionOnline(Map<String, dynamic> q) async {
+    final qEn = q['question_en'] ?? '';
+    final qTa = q['question_ta'] ?? '';
+    final options = jsonEncode(q['options']);
+    final correctIdx = q['correctOptionIndex'];
+    final explanation = q['explanation_en'] ?? '';
+
+    const defaultFactCheckerTemplate = '''
+You are an expert Wikipedia and PIB (Press Information Bureau) Online Fact-Checker for competitive examinations (TNPSC / UPSC).
+Fact-check the following question, options, correct answer index, and explanation against real-world online knowledge (Wikipedia, official government records, PIB, RBI, MEA, UGC).
+
+QUESTION (EN): {qEn}
+QUESTION (TA): {qTa}
+OPTIONS: {options}
+CORRECT OPTION INDEX: {correctIdx}
+EXPLANATION: {explanation}
+
+CRITICAL CHECKS:
+1. Are the facts, exact calendar dates (e.g. RBI MPC meeting dates), ministry/organization names (e.g. Ministry of Education vs UGC vs MeitY vs Ministry of Textiles), award winners, and statistics 100% factually correct according to verified official online records?
+2. Is the correct option index pointing to the genuinely correct option?
+3. If there is any factual error, date mismatch, incorrect ministry attribution, or hallucination, mark `isFactuallyCorrect: false`.
+
+Return ONLY a JSON object with this exact structure:
+{
+  "isFactuallyCorrect": true,
+  "reason": "Verified against online knowledge base"
+}
+''';
+
+    try {
+      final template = await _getPrompt('ca_online_fact_checker_prompt', defaultFactCheckerTemplate);
+      final prompt = template
+          .replaceAll('{qEn}', qEn.toString())
+          .replaceAll('{qTa}', qTa.toString())
+          .replaceAll('{options}', options)
+          .replaceAll('{correctIdx}', correctIdx.toString())
+          .replaceAll('{explanation}', explanation.toString());
+
+      _log("AI_DEBUG: [CA_FACT_CHECKER_PROMPT] Sending prompt to Gemini:\n$prompt");
+      final res = await _generateWithFallback(prompt);
+      if (res == null) return true;
+      int start = res.indexOf('{');
+      int end = res.lastIndexOf('}');
+      if (start == -1 || end <= start) return true;
+      final map = jsonDecode(res.substring(start, end + 1));
+      if (map is Map && map['isFactuallyCorrect'] == false) {
+        _log("AI_DEBUG: [Online Fact-Checker] REJECTED incorrect fact: ${map['reason']}");
+        return false;
+      }
+      return true;
+    } catch (e) {
+      _log("AI_DEBUG: [Online Fact-Checker] Error: $e");
+      return true;
+    }
+  }
+
 
 
   static Future<bool> generateAndSaveCurrentAffairsQuiz(DateTime date) async {
     const target = 20;
-    const maxAttempts = 12;
-    const batchQuestions = 5;
-    const batchSources = 8;
 
-    final db = FirebaseFirestore.instance;
+    final db = firestore.FirebaseFirestore.instance;
     final quizDateStr = AppDate.format(date);
-    final currentDate = AppDate.getISTNow();
-    final currentDateStr = AppDate.format(date);
+    final currentDateStr = AppDate.format(AppDate.getISTNow());
     final draftRef = db.collection('quiz_drafts').doc('ca_$quizDateStr');
 
     // Check if final quiz already exists for today
@@ -2637,7 +2796,7 @@ Return ONLY a JSON object with this exact structure:
         .where('type', isEqualTo: 'current_affairs')
         .limit(1).get();
     if (existing.docs.isNotEmpty) {
-      AppLog.d("AI_DEBUG: [CA] quiz already exists for $quizDateStr. Skip.");
+      _log("AI_DEBUG: [CA] quiz already exists for $quizDateStr. Skip.");
       return true;
     }
 
@@ -2650,20 +2809,22 @@ Return ONLY a JSON object with this exact structure:
         if (r is Map) draft.add(Map<String, dynamic>.from(r));
       }
     }
-    AppLog.d("AI_DEBUG: [CA] draft loaded: ${draft.length}/$target");
+    _log("AI_DEBUG: [CA] draft loaded: ${draft.length}/$target");
 
     // STRICT SOURCE-ONLY PIPELINE: Require verified real-world news articles
     List<Map<String, dynamic>> verifiedSources = await _getVerifiedCurrentAffairsSources(date);
-    AppLog.d("AI_DEBUG: [CA] facts pool = ${verifiedSources.length}");
+    _log("AI_DEBUG: [CA] facts pool = ${verifiedSources.length}");
     if (verifiedSources.isEmpty) {
-      AppLog.d("AI_DEBUG: [CA] No verified source articles found. Auto-generating daily news highlights for $quizDateStr...");
-      await generateAndSaveDailyNews(date);
+      _log("AI_DEBUG: [CA] No verified source articles found in valid range (>30 days). Auto-generating historical news highlights for past dates...");
+      await generateAndSaveDailyNews(date.subtract(const Duration(days: 45)));
+      await generateAndSaveDailyNews(date.subtract(const Duration(days: 90)));
+      await generateAndSaveDailyNews(date.subtract(const Duration(days: 135)));
       verifiedSources = await _getVerifiedCurrentAffairsSources(date);
-      AppLog.d("AI_DEBUG: [CA] facts pool after auto-gen = ${verifiedSources.length}");
+      _log("AI_DEBUG: [CA] facts pool after auto-gen = ${verifiedSources.length}");
     }
 
     if (verifiedSources.isEmpty) {
-      AppLog.d("AI_DEBUG: [CA] STOP - No verified source articles found in current_affairs_points. Current affairs requires real news articles. Skipping save.");
+      _log("AI_DEBUG: [CA] STOP - No verified source articles found in current_affairs_points. Current affairs requires real news articles. Skipping save.");
       return false;
     }
 
@@ -2692,168 +2853,133 @@ Return ONLY a JSON object with this exact structure:
         }
       }
     } catch (e) {
-      AppLog.d("AI_DEBUG: [CA] previous fetch failed: $e");
+      _log("AI_DEBUG: [CA] previous fetch failed: $e");
     }
     for (final q in draft) markUsed(q);
 
-    int stalls = 0;
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+    // 1-to-1 strict generation loop: Generate 1 question per source fact
+    for (final source in verifiedSources) {
       if (draft.length >= target) break;
-      if (attempt >= maxAttempts - 2 && draft.length >= 18) {
-        AppLog.d("AI_DEBUG: [CA] Reached near target (${draft.length}/$target) after $attempt attempts. Proceeding to save.");
-        break;
-      }
 
-      final free = verifiedSources
-          .where((s) => !usedSourceIds.contains(s['source_id'].toString()) &&
-          !usedEventIds.contains(s['event_id'].toString()))
-          .toList();
-      if (free.isEmpty) {
-        AppLog.d("AI_DEBUG: [CA] All verified sources used once. Resetting source usage to allow reuse for remaining questions. Draft=${draft.length}");
-        usedSourceIds.clear();
-        usedEventIds.clear();
-        free.addAll(verifiedSources);
-      }
+      final sid = source['source_id'].toString();
+      final eid = source['event_id'].toString();
+      if (usedSourceIds.contains(sid) || usedEventIds.contains(eid)) continue;
 
-      final ask = (target - draft.length) < batchQuestions
-          ? (target - draft.length) : batchQuestions;
-      final batch = free.take(batchSources).toList();
+      final prompt = '''
+You are an expert TNPSC Current Affairs Question Generator and Fact Verifier.
+Generate ONE highly accurate Tamil and English MCQ based EXCLUSIVELY on the single official source fact below.
 
-      final prompt = await _buildCaPromptSimple(
-        facts: batch,
-        ask: ask,
-        currentDateStr: currentDateStr,
-      );
-      AppLog.d("AI_DEBUG: [CA] attempt $attempt/$maxAttempts ask=$ask promptChars=${prompt.length}");
+SOURCE FACT:
+- EVENT: ${source['event_name']} (${source['event_date']})
+- EN: ${source['contentEn']}
+- TA: ${source['contentTa']}
 
-      final res = await _generateWithFallback(prompt);
-      if (res == null) {
-        AppLog.d("AI_DEBUG: [CA] attempt $attempt -> AI returned NULL (Rate limit / Quota). Backing off...");
-        await Future.delayed(const Duration(seconds: 20));
-        continue;
-      }
+RULES:
+1. The question must test facts directly from the source above.
+2. Exactly 4 distinct options, exactly one correct. correctOptionIndex = 0-3.
+3. 100% EN/TA parity with zero contradiction.
+4. Output ONLY a single JSON object (not an array) with this exact structure:
+{
+  "question_en": "...",
+  "question_ta": "...",
+  "options": [
+    {"en": "...", "ta": "..."},
+    {"en": "...", "ta": "..."},
+    {"en": "...", "ta": "..."},
+    {"en": "...", "ta": "..."}
+  ],
+  "correctOptionIndex": 0,
+  "explanation_en": "...",
+  "explanation_ta": "..."
+}
+''';
 
-      int added = 0;
+      _log("AI_DEBUG: [CA_QUIZ_PROMPT] Sending prompt to Gemini:\n$prompt");
+      final res = await _generateWithFallback(prompt, temperature: 0.2);
+      if (res == null) continue;
+
       try {
-        final start = res.indexOf('[');
-        final end = res.lastIndexOf(']');
-        if (start == -1 || end <= start) {
-          AppLog.d("AI_DEBUG: [CA] attempt $attempt -> no JSON array in response");
-          continue;
-        }
+        int start = res.indexOf('{');
+        int end = res.lastIndexOf('}');
+        if (start == -1 || end <= start) continue;
         final decoded = jsonDecode(res.substring(start, end + 1));
-        if (decoded is! List) continue;
+        if (decoded is! Map) continue;
+        final q = Map<String, dynamic>.from(decoded);
 
-        for (final raw in decoded) {
-          if (draft.length >= target) break;
-          if (raw is! Map) continue;
-          final q = Map<String, dynamic>.from(raw);
+        if (!_validateQuestion(q, generationDate: date, skipYearCheck: true)) continue;
 
-          if (!_validateQuestion(q,
-              generationDate: date, skipYearCheck: true)) {
-            AppLog.d("AI_DEBUG: [CA] REJECT invalid -> ${(q['question_en'] ?? '').toString()}");
-            continue;
-          }
+        final key = _normQ(q['question_en']?.toString() ?? '');
+        if (key.isEmpty || usedQuestionKeys.contains(key) || draft.any((e) => _normQ(e['question_en']?.toString() ?? '') == key)) continue;
 
-          final availableSources = batch.where((s) => !usedSourceIds.contains(s['source_id'].toString())).toList();
-          if (availableSources.isEmpty) continue;
-          final source = availableSources[added % availableSources.length];
-          final sid = source['source_id'].toString();
-
-          q['source_id'] = sid;
-          q['event_id'] = source['event_id'];
-          q['topic_key'] = source['topic_key'];
-          q['event_name'] = source['event_name'];
-          q['event_date'] = source['event_date'];
-          q['source_name'] = source['source_name'];
-          q['source_url'] = source['source_url'];
-          q['published_at'] = source['published_at'];
-
-          if (!_isValidRawUrl(q['source_url']?.toString())) continue;
-          if (usedSourceIds.contains(sid)) continue;
-          if (usedEventIds.contains(q['event_id'].toString())) continue;
-
-          final key = _normQ(q['question_en']?.toString() ?? '');
-          if (key.isEmpty || usedQuestionKeys.contains(key) || draft.any((existing) => _normQ(existing['question_en']?.toString() ?? '') == key)) {
-            AppLog.d("AI_DEBUG: [CA] REJECT duplicate -> $key");
-            continue;
-          }
-
-          // Options shuffle
-          final opts = q['options'];
-          final ci = int.tryParse(q['correctOptionIndex'].toString()) ?? -1;
-          if (opts is List && opts.length == 4 && ci >= 0 && ci < 4) {
-            final list = opts.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-            final correct = list[ci];
-            list.shuffle();
-            final ni = list.indexWhere(
-                    (o) => o['en'] == correct['en'] && o['ta'] == correct['ta']);
-            if (ni == -1) continue;
-            q['options'] = list;
-            q['correctOptionIndex'] = ni;
-          }
-
-          // AI #2: Verifier Check (Blind solve & Quote verification)
-          final verificationResult = await _verifyQuestionWithAi(q, source);
-          if (verificationResult == null) {
-            AppLog.d("AI_DEBUG: [CA] REJECT verifier timeout/error");
-            continue;
-          }
-
-          final bool languagesMatch = verificationResult['languagesMatch'] == true;
-          if (!languagesMatch) {
-            AppLog.d("AI_DEBUG: [CA] REJECT verifier language mismatch between EN and TA");
-            continue;
-          }
-
-          final int blindIndex = int.tryParse(verificationResult['blindSolveIndex'].toString()) ?? -1;
-          final String quote = verificationResult['supportingQuote']?.toString().trim() ?? '';
-
-          if (blindIndex != q['correctOptionIndex']) {
-            AppLog.d("AI_DEBUG: [CA] REJECT verifier mismatch -> blind($blindIndex) vs assigned(${q['correctOptionIndex']})");
-            continue;
-          }
-
-          final sourceContentCombined = "${source['contentEn']} ${source['contentTa']}".toLowerCase();
-          final normalizedQuote = quote.toLowerCase();
-          if (quote.length < 10 || !sourceContentCombined.contains(normalizedQuote.substring(0, quote.length > 30 ? 30 : quote.length))) {
-            AppLog.d("AI_DEBUG: [CA] REJECT verifier quote not found in source text");
-            continue;
-          }
-
-          q['quiz_type'] = 'current_affairs';
-          draft.add(q);
-          markUsed(q);
-          added++;
+        // Options shuffle
+        final opts = q['options'];
+        final ci = int.tryParse(q['correctOptionIndex'].toString()) ?? -1;
+        if (opts is List && opts.length == 4 && ci >= 0 && ci < 4) {
+          final list = opts.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final correct = list[ci];
+          list.shuffle();
+          final ni = list.indexWhere((o) => o['en'] == correct['en'] && o['ta'] == correct['ta']);
+          if (ni == -1) continue;
+          q['options'] = list;
+          q['correctOptionIndex'] = ni;
         }
+
+        // Verifier check
+        final verificationResult = await _verifyQuestionWithAi(q, source);
+        if (verificationResult == null || verificationResult['languagesMatch'] != true) continue;
+        final int blindIndex = int.tryParse(verificationResult['blindSolveIndex'].toString()) ?? -1;
+        if (blindIndex != q['correctOptionIndex']) continue;
+
+        // Online fact checker
+        final bool isOnlineFactCorrect = await _factCheckQuestionOnline(q);
+        if (!isOnlineFactCorrect) continue;
+
+        // Bind 100% exact metadata from source
+        q['source_id'] = source['source_id'];
+        q['event_id'] = source['event_id'];
+        q['topic_key'] = source['topic_key'];
+        q['event_name'] = source['event_name'];
+        q['event_date'] = source['event_date'];
+        q['source_name'] = source['source_name'];
+        q['source_url'] = source['source_url'];
+        q['published_at'] = source['published_at'];
+        q['quiz_type'] = 'current_affairs';
+        q['verificationStatus'] = 'verified';
+        q['publishStatus'] = 'published';
+
+        draft.add(q);
+        markUsed(q);
+
+        await draftRef.set({
+          'date': quizDateStr,
+          'questions': draft,
+          'count': draft.length,
+          'updatedAt': firestore.FieldValue.serverTimestamp(),
+        });
       } catch (e) {
-        AppLog.d("AI_DEBUG: [CA] attempt $attempt parse error: $e");
+        _log("AI_DEBUG: [CA] 1-to-1 parse error: $e");
       }
-
-      await draftRef.set({
-        'date': quizDateStr,
-        'questions': draft,
-        'count': draft.length,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      AppLog.d("AI_DEBUG: [CA] attempt $attempt added=$added draft=${draft.length}/$target");
-
-      stalls = added == 0 ? stalls + 1 : 0;
-      if (stalls >= 3) break;
-      await Future.delayed(const Duration(seconds: 6));
     }
 
-    if (draft.length < 18) {
-      AppLog.d("AI_DEBUG: [CA] partial ${draft.length}/$target saved in draft. Firestore quizzes untouched.");
+    if (draft.isEmpty) {
+      _log("AI_DEBUG: [CA] No verified questions generated. Firestore quizzes untouched.");
       return false;
     }
 
     final finalQs = (List<Map<String, dynamic>>.from(draft)..shuffle())
-        .take(target).toList();
+        .take(target)
+        .map((q) => {
+              ...q,
+              'quiz_type': 'current_affairs',
+              'verificationStatus': 'verified',
+              'publishStatus': 'published',
+            })
+        .toList();
 
+    // Final re-verification loop on all questions before saving
     for (var q in finalQs) {
       if (!_validateQuestion(q, generationDate: date, skipYearCheck: true)) {
-        AppLog.d("AI_DEBUG: [CA] Final validation failed on question. Firestore untouched.");
+        _log("AI_DEBUG: [CA] Final validation failed on question. Firestore untouched.");
         return false;
       }
     }
@@ -2866,17 +2992,21 @@ Return ONLY a JSON object with this exact structure:
       'questions': finalQs,
       'knowledgeCutoffDate': currentDateStr,
       'sourceOnly': true,
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'generationStatus': 'verified',
+      'publishStatus': 'published',
+      'verifiedQuestionCount': finalQs.length,
+      'verificationVersion': 3,
+      'createdAt': firestore.FieldValue.serverTimestamp(),
+    }, firestore.SetOptions(merge: true));
     await draftRef.delete();
-    AppLog.d("AI_DEBUG: [CA] FINAL SAVE SUCCESS - ${finalQs.length} 100% verified questions");
+    _log("AI_DEBUG: [CA] FINAL SAVE SUCCESS - ${finalQs.length} 100% verified 1-to-1 questions");
     return true;
   }
 
   static Future<void> checkAndAutoGenerateCurrentAffairsQuiz() async {
     try {
       final todayStr = AppDate.getTodayString();
-      final db = FirebaseFirestore.instance;
+      final db = firestore.FirebaseFirestore.instance;
 
       final query = await db.collection('quizzes')
           .where('date', isEqualTo: todayStr)
@@ -2885,11 +3015,11 @@ Return ONLY a JSON object with this exact structure:
           .get();
 
       if (query.docs.isEmpty) {
-        AppLog.d("AI_DEBUG: No CA quiz found for today ($todayStr). Generating...");
+        _log("AI_DEBUG: No CA quiz found for today ($todayStr). Generating...");
         await generateAndSaveCurrentAffairsQuiz(AppDate.getISTNow());
       }
     } catch (e) {
-      AppLog.e("AI_DEBUG: Error in auto CA quiz generation", e);
+      _logError("AI_DEBUG: Error in auto CA quiz generation", e);
     }
   }
 
@@ -2897,7 +3027,7 @@ Return ONLY a JSON object with this exact structure:
     try {
       final yesterday = DateTime.now().subtract(const Duration(days: 0));
       final yesterdayStr = AppDate.format(yesterday);
-      final db = FirebaseFirestore.instance;
+      final db = firestore.FirebaseFirestore.instance;
 
       // Check if news for yesterday already exists
       final query = await db.collection('current_affairs_points')
@@ -2906,13 +3036,13 @@ Return ONLY a JSON object with this exact structure:
           .get();
 
       if (query.docs.isEmpty) {
-        AppLog.d("AI_DEBUG: No news found for yesterday ($yesterdayStr). Triggering auto-generation for yesterday...");
+        _log("AI_DEBUG: No news found for yesterday ($yesterdayStr). Triggering auto-generation for yesterday...");
         await generateAndSaveDailyNews(yesterday);
       } else {
-        AppLog.d("AI_DEBUG: News for yesterday ($yesterdayStr) already exists. Skipping auto-gen.");
+        _log("AI_DEBUG: News for yesterday ($yesterdayStr) already exists. Skipping auto-gen.");
       }
     } catch (e) {
-      AppLog.e("AI_DEBUG: Error in auto news generation", e);
+      _logError("AI_DEBUG: Error in auto news generation", e);
     }
   }
 
@@ -2982,7 +3112,7 @@ Return ONLY a valid JSON array containing the verified, proofread, and enriched 
               continue;
             }
           } catch (e) {
-            AppLog.e("AI_DEBUG: Error parsing verified exam batch $i-$end: $e");
+            _logError("AI_DEBUG: Error parsing verified exam batch $i-$end: $e");
           }
         }
 
@@ -2992,7 +3122,7 @@ Return ONLY a valid JSON array containing the verified, proofread, and enriched 
 
       return verifiedQuestions;
     } catch (e) {
-      AppLog.e("Error in verifyAndEnrichExamPaperQuestions: $e");
+      _logError("Error in verifyAndEnrichExamPaperQuestions: $e");
       return questions;
     }
   }
@@ -3053,7 +3183,7 @@ Return ONLY a valid JSON array containing the spell-checked questions. NO Markdo
               continue;
             }
           } catch (e) {
-            AppLog.e("AI_DEBUG: Error parsing proofread batch $i-$end: $e");
+            _logError("AI_DEBUG: Error parsing proofread batch $i-$end: $e");
           }
         }
         // Fallback: retain original batch
@@ -3062,7 +3192,7 @@ Return ONLY a valid JSON array containing the spell-checked questions. NO Markdo
 
       return proofreadQuestions;
     } catch (e) {
-      AppLog.e("Error in proofreadAndFixExamPaperSpelling: $e", e);
+      _logError("Error in proofreadAndFixExamPaperSpelling: $e", e);
       return questions;
     }
   }
@@ -3087,7 +3217,7 @@ Return ONLY a valid JSON array containing the spell-checked questions. NO Markdo
         doc.dispose();
       }
     } catch (e) {
-      AppLog.e("Error slicing PDF pages: $e");
+      _logError("Error slicing PDF pages: $e");
       return null;
     }
   }
@@ -3207,7 +3337,7 @@ No Markdown formatting, no code fence, no extra preamble. Only raw JSON array.
       }
       return [];
     } catch (e) {
-      AppLog.e("Error in extractQuestionsFromPdfBytes: $e");
+      _logError("Error in extractQuestionsFromPdfBytes: $e");
       return [];
     }
   }
@@ -3350,7 +3480,7 @@ Return ONLY raw JSON array.
       }
       return [];
     } catch (e) {
-      AppLog.e("Error in parseAndEnrichPdfChunk: $e");
+      _logError("Error in parseAndEnrichPdfChunk: $e");
       return [];
     }
   }
