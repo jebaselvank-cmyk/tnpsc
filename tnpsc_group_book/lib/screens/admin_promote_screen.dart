@@ -78,30 +78,29 @@ class _AdminPromoteScreenState extends State<AdminPromoteScreen> with TickerProv
 
   Future<void> _loadQuizzes() async {
     try {
-      int slotSeed = AppDate.getSlotSeed();
+      int randomSeed = Random().nextInt(999999);
       
-      // 1. Select Topic based on synchronized 6-hour rotation
+      // 1. Select Random Topic
       final subjects = tnpscSubjects;
-      _currentTopicSubject = subjects[slotSeed % subjects.length];
+      _currentTopicSubject = subjects[Random().nextInt(subjects.length)];
       String topicName = _currentTopicSubject!.titleEn;
 
-      // 2. Fetch 3 quizzes for this topic with a SEED for synchronized shuffle
+      // 2. Fetch 3 quizzes for this topic with a random seed
       List<Question> pool = await _firestoreService.getRandomQuizzesByTopic(
         topicName, 
         limit: 3, 
-        seed: slotSeed
+        seed: randomSeed
       );
       
-      // Fallback logic remains seeded for consistency
+      // Fallback logic
       if (pool.isEmpty) {
         final daily = await _firestoreService.getDailyRotatingQuiz(isAdmin: true);
         pool.addAll(daily);
       }
       
       if (pool.length < 3) {
-        // Deterministic pick from defaults
         var tempDefaults = List<Question>.from(defaultRoomQuestions);
-        tempDefaults.shuffle(Random(slotSeed));
+        tempDefaults.shuffle(Random(randomSeed));
         pool.addAll(tempDefaults);
       }
 
@@ -384,7 +383,7 @@ class _AdminPromoteScreenState extends State<AdminPromoteScreen> with TickerProv
                           child: SharePoster(
                             question: question,
                             subject: subject,
-                            dayIndex: (AppDate.getSlotSeed() % 7) + 1,
+                            dayIndex: (Random().nextInt(7)) + 1,
                             showCorrectAnswer: _showAnswer,
                             timerSeconds: _timerSeconds,
                             maxTimerSeconds: _maxTimerSeconds,
@@ -477,6 +476,20 @@ class _AdminPromoteScreenState extends State<AdminPromoteScreen> with TickerProv
                   "Share", 
                   Colors.white,
                   onTap: _shareCurrentQuiz,
+                ),
+                const SizedBox(height: 25),
+                _buildSideIcon(
+                  Icons.shuffle_rounded, 
+                  "New", 
+                  Colors.white,
+                  onTap: () {
+                    _timer?.cancel();
+                    setState(() {
+                      _isLoading = true;
+                      _currentIndex = 0;
+                    });
+                    _loadQuizzes();
+                  },
                 ),
                 const SizedBox(height: 25),
                 _buildSideIcon(
